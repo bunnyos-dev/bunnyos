@@ -470,10 +470,13 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
     };
 
     println!("\n✓ Done. Reboot to start the restored system: doas reboot");
-    println!(
-        "  Changed your mind? After rebooting, run: bunny rollback {}",
-        outcome.before
-    );
+    // Refer to the undo point by its number in `bunny generations`.
+    let undo = rollback::list(root)?
+        .iter()
+        .position(|g| g.name == outcome.before)
+        .map(|i| (i + 1).to_string())
+        .unwrap_or_else(|| outcome.before.clone());
+    println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
     println!(
         "  The replaced system is kept as the subvolume {} until you remove it.",
         outcome.replaced

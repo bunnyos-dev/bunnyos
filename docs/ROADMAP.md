@@ -14,7 +14,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 1. Read a system | `import`, `check`, `plan` | ✅ Done, tested on a real desktop |
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
-| 4. Same system everywhere | lockfile, `update` | 🔶 Part 1 in review |
+| 4. Same system everywhere | lockfile, `update` | 🔶 Part 1 done, part 2 next |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ⬜ |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
@@ -37,12 +37,14 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [x] `bunny rollback`: swap to a snapshot (undoable), carries nested
       subvolumes like `/srv`
 - [x] `bunny clean`: remove old generations and leftovers safely
+- [x] `bunny lock`: exact installed versions and package-tree snapshot in
+      `bunny.lock`; `bunny plan` shows drift from it
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
 ## Version 1 — still to do
 
-- [~] **Lockfile, part 1:** `bunny lock` writes `bunny.lock` next to the
+- [x] **Lockfile, part 1:** `bunny lock` writes `bunny.lock` next to the
       config: the `::gentoo` snapshot (git commit or timestamp) and the exact
       installed version of every package (from `/var/db/pkg`). `bunny plan`
       shows packages whose installed version differs from the lock. Tests on

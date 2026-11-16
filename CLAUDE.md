@@ -38,3 +38,5 @@ decision changes. `docs/ROADMAP.md` is the to-do list.
   and saying what the output should look like. Commands that ask questions go
   on their own line.
 - Keep PRs small enough to test in about 15 minutes.
+- When working live with the maintainer: once they've confirmed a PR's VM
+  test passed, merge it for them (squash) and update the roadmap.

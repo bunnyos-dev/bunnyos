@@ -7,7 +7,7 @@
 #   ./bunny-vm.sh restore <name>   go back to a snapshot (VM must be off)
 #   ./bunny-vm.sh snaps            list snapshots
 #   ./bunny-vm.sh reset-keys       wipe Secure Boot keys (back to Setup Mode)
-#   ./bunny-vm.sh ssh              SSH into the running VM (port 2222)
+#   ./bunny-vm.sh ssh [user]       SSH into the running VM (port 2222, default user "you")
 #
 # Options (environment variables):
 #   MEM=8G CPUS=4 DISK_SIZE=60G GL=1   (GL=0 if 3D graphics won't start)
@@ -110,6 +110,6 @@ case "${1:-run}" in
     restore)    check_off; qemu-img snapshot -a "${2:?name needed}" "$DISK"; echo "✓ Restored: $2" ;;
     snaps)      qemu-img snapshot -l "$DISK" ;;
     reset-keys) check_off; find_firmware; cp "$VARS_TEMPLATE" "$VARS"; echo "✓ Secure Boot keys wiped (Setup Mode)" ;;
-    ssh)        exec ssh -p 2222 -o StrictHostKeyChecking=no "${2:-root}"@localhost ;;
+    ssh)        exec ssh -p 2222 -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
     *)          sed -n '2,15p' "$0" ;;
 esac

@@ -14,6 +14,8 @@ pub fn world_path(root: &Path) -> PathBuf {
     root.join(WORLD_FILE)
 }
 
+// Used by `bunny switch` (next step).
+#[allow(dead_code)]
 pub fn package_use_path(root: &Path) -> PathBuf {
     root.join(PACKAGE_USE_FILE)
 }
@@ -38,6 +40,8 @@ pub fn read_world(root: &Path) -> std::io::Result<BTreeSet<String>> {
 }
 
 /// The contents bunny's package.use file should have.
+/// Used by `bunny switch` (next step).
+#[allow(dead_code)]
 pub fn render_package_use(config: &Config) -> String {
     let mut out = String::from("# Managed by bunny. Edit bunny.toml instead of this file.\n");
     for (atom, settings) in &config.pkg {

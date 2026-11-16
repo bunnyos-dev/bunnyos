@@ -158,9 +158,14 @@ fn misplaced_top_level_key(message: &str) -> Option<&'static str> {
         .find(|key| message.contains(&format!("unknown field `{key}`")))
 }
 
-/// `category/name`, using the characters Gentoo allows.
-fn is_package_name(s: &str) -> bool {
-    let Some((cat, name)) = s.split_once('/') else {
+/// `category/name`, optionally with a slot (`category/name:slot`),
+/// using the characters Gentoo allows.
+pub fn is_package_name(s: &str) -> bool {
+    let (atom, slot) = match s.split_once(':') {
+        Some((atom, slot)) => (atom, Some(slot)),
+        None => (s, None),
+    };
+    let Some((cat, name)) = atom.split_once('/') else {
         return false;
     };
     let ok = |part: &str| {
@@ -170,7 +175,7 @@ fn is_package_name(s: &str) -> bool {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || "+_.-".contains(c))
     };
-    ok(cat) && ok(name) && !name.contains('/')
+    ok(cat) && ok(name) && !name.contains('/') && slot.is_none_or(ok)
 }
 
 /// A USE flag, optionally prefixed with `-` to disable it.
@@ -286,6 +291,10 @@ mod tests {
     fn package_names() {
         assert!(is_package_name("www-client/firefox"));
         assert!(is_package_name("dev-libs/libsigc++"));
+        assert!(is_package_name("net-misc/freerdp:3"));
+        assert!(is_package_name("sys-fs/fuse:0"));
+        assert!(!is_package_name("sys-fs/fuse:"));
+        assert!(!is_package_name("sys-fs/fuse::gentoo"));
         assert!(!is_package_name("firefox"));
         assert!(!is_package_name("a/b/c"));
         assert!(!is_package_name("/firefox"));

@@ -1,6 +1,7 @@
 //! bunny: declarative, reproducible system management for BunnyOS.
 
 mod config;
+mod import;
 mod init;
 mod plan;
 mod portage;
@@ -8,6 +9,7 @@ mod portage;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 use crate::config::Config;
@@ -37,6 +39,18 @@ enum Command {
         #[arg(default_value = "/etc/bunny/bunny.toml")]
         config: PathBuf,
         /// System root to compare against (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Write a bunny.toml that describes this system as it is now (changes nothing)
+    Import {
+        /// Save to this file instead of printing it
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Overwrite the output file if it already exists
+        #[arg(long)]
+        force: bool,
+        /// System root to read (for importing another system)
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
@@ -70,6 +84,38 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             }
             let plan = plan::make(&cfg, &root)?;
             print!("{}", plan.render());
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Import {
+            output,
+            force,
+            root,
+        } => {
+            let imported = import::from_system(&root)?;
+            let text = imported.render();
+            match output {
+                Some(path) => {
+                    if path.exists() && !force {
+                        anyhow::bail!(
+                            "{} already exists, so it wasn't overwritten.\n  \
+                             Pick another name, or add --force to replace it.",
+                            path.display()
+                        );
+                    }
+                    std::fs::write(&path, text)
+                        .with_context(|| format!("Couldn't write {}", path.display()))?;
+                    eprintln!("✓ Saved to {}.", path.display());
+                    eprintln!("{}", imported.summary());
+                    eprintln!(
+                        "Next: review it, then run `bunny plan {}`. It should say nothing needs to change.",
+                        path.display()
+                    );
+                }
+                None => {
+                    print!("{text}");
+                    eprintln!("\n{}", imported.summary());
+                }
+            }
             Ok(ExitCode::SUCCESS)
         }
     }

@@ -135,6 +135,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 
 | Command | Does |
 |---|---|
+| `bunny import` | Write a `bunny.toml` from the current system (world set, services, package.use) |
 | `bunny check` | Validate `bunny.toml` and explain any problems |
 | `bunny plan` | Show what would change, how long it takes, what loses prebuilt binaries |
 | `bunny update` | Sync the tree and refresh `bunny.lock` |
@@ -338,7 +339,7 @@ first, then on the author's desktop, laptop and ThinkPad T440p.
 **In v1:**
 - `bunny.toml`: packages, USE flags, services, managed config files
 - `bunny.lock`
-- `bunny check`, `plan`, `update`, `switch`, `status`, `diff`
+- `bunny import`, `check`, `plan`, `update`, `switch`, `status`, `diff`
 - Generations as btrfs snapshots with GRUB rollback entries
 - Plain-English explanations for the most common emerge errors
 

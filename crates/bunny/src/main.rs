@@ -552,6 +552,13 @@ fn confirm(question: &str, default: Default) -> anyhow::Result<bool> {
             return Ok(false); // no more input: never assume yes
         }
         match parse_answer(&answer, default) {
+            Some(false) if default == Default::No && answer.trim().is_empty() => {
+                println!(
+                    "(Enter means no here, because this can't be undone. \
+                     To go ahead, run it again and type y.)"
+                );
+                return Ok(false);
+            }
             Some(yes) => return Ok(yes),
             None => print!(
                 "Didn't catch that (got \"{}\"). Type y to continue or n to cancel: ",

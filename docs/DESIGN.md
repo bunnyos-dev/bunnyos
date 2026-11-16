@@ -173,7 +173,7 @@ elevation themselves through the configured tool (doas by default).
 5. Writes the world file from `packages`.
 6. Runs `emerge --update --deep --newuse @world` (with `--ask` unless `--yes`).
 7. Runs `emerge --depclean --ask` if packages were removed. **Always asks.**
-8. Enables services with `rc-update`, checking again after install.
+8. Enables services with `rc-update` and starts them, checking again after install.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
 commands are only printed.

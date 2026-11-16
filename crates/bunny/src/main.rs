@@ -324,13 +324,48 @@ fn is_root() -> bool {
     std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
 }
 
+/// Asks a yes/no question. Anything that isn't clearly yes or no (like a
+/// pasted command) is asked again instead of being taken as "no".
 fn confirm(question: &str) -> anyhow::Result<bool> {
     use std::io::Write;
     print!("{question} [y/N] ");
-    std::io::stdout().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().read_line(&mut answer)?;
-    Ok(matches!(answer.trim(), "y" | "Y" | "yes" | "Yes"))
+    loop {
+        std::io::stdout().flush()?;
+        let mut answer = String::new();
+        if std::io::stdin().read_line(&mut answer)? == 0 {
+            return Ok(false); // no more input
+        }
+        match parse_answer(&answer) {
+            Some(yes) => return Ok(yes),
+            None => print!(
+                "Didn't catch that (got \"{}\"). Type y to continue or n to cancel: ",
+                answer.trim()
+            ),
+        }
+    }
+}
+
+/// `Some(true)` for yes, `Some(false)` for no or just Enter, `None` otherwise.
+fn parse_answer(answer: &str) -> Option<bool> {
+    match answer.trim().to_lowercase().as_str() {
+        "y" | "yes" => Some(true),
+        "" | "n" | "no" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_answer;
+
+    #[test]
+    fn answers() {
+        assert_eq!(parse_answer("y\n"), Some(true));
+        assert_eq!(parse_answer("YES"), Some(true));
+        assert_eq!(parse_answer("\n"), Some(false));
+        assert_eq!(parse_answer("n"), Some(false));
+        assert_eq!(parse_answer("doas rc-service cronie status"), None);
+    }
 }
 
 /// `YYYYMMDD-HHMMSS` in UTC, for naming snapshots and backups.

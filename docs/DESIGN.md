@@ -160,6 +160,24 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 Read-only commands never need root. Commands that change the system ask for
 elevation themselves through the configured tool (doas by default).
 
+### `bunny switch` (current behaviour)
+
+1. Shows the plan and asks before changing anything (`--yes` skips this).
+   Re-runs itself through doas when not root.
+2. Takes a read-only btrfs snapshot of `/` in `/.snapshots/bunny-<time>`. If
+   that fails, nothing is changed.
+3. Backs up the world file and package.use to `/var/lib/bunny/backups/<time>/`.
+4. **Takes over package.use:** the user's files move to the backup, and
+   bunny writes `zz-bunny` (generated from the config, read last so it wins)
+   plus `00-bunny-kept` (lines bunny can't manage yet, word for word).
+5. Writes the world file from `packages`.
+6. Runs `emerge --update --deep --newuse @world` (with `--ask` unless `--yes`).
+7. Runs `emerge --depclean --ask` if packages were removed. **Always asks.**
+8. Enables services with `rc-update`, checking again after install.
+
+With `--root` pointing anywhere but `/`, files are written to that root and
+commands are only printed.
+
 ### Config files (`/etc`)
 
 - Managed files are stored as **overrides on top of the package default**:

@@ -7,17 +7,19 @@ use crate::config::Config;
 
 /// Where Portage keeps the world set, relative to the system root.
 pub const WORLD_FILE: &str = "var/lib/portage/world";
-/// The package.use file bunny owns. Other files in package.use are left alone.
-pub const PACKAGE_USE_FILE: &str = "etc/portage/package.use/bunny";
+/// The package.use directory.
+pub const PACKAGE_USE_DIR: &str = "etc/portage/package.use";
+/// bunny's own package.use file. Named so Portage reads it last, so it wins.
+pub const BUNNY_USE_FILE: &str = "zz-bunny";
+/// package.use lines bunny can't manage yet, kept word for word. Read first.
+pub const KEPT_USE_FILE: &str = "00-bunny-kept";
 
 pub fn world_path(root: &Path) -> PathBuf {
     root.join(WORLD_FILE)
 }
 
-// Used by `bunny switch` (next step).
-#[allow(dead_code)]
-pub fn package_use_path(root: &Path) -> PathBuf {
-    root.join(PACKAGE_USE_FILE)
+pub fn package_use_dir(root: &Path) -> PathBuf {
+    root.join(PACKAGE_USE_DIR)
 }
 
 /// The packages the config asks for, sorted and de-duplicated.
@@ -39,9 +41,17 @@ pub fn read_world(root: &Path) -> std::io::Result<BTreeSet<String>> {
     }
 }
 
+/// The world file for the config: one package per line, sorted.
+pub fn render_world(config: &Config) -> String {
+    let mut out = String::new();
+    for atom in wanted_world(config) {
+        out.push_str(&atom);
+        out.push('\n');
+    }
+    out
+}
+
 /// The contents bunny's package.use file should have.
-/// Used by `bunny switch` (next step).
-#[allow(dead_code)]
 pub fn render_package_use(config: &Config) -> String {
     let mut out = String::from("# Managed by bunny. Edit bunny.toml instead of this file.\n");
     for (atom, settings) in &config.pkg {

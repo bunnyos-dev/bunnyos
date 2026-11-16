@@ -8,6 +8,7 @@
 #   ./bunny-vm.sh snaps            list snapshots
 #   ./bunny-vm.sh reset-keys       wipe Secure Boot keys (back to Setup Mode)
 #   ./bunny-vm.sh ssh [user]       SSH into the running VM (port 2222, default user "you")
+#   ./bunny-vm.sh put <file>...    Copy files into the running VM (to /home/you)
 #
 # Options (environment variables):
 #   MEM=8G CPUS=4 DISK_SIZE=60G GL=1   (GL=0 if 3D graphics won't start)
@@ -110,7 +111,9 @@ case "${1:-run}" in
     restore)    check_off; qemu-img snapshot -a "${2:?name needed}" "$DISK"; echo "✓ Restored: $2" ;;
     snaps)      qemu-img snapshot -l "$DISK" ;;
     reset-keys) check_off; find_firmware; cp "$VARS_TEMPLATE" "$VARS"; echo "✓ Secure Boot keys wiped (Setup Mode)" ;;
+    put)        shift; [ $# -gt 0 ] || { echo "✗ Name at least one file to copy."; exit 1; }
+                exec scp -P 2222 -o StrictHostKeyChecking=no "$@" you@localhost: ;;
     # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
     ssh)        TERM=xterm-256color exec ssh -p 2222 -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
-    *)          sed -n '2,15p' "$0" ;;
+    *)          sed -n '2,16p' "$0" ;;
 esac

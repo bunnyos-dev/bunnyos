@@ -96,6 +96,9 @@ sha512sum -c "$FILE.sha512" >/dev/null || fail "The stage3 download is corrupted
 say "Unpacking"
 tar xpf "$FILE" --xattrs-include='*.*' --numeric-owner -C "$MNT"
 rm -f "$FILE" "$FILE.DIGESTS" "$FILE.sha512"
+# Create /srv now as a normal folder. Otherwise tmpfiles creates it as a btrfs
+# subvolume on first boot, and nested subvolumes aren't part of snapshots.
+mkdir -p "$MNT/srv"
 
 # ----------------------------------------------------------- portage setup --
 say "Configuring Portage"

@@ -19,6 +19,12 @@ use crate::portage;
 pub trait Runner {
     /// Runs a command, showing its output to the user. Returns whether it succeeded.
     fn run(&mut self, cmd: &[String]) -> Result<bool>;
+
+    /// Runs a command and returns what it printed, or `None` if it failed.
+    /// Only for commands that just read information.
+    fn output(&mut self, _cmd: &[String]) -> Result<Option<String>> {
+        Ok(None)
+    }
 }
 
 /// Runs commands for real.
@@ -31,6 +37,17 @@ impl Runner for SystemRunner {
             .status()
             .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
         Ok(status.success())
+    }
+
+    fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
+        let out = std::process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .output()
+            .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
+        Ok(out
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).into_owned()))
     }
 }
 

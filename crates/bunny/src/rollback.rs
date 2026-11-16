@@ -5,6 +5,7 @@
 //! them. The current system is snapshotted first, so a rollback can itself be
 //! undone. The swap happens on the btrfs top level and takes effect on reboot.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -107,6 +108,46 @@ pub struct Outcome {
     pub before: String,
     /// Where the replaced root subvolume was moved.
     pub replaced: String,
+    /// Nested subvolumes (like /srv) carried over to the restored system.
+    pub carried: Vec<String>,
+    /// Nested subvolumes that couldn't be carried over (left in `replaced`).
+    pub left_behind: Vec<String>,
+}
+
+/// Parses `btrfs subvolume list` output into paths relative to the top level.
+pub fn parse_subvolume_list(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter_map(|line| line.split_once(" path ").map(|(_, p)| p.trim()))
+        .map(|p| p.strip_prefix("<FS_TREE>/").unwrap_or(p).to_string())
+        .filter(|p| !p.is_empty())
+        .collect()
+}
+
+/// Subvolumes nested anywhere inside `subvol` (a path relative to the top
+/// level, mounted at `top`), as top-level-relative paths, deepest first.
+pub fn nested_subvolumes(runner: &mut dyn Runner, top: &Path, subvol: &str) -> Result<Vec<String>> {
+    let mut found = Vec::new();
+    let mut queue = vec![subvol.to_string()];
+    while let Some(parent) = queue.pop() {
+        let cmd: Vec<String> = ["btrfs", "subvolume", "list", "-o"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain([top.join(&parent).to_string_lossy().into_owned()])
+            .collect();
+        let children = runner
+            .output(&cmd)?
+            .map(|out| parse_subvolume_list(&out))
+            .unwrap_or_default();
+        for child in children {
+            if child.starts_with(&format!("{parent}/")) {
+                queue.push(child.clone());
+                found.push(child);
+            }
+        }
+    }
+    found.sort_by_key(|p| std::cmp::Reverse(p.matches('/').count()));
+    Ok(found)
 }
 
 /// Replaces `@` with a writable copy of `generation`. Takes effect on reboot.
@@ -145,6 +186,11 @@ pub fn rollback(
 
     let before = format!("bunny-{stamp}-before-rollback");
     let replaced = format!("{ROOT_SUBVOL}replaced-{stamp}");
+    // Subvolumes inside @ (like /srv) aren't part of snapshots. Carry them
+    // over to the restored system afterwards, like /home, so nothing is lost.
+    let nested = nested_subvolumes(runner, &top, ROOT_SUBVOL)?;
+    let mut carried = Vec::new();
+    let mut left_behind = Vec::new();
     let result = (|| -> Result<()> {
         let before_path = t(&format!("{SNAPSHOTS_SUBVOL}/{before}"));
         if !run(
@@ -172,6 +218,21 @@ pub fn rollback(
             run(runner, &["mv", &t(&replaced), &t(ROOT_SUBVOL)])?;
             bail!("Couldn't restore \"{generation}\". Your current system was put back unchanged.");
         }
+        // Shallowest first, so parents are in place before their children.
+        for path in nested.iter().rev() {
+            let inside = path
+                .strip_prefix(&format!("{ROOT_SUBVOL}/"))
+                .unwrap_or(path);
+            let from = t(&format!("{replaced}/{inside}"));
+            let to = t(path);
+            // The snapshot has an empty folder where the subvolume was.
+            let _ = run(runner, &["rmdir", &to])?;
+            if run(runner, &["mv", &from, &to])? {
+                carried.push(format!("/{inside}"));
+            } else {
+                left_behind.push(format!("/{inside}"));
+            }
+        }
         Ok(())
     })();
 
@@ -195,7 +256,12 @@ pub fn rollback(
             to: Some(generation.to_string()),
         },
     )?;
-    Ok(Outcome { before, replaced })
+    Ok(Outcome {
+        before,
+        replaced,
+        carried,
+        left_behind,
+    })
 }
 
 /// What `bunny clean` would remove.
@@ -205,6 +271,8 @@ pub struct CleanPlan {
     pub generations: Vec<String>,
     /// Old root subvolumes left behind by rollbacks.
     pub replaced: Vec<String>,
+    /// Subvolumes nested inside each old root, deleted first (deepest first).
+    pub nested: BTreeMap<String, Vec<String>>,
 }
 
 impl CleanPlan {
@@ -215,11 +283,14 @@ impl CleanPlan {
 
 /// Keeps the newest `keep` generations. Old root subvolumes are removable,
 /// except the one `/` is still running from (before the reboot).
+/// `running_copy_of` is the generation the current system was restored from;
+/// it's always kept, so it's clear what you're running.
 pub fn clean_plan(
     generations: &[Generation],
     keep: usize,
     top_level_names: &[String],
     running_subvol: &str,
+    running_copy_of: Option<&str>,
 ) -> CleanPlan {
     let cut = generations.len().saturating_sub(keep);
     let mut replaced: Vec<String> = top_level_names
@@ -229,8 +300,13 @@ pub fn clean_plan(
         .collect();
     replaced.sort();
     CleanPlan {
-        generations: generations[..cut].iter().map(|g| g.name.clone()).collect(),
+        generations: generations[..cut]
+            .iter()
+            .filter(|g| Some(g.name.as_str()) != running_copy_of)
+            .map(|g| g.name.clone())
+            .collect(),
         replaced,
+        nested: BTreeMap::new(),
     }
 }
 
@@ -243,25 +319,32 @@ pub fn clean(
     runner: &mut dyn Runner,
 ) -> Result<Vec<String>> {
     let mut failed = Vec::new();
-    let mut delete = |runner: &mut dyn Runner, path: PathBuf, name: &str| -> Result<bool> {
-        let ok = runner.run(&[
+    let delete = |runner: &mut dyn Runner, path: PathBuf| -> Result<bool> {
+        runner.run(&[
             "btrfs".to_string(),
             "subvolume".to_string(),
             "delete".to_string(),
             path.to_string_lossy().into_owned(),
-        ])?;
-        if !ok {
-            failed.push(name.to_string());
-        }
-        Ok(ok)
+        ])
     };
     for name in &plan.generations {
-        if delete(runner, top.join(SNAPSHOTS_SUBVOL).join(name), name)? {
+        if delete(runner, top.join(SNAPSHOTS_SUBVOL).join(name))? {
             let _ = std::fs::remove_file(notes::note_path(root, name));
+        } else {
+            failed.push(name.clone());
         }
     }
     for name in &plan.replaced {
-        delete(runner, top.join(name), name)?;
+        let mut nested_ok = true;
+        for inner in plan.nested.get(name).into_iter().flatten() {
+            if !delete(runner, top.join(inner))? {
+                nested_ok = false;
+                failed.push(inner.clone());
+            }
+        }
+        if !nested_ok || !delete(runner, top.join(name))? {
+            failed.push(name.clone());
+        }
     }
     Ok(failed)
 }
@@ -274,6 +357,8 @@ mod tests {
     struct Recorder {
         commands: Vec<String>,
         fail: Option<&'static str>,
+        /// Canned output for `btrfs subvolume list -o <path ending>`.
+        lists: Vec<(&'static str, &'static str)>,
     }
 
     impl Runner for Recorder {
@@ -282,6 +367,17 @@ mod tests {
             let ok = self.fail.is_none_or(|f| !line.contains(f));
             self.commands.push(line);
             Ok(ok)
+        }
+
+        fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
+            let path = cmd.last().unwrap();
+            Ok(Some(
+                self.lists
+                    .iter()
+                    .find(|(end, _)| path.ends_with(end))
+                    .map(|(_, out)| out.to_string())
+                    .unwrap_or_default(),
+            ))
         }
     }
 
@@ -343,12 +439,12 @@ mod tests {
             })
             .collect();
         let top = ["@", "@home", "@replaced-b", "@replaced-a", "@snapshots"].map(String::from);
-        let plan = clean_plan(&gens, 2, &top, "@");
+        let plan = clean_plan(&gens, 2, &top, "@", None);
         assert_eq!(plan.generations, ["bunny-1"]);
         assert_eq!(plan.replaced, ["@replaced-a", "@replaced-b"]);
 
         // Not rebooted after a rollback yet: / still runs from @replaced-b.
-        let plan = clean_plan(&gens, 5, &top, "@replaced-b");
+        let plan = clean_plan(&gens, 5, &top, "@replaced-b", None);
         assert!(plan.generations.is_empty());
         assert_eq!(plan.replaced, ["@replaced-a"]);
     }
@@ -364,6 +460,7 @@ mod tests {
         let plan = CleanPlan {
             generations: vec!["bunny-1".into()],
             replaced: vec!["@replaced-a".into()],
+            nested: BTreeMap::from([("@replaced-a".into(), vec!["@replaced-a/srv".into()])]),
         };
         let mut runner = Recorder::default();
         let failed = clean(root.path(), Path::new("/top"), &plan, &mut runner).unwrap();
@@ -372,10 +469,77 @@ mod tests {
             runner.commands,
             [
                 "btrfs subvolume delete /top/@snapshots/bunny-1",
+                "btrfs subvolume delete /top/@replaced-a/srv",
                 "btrfs subvolume delete /top/@replaced-a"
             ]
         );
         assert!(!notes::note_path(root.path(), "bunny-1").exists());
+    }
+
+    #[test]
+    fn keeps_the_generation_you_are_running_a_copy_of() {
+        let gens: Vec<_> = ["bunny-1", "bunny-2", "bunny-3"]
+            .iter()
+            .map(|n| Generation {
+                name: n.to_string(),
+            })
+            .collect();
+        let plan = clean_plan(&gens, 1, &[], "@", Some("bunny-1"));
+        assert_eq!(plan.generations, ["bunny-2"]);
+    }
+
+    #[test]
+    fn parses_subvolume_lists() {
+        let out = "ID 262 gen 85 top level 256 path <FS_TREE>/@replaced-X/srv\n\
+                   ID 270 gen 9 top level 256 path @/var/lib/machines\n";
+        assert_eq!(
+            parse_subvolume_list(out),
+            ["@replaced-X/srv", "@/var/lib/machines"]
+        );
+    }
+
+    #[test]
+    fn finds_nested_subvolumes_deepest_first() {
+        let mut runner = Recorder {
+            lists: vec![
+                (
+                    "top/@",
+                    "ID 1 gen 1 top level 5 path @/srv\nID 2 gen 1 top level 5 path @/opt\n",
+                ),
+                ("top/@/srv", "ID 3 gen 1 top level 1 path @/srv/data\n"),
+            ],
+            ..Default::default()
+        };
+        let nested = nested_subvolumes(&mut runner, Path::new("/top"), "@").unwrap();
+        assert_eq!(nested[0], "@/srv/data");
+        assert_eq!(nested.len(), 3);
+    }
+
+    #[test]
+    fn rollback_carries_nested_subvolumes_over() {
+        let root = system_with(&["bunny-a"]);
+        let mut runner = Recorder {
+            lists: vec![("top/@", "ID 262 gen 85 top level 265 path @/srv\n")],
+            ..Default::default()
+        };
+        let out = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap();
+        let top = root
+            .path()
+            .join("run/bunny/top")
+            .to_string_lossy()
+            .into_owned();
+        let restore = runner
+            .commands
+            .iter()
+            .position(|c| c.contains("snapshots/bunny-a"))
+            .unwrap();
+        assert_eq!(runner.commands[restore + 1], format!("rmdir {top}/@/srv"));
+        assert_eq!(
+            runner.commands[restore + 2],
+            format!("mv {top}/@replaced-X/srv {top}/@/srv")
+        );
+        assert_eq!(out.carried, ["/srv"]);
+        assert!(out.left_behind.is_empty());
     }
 
     #[test]

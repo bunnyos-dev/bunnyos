@@ -117,6 +117,11 @@ isolated = false       # compile inside a clean container
   writable copy of the chosen snapshot the new `@`. It takes effect on reboot.
   If restoring fails, the current system is moved back unchanged.
 - `/boot` lives inside `@`, so the kernel rolls back together with the system.
+- **Nested subvolumes** (subvolumes inside `@`, e.g. `/srv` when tmpfiles
+  creates it as a subvolume on btrfs) aren't part of snapshots. Rollback moves
+  them over to the restored system, like `/home`, and `clean` deletes them
+  inside-out. The installer creates `/srv` as a plain folder to avoid this.
+- `clean` never removes the generation you're running a copy of.
 - Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
   right after it (a switch with a short summary, or a rollback and its
   target), and `/.snapshots/bunny-state.toml` remembers the last action, so

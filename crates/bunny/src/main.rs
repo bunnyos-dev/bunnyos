@@ -372,7 +372,22 @@ fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .collect();
         let gens = rollback::list(root)?;
-        let plan = rollback::clean_plan(&gens, keep, &top_names, &running);
+        let running_copy = match notes::read_state(root) {
+            Some(notes::State {
+                last: notes::Kind::Rollback,
+                to,
+                ..
+            }) => to,
+            _ => None,
+        };
+        let mut plan =
+            rollback::clean_plan(&gens, keep, &top_names, &running, running_copy.as_deref());
+        for name in &plan.replaced {
+            let nested = rollback::nested_subvolumes(runner.as_mut(), &top, name)?;
+            if !nested.is_empty() {
+                plan.nested.insert(name.clone(), nested);
+            }
+        }
         if plan.is_empty() {
             println!(
                 "✓ Nothing to clean. You have {} generation(s), and bunny keeps the newest {keep}.",
@@ -390,7 +405,16 @@ fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
         if !plan.replaced.is_empty() {
             println!("Old systems left behind by rollbacks:");
             for name in &plan.replaced {
-                println!("  - {name}");
+                match plan.nested.get(name) {
+                    Some(inner) => {
+                        let inside: Vec<_> = inner
+                            .iter()
+                            .map(|p| format!("/{}", p.split_once('/').map_or(p.as_str(), |x| x.1)))
+                            .collect();
+                        println!("  - {name}   (with {} inside it)", inside.join(", "));
+                    }
+                    None => println!("  - {name}"),
+                }
             }
         }
         if !real_system {
@@ -477,8 +501,21 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         .map(|i| (i + 1).to_string())
         .unwrap_or_else(|| outcome.before.clone());
     println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
+    if !outcome.carried.is_empty() {
+        println!(
+            "  Kept as they are (separate subvolumes, like /home): {}",
+            outcome.carried.join(", ")
+        );
+    }
+    if !outcome.left_behind.is_empty() {
+        println!(
+            "  Note: couldn't bring over {}. Their contents are still in {} until you remove it.",
+            outcome.left_behind.join(", "),
+            outcome.replaced
+        );
+    }
     println!(
-        "  The replaced system is kept as the subvolume {} until you remove it.",
+        "  The replaced system is kept as the subvolume {} until you remove it (bunny clean).",
         outcome.replaced
     );
     Ok(ExitCode::SUCCESS)

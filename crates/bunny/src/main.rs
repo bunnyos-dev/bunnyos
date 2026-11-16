@@ -88,6 +88,18 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
+    /// Sync the package tree, update everything, and record the new versions in bunny.lock
+    Update {
+        /// Path to the config
+        #[arg(default_value = "/etc/bunny/bunny.toml")]
+        config: PathBuf,
+        /// Don't ask first (removing packages always asks)
+        #[arg(short, long)]
+        yes: bool,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Record the exact versions installed now in bunny.lock, next to the config
     Lock {
         /// Path to the config (the lock is written next to it)
@@ -153,6 +165,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
         Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
         Command::Lock { config, root } => lock_cmd(&config, &root),
+        Command::Update { config, yes, root } => update_cmd(&config, yes, &root),
         Command::Import {
             output,
             force,
@@ -214,6 +227,13 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
             foreign.join(", ")
         );
     }
+    let lock_path = lock::path_for(config);
+    if lock_path.exists() {
+        println!(
+            "\nPackages stay at the versions in {}. To move to newer versions, use `bunny update`.",
+            lock_path.display()
+        );
+    }
     if !real_system {
         println!("\nThis is a test root, so commands are only printed, not run.");
     }
@@ -239,12 +259,10 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     let opts = apply::Options {
         yes,
         stamp: timestamp(),
+        update_all: false,
     };
-    let outcome = if real_system {
-        apply::switch(&cfg, root, &plan, &mut apply::SystemRunner, &opts)?
-    } else {
-        apply::switch(&cfg, root, &plan, &mut apply::PrintRunner, &opts)?
-    };
+    let mut runner = runner_for(real_system);
+    let (outcome, change) = lock::switch(&cfg, root, &plan, &lock_path, runner.as_mut(), &opts)?;
 
     println!("\n✓ This system now matches {}.", config.display());
     if let (true, Some(snapshot)) = (real_system, &outcome.snapshot) {
@@ -260,10 +278,95 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     for note in &outcome.notes {
         println!("  Note: {note}");
     }
+    report_lock_change(&change);
+    Ok(ExitCode::SUCCESS)
+}
+
+fn runner_for(real_system: bool) -> Box<dyn apply::Runner> {
+    if real_system {
+        Box::new(apply::SystemRunner)
+    } else {
+        Box::new(apply::PrintRunner)
+    }
+}
+
+fn report_lock_change(change: &lock::LockChange) {
+    if change.created {
+        println!(
+            "  Created {}: the exact versions installed now.",
+            change.path.display()
+        );
+        return;
+    }
+    let d = &change.drift;
+    if d.is_empty() {
+        println!("  {} is unchanged.", change.path.display());
+        return;
+    }
+    println!("  Updated {}:", change.path.display());
+    for (name, old, new) in &d.changed {
+        println!("    ~ {name}: {old} → {new}");
+    }
+    for (name, v) in &d.extra {
+        println!("    + {name} {v}");
+    }
+    for (name, v) in &d.missing {
+        println!("    - {name} {v}");
+    }
+    for (repo, old, new) in &d.repos {
+        println!("    ~ {repo} package tree: {old} → {new}");
+    }
+}
+
+fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    let real_system = root == Path::new("/");
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
+    }
+    let cfg = Config::load(config)?;
+    if report_problems(&cfg, config) != ExitCode::SUCCESS {
+        eprintln!("Fix these first, then run `bunny update` again.");
+        return Ok(ExitCode::FAILURE);
+    }
     println!(
-        "  To record the exact versions installed now: bunny lock {}",
-        config.display()
+        "\nThis will sync the Gentoo package tree, update everything to the newest\n\
+         versions, and record them in {}.",
+        lock::path_for(config).display()
     );
+    let undoable = root.join(".snapshots").is_dir();
+    if undoable {
+        println!("A snapshot is taken first, so you can roll back if you don't like the result.");
+    } else {
+        println!("Note: there's no /.snapshots folder, so this update can't be rolled back.");
+    }
+    if !real_system {
+        println!("\nThis is a test root, so commands are only printed, not run.");
+    }
+    let default = if undoable { Default::Yes } else { Default::No };
+    if !yes && !confirm("\nUpdate now?", default)? {
+        println!("Nothing was changed.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let opts = apply::Options {
+        yes,
+        stamp: timestamp(),
+        update_all: true,
+    };
+    let mut runner = runner_for(real_system);
+    let (outcome, change) =
+        lock::update(&cfg, root, &lock::path_for(config), runner.as_mut(), &opts)?;
+
+    println!("\n✓ Updated.");
+    if let (true, Some(snapshot)) = (real_system, &outcome.snapshot) {
+        println!(
+            "  The system before this update is saved in {}.",
+            snapshot.display()
+        );
+    }
+    for note in &outcome.notes {
+        println!("  Note: {note}");
+    }
+    report_lock_change(&change);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -579,6 +682,11 @@ fn lock_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
     }
     std::fs::write(&path, lock::render(&new)?)
         .with_context(|| format!("Couldn't write {}", path.display()))?;
+    // Keep the version pins in step, if they're in use. They live in /etc, so
+    // without root they're refreshed on the next `bunny switch` instead.
+    if root.join(lock::PIN_FILE).exists() && lock::write_pins(root, &new).is_err() {
+        println!("  The version pins will catch up on the next `bunny switch`.");
+    }
     println!(
         "✓ Saved {} ({} packages, {} package tree{}).",
         path.display(),

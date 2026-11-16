@@ -61,11 +61,15 @@ impl Runner for PrintRunner {
     }
 }
 
+#[derive(Clone)]
 pub struct Options {
     /// Don't let emerge ask before installing. Removing packages always asks.
     pub yes: bool,
     /// Used to name the snapshot and the backup folder, e.g. `20261116-203000`.
     pub stamp: String,
+    /// Run the world update even if the plan has no package changes
+    /// (for `bunny update`).
+    pub update_all: bool,
 }
 
 /// What happened, for the summary at the end.
@@ -145,7 +149,7 @@ pub fn switch(
         .context("Couldn't write the world file")?;
 
     // 4. Install and update.
-    if !plan.add_packages.is_empty() || !plan.use_changes.is_empty() {
+    if opts.update_all || !plan.add_packages.is_empty() || !plan.use_changes.is_empty() {
         let mut emerge = cmd(&["emerge", "--update", "--deep", "--newuse", "--verbose"]);
         if !opts.yes {
             emerge.push("--ask".into());
@@ -328,6 +332,7 @@ mod tests {
         Options {
             yes: false,
             stamp: "20261116-120000".into(),
+            update_all: false,
         }
     }
 
@@ -436,6 +441,7 @@ mod tests {
             let opts = Options {
                 yes: true,
                 stamp: stamp.into(),
+                update_all: false,
             };
             switch(&config, root.path(), &plan, &mut Recorder::default(), &opts).unwrap();
         }

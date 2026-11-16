@@ -378,6 +378,26 @@ pub fn update(
     Ok((outcome, change))
 }
 
+/// When there's nothing else to switch: creates the lock if it's missing and
+/// puts back missing pins. Returns messages for the user.
+pub fn ensure(root: &Path, lock_path: &Path) -> Result<Vec<String>> {
+    let mut messages = Vec::new();
+    if !lock_path.exists() {
+        let change = relock(root, lock_path, None)?;
+        messages.push(format!(
+            "✓ Created {}: the exact versions installed now. Packages now stay at these versions.",
+            change.path.display()
+        ));
+    } else if !root.join(PIN_FILE).exists() {
+        write_pins(root, &load(lock_path)?)?;
+        messages.push(format!(
+            "✓ Put back the version pins from {}.",
+            lock_path.display()
+        ));
+    }
+    Ok(messages)
+}
+
 /// Writes the lock from the system as it is now and re-pins to it.
 fn relock(root: &Path, lock_path: &Path, old: Option<Lock>) -> Result<LockChange> {
     let new = from_system(root)?;
@@ -652,5 +672,20 @@ mod tests {
         .unwrap_err();
         assert!(err.to_string().contains("nothing was changed"));
         assert_eq!(runner.commands.len(), 1);
+    }
+
+    #[test]
+    fn ensure_creates_a_missing_lock_and_pins() {
+        let root = fake_system();
+        let lock_path = root.path().join("bunny.lock");
+        let messages = ensure(root.path(), &lock_path).unwrap();
+        assert!(messages[0].contains("Created"));
+        assert!(lock_path.exists());
+        assert!(root.path().join(PIN_FILE).exists());
+
+        // Pins removed by hand: put back. Everything in place: nothing to say.
+        std::fs::remove_file(root.path().join(PIN_FILE)).unwrap();
+        assert!(ensure(root.path(), &lock_path).unwrap()[0].contains("Put back"));
+        assert!(ensure(root.path(), &lock_path).unwrap().is_empty());
     }
 }

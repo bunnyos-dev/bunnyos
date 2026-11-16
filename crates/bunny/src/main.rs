@@ -214,7 +214,11 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     }
     let plan = plan::make(&cfg, root)?;
     print!("{}", plan.render());
+    let lock_path = lock::path_for(config);
     if plan.is_empty() {
+        for message in lock::ensure(root, &lock_path)? {
+            println!("{message}");
+        }
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -227,7 +231,6 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
             foreign.join(", ")
         );
     }
-    let lock_path = lock::path_for(config);
     if lock_path.exists() {
         println!(
             "\nPackages stay at the versions in {}. To move to newer versions, use `bunny update`.",

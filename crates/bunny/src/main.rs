@@ -65,7 +65,7 @@ enum Command {
     },
     /// Put the system back to a saved generation (the latest one if no name is given)
     Rollback {
-        /// Generation name from `bunny generations`
+        /// Number or name from `bunny generations`, or `list` to show them
         name: Option<String>,
         /// Don't ask first
         #[arg(short, long)]
@@ -256,26 +256,34 @@ fn generations(root: &Path) -> anyhow::Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     println!("Saved generations (oldest first):\n");
-    for g in &gens {
-        let label = if g.is_pre_rollback() {
-            "  (your system just before a rollback)"
+    for (i, g) in gens.iter().enumerate() {
+        let what = if g.is_pre_rollback() {
+            "your system just before a rollback"
         } else {
-            "  (your system just before a switch)"
+            "your system just before a switch"
         };
-        println!("  {}   {}{label}", g.name, g.when());
+        println!("  {:>2}. {}   {what}", i + 1, g.when());
+        println!("      {}", g.name);
     }
-    println!("\nTo go back to one: bunny rollback <name>");
+    println!(
+        "\nTo go back to one: bunny rollback <number>   (for example: bunny rollback {})",
+        gens.len()
+    );
     Ok(ExitCode::SUCCESS)
 }
 
 fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    // Listing doesn't need root.
+    if name.as_deref() == Some("list") {
+        return generations(root);
+    }
     let real_system = root == Path::new("/");
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
     let gens = rollback::list(root)?;
     let name = match name {
-        Some(name) => name,
+        Some(input) => rollback::resolve(&gens, &input).unwrap_or(input),
         None => match gens.iter().rev().find(|g| !g.is_pre_rollback()) {
             Some(g) => g.name.clone(),
             None => anyhow::bail!(

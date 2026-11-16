@@ -154,7 +154,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny update` | Sync the tree and refresh `bunny.lock` |
 | `bunny switch` | Apply the lock as a new generation |
 | `bunny generations` | List saved generations |
-| `bunny rollback [name]` | Restore a generation (takes effect on reboot) |
+| `bunny rollback [number|name]` | Restore a generation (takes effect on reboot); `bunny rollback list` lists them |
 | `bunny try` | Build and boot a generation without making it permanent |
 | `bunny status` | Show drift (anything changed outside bunny) |
 | `bunny diff [--baseline]` | Show differences from the config or from the Baseline |

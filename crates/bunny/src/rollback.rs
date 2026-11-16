@@ -66,6 +66,13 @@ pub fn list(root: &Path) -> Result<Vec<Generation>> {
     Ok(generations)
 }
 
+/// Turns a number from `bunny generations` (1 = oldest) into a name.
+/// Anything that isn't a valid number is returned as `None`.
+pub fn resolve(generations: &[Generation], input: &str) -> Option<String> {
+    let n: usize = input.parse().ok()?;
+    generations.get(n.checked_sub(1)?).map(|g| g.name.clone())
+}
+
 /// Finds the device and subvolume `/` is mounted from, using /proc/self/mountinfo.
 pub fn root_mount(mountinfo: &str) -> Result<(String, String)> {
     for line in mountinfo.lines() {
@@ -210,6 +217,21 @@ mod tests {
         let names: Vec<_> = gens.iter().map(|g| g.name.as_str()).collect();
         assert_eq!(names, ["bunny-20261101-090000", "bunny-20261116-204336"]);
         assert_eq!(gens[1].when(), "2026-11-16 20:43:36 UTC");
+    }
+
+    #[test]
+    fn resolves_numbers() {
+        let gens: Vec<_> = ["bunny-a", "bunny-b"]
+            .iter()
+            .map(|n| Generation {
+                name: n.to_string(),
+            })
+            .collect();
+        assert_eq!(resolve(&gens, "1").as_deref(), Some("bunny-a"));
+        assert_eq!(resolve(&gens, "2").as_deref(), Some("bunny-b"));
+        assert_eq!(resolve(&gens, "0"), None);
+        assert_eq!(resolve(&gens, "3"), None);
+        assert_eq!(resolve(&gens, "bunny-a"), None);
     }
 
     #[test]

@@ -186,7 +186,20 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
         println!("\nThis is a test root, so commands are only printed, not run.");
     }
 
-    if !yes && !confirm("\nApply these changes?")? {
+    if !yes
+        && !confirm(
+            "\nApply these changes?",
+            // Enter only means yes when a snapshot makes this undoable.
+            if root.join(".snapshots").is_dir() {
+                Default::Yes
+            } else {
+                println!(
+                    "\nNote: there's no /.snapshots folder, so this switch can't be rolled back."
+                );
+                Default::No
+            },
+        )?
+    {
         println!("Nothing was changed.");
         return Ok(ExitCode::SUCCESS);
     }
@@ -294,7 +307,7 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
     if !real_system {
         println!("\nThis is a test root, so commands are only printed, not run.");
     }
-    if !yes && !confirm("\nRoll back?")? {
+    if !yes && !confirm("\nRoll back?", Default::Yes)? {
         println!("Nothing was changed.");
         return Ok(ExitCode::SUCCESS);
     }
@@ -324,18 +337,31 @@ fn is_root() -> bool {
     std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
 }
 
+/// What pressing Enter means at a yes/no question.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Default {
+    /// For changes that can be undone (a snapshot is taken first).
+    Yes,
+    /// For changes that can't be undone (no snapshot, erasing a disk).
+    No,
+}
+
 /// Asks a yes/no question. Anything that isn't clearly yes or no (like a
-/// pasted command) is asked again instead of being taken as "no".
-fn confirm(question: &str) -> anyhow::Result<bool> {
+/// pasted command) is asked again instead of being guessed.
+fn confirm(question: &str, default: Default) -> anyhow::Result<bool> {
     use std::io::Write;
-    print!("{question} [y/N] ");
+    let hint = match default {
+        Default::Yes => "[Y/n]",
+        Default::No => "[y/N]",
+    };
+    print!("{question} {hint} ");
     loop {
         std::io::stdout().flush()?;
         let mut answer = String::new();
         if std::io::stdin().read_line(&mut answer)? == 0 {
-            return Ok(false); // no more input
+            return Ok(false); // no more input: never assume yes
         }
-        match parse_answer(&answer) {
+        match parse_answer(&answer, default) {
             Some(yes) => return Ok(yes),
             None => print!(
                 "Didn't catch that (got \"{}\"). Type y to continue or n to cancel: ",
@@ -345,11 +371,13 @@ fn confirm(question: &str) -> anyhow::Result<bool> {
     }
 }
 
-/// `Some(true)` for yes, `Some(false)` for no or just Enter, `None` otherwise.
-fn parse_answer(answer: &str) -> Option<bool> {
+/// `Some(true)` for yes, `Some(false)` for no, Enter means `default`,
+/// `None` for anything else.
+fn parse_answer(answer: &str, default: Default) -> Option<bool> {
     match answer.trim().to_lowercase().as_str() {
+        "" => Some(default == Default::Yes),
         "y" | "yes" => Some(true),
-        "" | "n" | "no" => Some(false),
+        "n" | "no" => Some(false),
         _ => None,
     }
 }
@@ -400,14 +428,22 @@ fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_answer;
+    use super::{parse_answer, Default};
 
     #[test]
     fn answers() {
-        assert_eq!(parse_answer("y\n"), Some(true));
-        assert_eq!(parse_answer("YES"), Some(true));
-        assert_eq!(parse_answer("\n"), Some(false));
-        assert_eq!(parse_answer("n"), Some(false));
-        assert_eq!(parse_answer("doas rc-service cronie status"), None);
+        assert_eq!(parse_answer("y\n", Default::No), Some(true));
+        assert_eq!(parse_answer("YES", Default::No), Some(true));
+        assert_eq!(parse_answer("n", Default::Yes), Some(false));
+        assert_eq!(
+            parse_answer("doas rc-service cronie status", Default::Yes),
+            None
+        );
+    }
+
+    #[test]
+    fn enter_means_the_default() {
+        assert_eq!(parse_answer("\n", Default::Yes), Some(true));
+        assert_eq!(parse_answer("\n", Default::No), Some(false));
     }
 }

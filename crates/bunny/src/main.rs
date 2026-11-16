@@ -354,20 +354,6 @@ fn parse_answer(answer: &str) -> Option<bool> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::parse_answer;
-
-    #[test]
-    fn answers() {
-        assert_eq!(parse_answer("y\n"), Some(true));
-        assert_eq!(parse_answer("YES"), Some(true));
-        assert_eq!(parse_answer("\n"), Some(false));
-        assert_eq!(parse_answer("n"), Some(false));
-        assert_eq!(parse_answer("doas rc-service cronie status"), None);
-    }
-}
-
 /// `YYYYMMDD-HHMMSS` in UTC, for naming snapshots and backups.
 fn timestamp() -> String {
     let secs = std::time::SystemTime::now()
@@ -410,4 +396,18 @@ fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode {
         eprintln!("  • {problem}\n");
     }
     ExitCode::FAILURE
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_answer;
+
+    #[test]
+    fn answers() {
+        assert_eq!(parse_answer("y\n"), Some(true));
+        assert_eq!(parse_answer("YES"), Some(true));
+        assert_eq!(parse_answer("\n"), Some(false));
+        assert_eq!(parse_answer("n"), Some(false));
+        assert_eq!(parse_answer("doas rc-service cronie status"), None);
+    }
 }

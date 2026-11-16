@@ -110,6 +110,7 @@ case "${1:-run}" in
     restore)    check_off; qemu-img snapshot -a "${2:?name needed}" "$DISK"; echo "✓ Restored: $2" ;;
     snaps)      qemu-img snapshot -l "$DISK" ;;
     reset-keys) check_off; find_firmware; cp "$VARS_TEMPLATE" "$VARS"; echo "✓ Secure Boot keys wiped (Setup Mode)" ;;
-    ssh)        exec ssh -p 2222 -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
+    # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
+    ssh)        TERM=xterm-256color exec ssh -p 2222 -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
     *)          sed -n '2,15p' "$0" ;;
 esac

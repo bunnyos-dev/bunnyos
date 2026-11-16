@@ -1,7 +1,7 @@
 # Working on BunnyOS
 
 Read `docs/DESIGN.md` first. It is the source of truth; update it when a
-decision changes.
+decision changes. `docs/ROADMAP.md` is the to-do list.
 
 ## Rules
 
@@ -24,3 +24,17 @@ decision changes.
 - Rust workspace; the CLI lives in `crates/bunny`.
 - `cargo fmt`, `cargo clippy -- -D warnings` and `cargo test` must pass.
 - Prefer small modules with unit tests over large untested ones.
+
+## Daily work sessions
+
+- Work on the first unchecked, unblocked item in `docs/ROADMAP.md`.
+- One branch and one pull request per item (`daily/<short-name>`). Never push
+  to `main` and never merge; the maintainer tests in the VM and merges.
+- If two or more daily PRs are still open, don't start a new item. Leave a
+  short comment on the oldest one instead.
+- Mark the item `[~]` in the PR's copy of the roadmap.
+- Every PR description ends with **"How to test in the VM"**: exact commands,
+  one per line, using `tools/bunny-vm.sh restore clean-install`, `put`, `ssh`,
+  and saying what the output should look like. Commands that ask questions go
+  on their own line.
+- Keep PRs small enough to test in about 15 minutes.

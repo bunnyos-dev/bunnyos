@@ -21,6 +21,8 @@ pub struct Imported {
     pub use_flags: BTreeMap<String, Vec<String>>,
     /// package.use lines bunny can't represent yet, with the file they came from.
     pub skipped: Vec<(PathBuf, String)>,
+    /// How many package.use lines had a version number that was dropped.
+    pub versioned: usize,
     /// Whether make.conf sets global USE flags (not managed by bunny yet).
     pub global_use: bool,
 }
@@ -44,6 +46,7 @@ pub fn from_system(root: &Path) -> Result<Imported> {
         global_use: make_conf_sets_use(root),
         use_flags: package_use.flags,
         skipped: package_use.skipped,
+        versioned: package_use.versioned,
     })
 }
 
@@ -53,6 +56,8 @@ pub struct PackageUse {
     pub flags: BTreeMap<String, Vec<String>>,
     /// Lines bunny can't represent yet, with the file they came from.
     pub skipped: Vec<(PathBuf, String)>,
+    /// How many lines had a version number that was dropped.
+    pub versioned: usize,
 }
 
 pub fn read_package_use(root: &Path) -> Result<PackageUse> {
@@ -67,7 +72,10 @@ pub fn read_package_use(root: &Path) -> Result<PackageUse> {
                 continue;
             }
             match parse_use_line(line) {
-                Some((atom, flags)) => {
+                Some((atom, flags, versioned)) => {
+                    if versioned {
+                        result.versioned += 1;
+                    }
                     let entry = result.flags.entry(atom).or_default();
                     for flag in flags {
                         merge_flag(entry, flag);
@@ -103,17 +111,20 @@ fn package_use_files(path: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// Parses `category/name flag -flag GROUP: value`. Returns `None` for lines
-/// bunny can't represent yet (version ranges, wildcards).
-fn parse_use_line(line: &str) -> Option<(String, Vec<String>)> {
+/// Parses `category/name flag -flag GROUP: value`.
+///
+/// Returns the atom, its flags, and whether a version number was dropped from
+/// the atom. Returns `None` for lines bunny can't represent yet (version
+/// ranges like `<`, package wildcards, flag wildcards like `-*`).
+fn parse_use_line(line: &str) -> Option<(String, Vec<String>, bool)> {
     let mut words = line.split_whitespace();
-    let atom = words.next()?;
-    if !is_package_name(atom) {
-        return None;
-    }
+    let (atom, versioned) = normalize_atom(words.next()?)?;
     let mut flags = Vec::new();
     let mut group: Option<String> = None;
     for word in words {
+        if word.contains('*') {
+            return None;
+        }
         if let Some(name) = word.strip_suffix(':') {
             // USE_EXPAND, e.g. `PYTHON_TARGETS: python3_12` → `python_targets_python3_12`
             group = Some(name.to_lowercase());
@@ -128,7 +139,85 @@ fn parse_use_line(line: &str) -> Option<(String, Vec<String>)> {
             None => flags.push(format!("{minus}{flag}")),
         }
     }
-    Some((atom.to_string(), flags))
+    Some((atom, flags, versioned))
+}
+
+/// Turns a package.use atom into plain `category/name[:slot]`.
+///
+/// - `>=cat/pkg-1.2.3`, `=cat/pkg-1.2*` and `~cat/pkg-1.2` lose their version
+///   (these are what `emerge --autounmask-write` produces), so the flags apply
+///   to every version.
+/// - A `::repo` suffix is dropped.
+/// - `<`, `<=` and `>` ranges, and wildcards like `*/*`, return `None`.
+fn normalize_atom(raw: &str) -> Option<(String, bool)> {
+    let raw = raw.split_once("::").map_or(raw, |(atom, _repo)| atom);
+    let (body, versioned) = if let Some(rest) = raw.strip_prefix(">=") {
+        (rest, true)
+    } else if raw.starts_with(['<', '>']) {
+        return None;
+    } else if let Some(rest) = raw.strip_prefix(['=', '~']) {
+        (rest, true)
+    } else {
+        (raw, false)
+    };
+    if body.contains('*') && !versioned {
+        return None;
+    }
+
+    let atom = if versioned {
+        let (with_version, slot) = match body.split_once(':') {
+            Some((a, s)) => (a, Some(s)),
+            None => (body, None),
+        };
+        let name = strip_version(with_version)?;
+        match slot {
+            Some(slot) => format!("{name}:{slot}"),
+            None => name.to_string(),
+        }
+    } else {
+        body.to_string()
+    };
+
+    is_package_name(&atom).then_some((atom, versioned))
+}
+
+/// `cat/name-1.2.3-r1` → `cat/name`. The version starts at the first `-`
+/// followed by a digit where the rest is a valid version, so names like
+/// `font-adobe-100dpi` aren't cut in the wrong place.
+fn strip_version(s: &str) -> Option<&str> {
+    s.match_indices('-')
+        .map(|(i, _)| i)
+        .find(|&i| is_version(&s[i + 1..]))
+        .map(|i| &s[..i])
+}
+
+/// Gentoo version syntax: `1.2.3`, `1.2b`, `1.2_rc3`, `1.2_p1-r2`, `1.2*`.
+fn is_version(s: &str) -> bool {
+    let s = s.strip_suffix('*').unwrap_or(s);
+    let s = match s.rsplit_once("-r") {
+        Some((v, rev)) if !rev.is_empty() && rev.bytes().all(|b| b.is_ascii_digit()) => v,
+        _ => s,
+    };
+    let (main, suffixes) = match s.split_once('_') {
+        Some((m, rest)) => (m, Some(rest)),
+        None => (s, None),
+    };
+    let main = main
+        .strip_suffix(|c: char| c.is_ascii_lowercase())
+        .unwrap_or(main);
+    let numbers_ok = !main.is_empty()
+        && main
+            .split('.')
+            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+    let suffixes_ok = suffixes.is_none_or(|rest| {
+        rest.split('_').all(|part| {
+            ["alpha", "beta", "pre", "rc", "p"].iter().any(|kind| {
+                part.strip_prefix(kind)
+                    .is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit()))
+            })
+        })
+    });
+    numbers_ok && suffixes_ok
 }
 
 /// Adds a flag, replacing any earlier setting of the same flag
@@ -191,10 +280,20 @@ impl Imported {
             );
         }
 
+        if self.versioned > 0 {
+            let _ = write!(
+                out,
+                "\n# {} package.use line(s) were tied to a version (like `>=cat/pkg-1.2`,\n\
+                 # often written by `emerge --autounmask-write`). Their flags now apply to\n\
+                 # every version of the package.\n",
+                self.versioned
+            );
+        }
+
         if !self.skipped.is_empty() {
             out.push_str(
-                "\n# These package.use lines couldn't be imported yet (version ranges or\n\
-                 # wildcards). They stay in their files and keep working:\n",
+                "\n# These package.use lines couldn't be imported yet (`<`/`>` version ranges\n\
+                 # or wildcards). They stay in their files and keep working:\n",
             );
             for (file, line) in &self.skipped {
                 let _ = writeln!(out, "#   {}: {line}", file.display());
@@ -210,6 +309,13 @@ impl Imported {
             self.services.len(),
             self.use_flags.values().filter(|f| !f.is_empty()).count(),
         );
+        if self.versioned > 0 {
+            let _ = write!(
+                text,
+                "\n{} line(s) were tied to a version; their flags now apply to every version.",
+                self.versioned
+            );
+        }
         if !self.skipped.is_empty() {
             let _ = write!(
                 text,
@@ -266,7 +372,10 @@ mod tests {
             root,
             "etc/portage/package.use/python",
             "dev-lang/python:3.12 sqlite PYTHON_TARGETS: python3_12 -python3_11\n\
-             >=dev-libs/foo-1.2 bar\n",
+             >=dev-libs/foo-1.2 bar\n\
+             <dev-libs/old-2 baz\n\
+             media-gfx/swayimg LUA_SINGLE_TARGET: -* lua5-4\n\
+             */* PYTHON_TARGETS: python3_13\n",
         );
         write(root, "etc/portage/package.use/.hidden", "x/y z\n");
         write(root, "etc/portage/make.conf", "USE=\"wayland -X\"\n");
@@ -293,8 +402,66 @@ mod tests {
                 "-python_targets_python3_11"
             ]
         );
-        assert_eq!(imported.skipped.len(), 1);
+        assert_eq!(imported.use_flags["dev-libs/foo"], ["bar"]);
+        assert_eq!(imported.versioned, 1);
+        // `<` range, `-*` wildcard, `*/*` wildcard
+        assert_eq!(imported.skipped.len(), 3, "{:#?}", imported.skipped);
         assert!(!imported.use_flags.contains_key("x/y"));
+    }
+
+    #[test]
+    fn normalizes_atoms() {
+        let n = |s| normalize_atom(s);
+        assert_eq!(
+            n("www-client/firefox"),
+            Some(("www-client/firefox".into(), false))
+        );
+        assert_eq!(
+            n(">=media-libs/libsndfile-1.2.2"),
+            Some(("media-libs/libsndfile".into(), true))
+        );
+        assert_eq!(
+            n("=dev-lang/rust-1.85.0-r1"),
+            Some(("dev-lang/rust".into(), true))
+        );
+        assert_eq!(n("=sys-libs/foo-1.2*"), Some(("sys-libs/foo".into(), true)));
+        assert_eq!(
+            n("~app-misc/bar-3.0_rc2"),
+            Some(("app-misc/bar".into(), true))
+        );
+        assert_eq!(
+            n(">=media-fonts/font-adobe-100dpi-1.0.4"),
+            Some(("media-fonts/font-adobe-100dpi".into(), true))
+        );
+        assert_eq!(
+            n(">=dev-lang/python-3.12.4:3.12"),
+            Some(("dev-lang/python:3.12".into(), true))
+        );
+        assert_eq!(
+            n("gui-apps/quickshell::guru"),
+            Some(("gui-apps/quickshell".into(), false))
+        );
+        assert_eq!(n("<dev-libs/old-2"), None);
+        assert_eq!(n("*/*"), None);
+        assert_eq!(n("dev-python/*"), None);
+    }
+
+    #[test]
+    fn versions() {
+        for ok in [
+            "1",
+            "1.2.3",
+            "1.2b",
+            "1.2_rc3",
+            "1.2_p1-r2",
+            "1.2*",
+            "2026.11.16",
+        ] {
+            assert!(is_version(ok), "{ok}");
+        }
+        for bad in ["", "dpi-1.0", "abc", "1..2", "1.2_foo", "-r1"] {
+            assert!(!is_version(bad), "{bad}");
+        }
     }
 
     #[test]

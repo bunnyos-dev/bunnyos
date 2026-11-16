@@ -189,7 +189,7 @@ fn normalize_atom(raw: &str) -> Option<(String, bool)> {
 /// `cat/name-1.2.3-r1` → `cat/name`. The version starts at the first `-`
 /// followed by a digit where the rest is a valid version, so names like
 /// `font-adobe-100dpi` aren't cut in the wrong place.
-fn strip_version(s: &str) -> Option<&str> {
+pub fn strip_version(s: &str) -> Option<&str> {
     s.match_indices('-')
         .map(|(i, _)| i)
         .find(|&i| is_version(&s[i + 1..]))

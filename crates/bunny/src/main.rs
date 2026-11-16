@@ -4,6 +4,7 @@ mod apply;
 mod config;
 mod import;
 mod init;
+mod lock;
 mod notes;
 mod plan;
 mod portage;
@@ -87,6 +88,15 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
+    /// Record the exact versions installed now in bunny.lock, next to the config
+    Lock {
+        /// Path to the config (the lock is written next to it)
+        #[arg(default_value = "/etc/bunny/bunny.toml")]
+        config: PathBuf,
+        /// System root to read (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Write a bunny.toml that describes this system as it is now (changes nothing)
     Import {
         /// Save to this file instead of printing it
@@ -129,12 +139,20 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             }
             let plan = plan::make(&cfg, &root)?;
             print!("{}", plan.render());
+            let lock_path = lock::path_for(&config);
+            if lock_path.exists() {
+                let locked = lock::load(&lock_path)?;
+                let now = lock::from_system(&root)?;
+                println!();
+                print!("{}", lock::compare(&locked, &now).render());
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
         Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
+        Command::Lock { config, root } => lock_cmd(&config, &root),
         Command::Import {
             output,
             force,
@@ -242,6 +260,10 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     for note in &outcome.notes {
         println!("  Note: {note}");
     }
+    println!(
+        "  To record the exact versions installed now: bunny lock {}",
+        config.display()
+    );
     Ok(ExitCode::SUCCESS)
 }
 
@@ -517,6 +539,52 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
     println!(
         "  The replaced system is kept as the subvolume {} until you remove it (bunny clean).",
         outcome.replaced
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn lock_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
+    let path = lock::path_for(config);
+    let new = lock::from_system(root)?;
+    if new.packages.is_empty() {
+        anyhow::bail!(
+            "Couldn't find any installed packages under {}.\n  \
+             Is this a Gentoo system?",
+            root.join("var/db/pkg").display()
+        );
+    }
+    if path.exists() {
+        let old = lock::load(&path)?;
+        let drift = lock::compare(&old, &new);
+        if drift.is_empty() {
+            println!("✓ {} is already up to date.", path.display());
+            return Ok(ExitCode::SUCCESS);
+        }
+        println!(
+            "Updating {}. What changed since it was written:",
+            path.display()
+        );
+        for (name, old_v, new_v) in &drift.changed {
+            println!("  ~ {name}: {old_v} → {new_v}");
+        }
+        for (name, v) in &drift.missing {
+            println!("  - {name} {v}");
+        }
+        for (name, v) in &drift.extra {
+            println!("  + {name} {v}");
+        }
+        for (repo, old_s, new_s) in &drift.repos {
+            println!("  ~ {repo} package tree: {old_s} → {new_s}");
+        }
+    }
+    std::fs::write(&path, lock::render(&new)?)
+        .with_context(|| format!("Couldn't write {}", path.display()))?;
+    println!(
+        "✓ Saved {} ({} packages, {} package tree{}).",
+        path.display(),
+        new.packages.len(),
+        new.repos.len(),
+        if new.repos.len() == 1 { "" } else { "s" }
     );
     Ok(ExitCode::SUCCESS)
 }

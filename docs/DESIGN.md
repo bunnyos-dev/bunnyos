@@ -79,6 +79,14 @@ Modules expand one line into packages + services + config files, for example
   only happens during `bunny update`. This is also the main speed win over
   plain emerge.
 
+**Current behaviour (part 1):** `bunny lock` writes `bunny.lock` next to
+the config (`bunny.toml` → `bunny.lock`) with each repository's snapshot (git
+commit, or the sync timestamp from `metadata/timestamp.chk`) and the exact
+installed version of every package from `/var/db/pkg` (keyed `cat/name`, or
+`cat/name:slot` when several slots are installed). `bunny plan` shows any
+difference between the system and the lock. Installing the locked versions
+(part 2) isn't built yet.
+
 **Reproducibility is "same recipe", not bit-for-bit.** Same lock means same
 versions, flags and settings. Locally compiled binaries can still differ
 (timestamps, CPU flags). This is a deliberate difference from NixOS.
@@ -164,6 +172,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny import` | Write a `bunny.toml` from the current system (world set, services, package.use) |
 | `bunny check` | Validate `bunny.toml` and explain any problems |
 | `bunny plan` | Show what would change, how long it takes, what loses prebuilt binaries |
+| `bunny lock` | Record exactly what's installed in `bunny.lock` |
 | `bunny update` | Sync the tree and refresh `bunny.lock` |
 | `bunny switch` | Apply the lock as a new generation |
 | `bunny generations` | List saved generations |

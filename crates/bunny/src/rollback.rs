@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::apply::Runner;
+use crate::notes::{self, Kind, Note, State};
 
 /// The root subvolume name from the BunnyOS disk layout.
 const ROOT_SUBVOL: &str = "@";
@@ -55,6 +56,8 @@ pub fn list(root: &Path) -> Result<Vec<Generation>> {
     let mut generations: Vec<Generation> = match std::fs::read_dir(&dir) {
         Ok(entries) => entries
             .flatten()
+            // Snapshots are folders; notes next to them are files.
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .filter(|n| n.starts_with("bunny-"))
             .map(|name| Generation { name })
@@ -174,7 +177,93 @@ pub fn rollback(
 
     run(runner, &["umount", &top_str])?;
     result?;
+
+    notes::write_note(
+        root,
+        &before,
+        &Note {
+            kind: Kind::Rollback,
+            summary: String::new(),
+            to: Some(generation.to_string()),
+        },
+    )?;
+    notes::write_state(
+        root,
+        &State {
+            last: Kind::Rollback,
+            at: stamp.to_string(),
+            to: Some(generation.to_string()),
+        },
+    )?;
     Ok(Outcome { before, replaced })
+}
+
+/// What `bunny clean` would remove.
+#[derive(Debug, Default, PartialEq)]
+pub struct CleanPlan {
+    /// Old generations (folders in /.snapshots).
+    pub generations: Vec<String>,
+    /// Old root subvolumes left behind by rollbacks.
+    pub replaced: Vec<String>,
+}
+
+impl CleanPlan {
+    pub fn is_empty(&self) -> bool {
+        self.generations.is_empty() && self.replaced.is_empty()
+    }
+}
+
+/// Keeps the newest `keep` generations. Old root subvolumes are removable,
+/// except the one `/` is still running from (before the reboot).
+pub fn clean_plan(
+    generations: &[Generation],
+    keep: usize,
+    top_level_names: &[String],
+    running_subvol: &str,
+) -> CleanPlan {
+    let cut = generations.len().saturating_sub(keep);
+    let mut replaced: Vec<String> = top_level_names
+        .iter()
+        .filter(|n| n.starts_with("@replaced-") && n.as_str() != running_subvol)
+        .cloned()
+        .collect();
+    replaced.sort();
+    CleanPlan {
+        generations: generations[..cut].iter().map(|g| g.name.clone()).collect(),
+        replaced,
+    }
+}
+
+/// Deletes what `plan` lists. `top` is where the btrfs top level is mounted.
+/// Returns the names that couldn't be deleted.
+pub fn clean(
+    root: &Path,
+    top: &Path,
+    plan: &CleanPlan,
+    runner: &mut dyn Runner,
+) -> Result<Vec<String>> {
+    let mut failed = Vec::new();
+    let mut delete = |runner: &mut dyn Runner, path: PathBuf, name: &str| -> Result<bool> {
+        let ok = runner.run(&[
+            "btrfs".to_string(),
+            "subvolume".to_string(),
+            "delete".to_string(),
+            path.to_string_lossy().into_owned(),
+        ])?;
+        if !ok {
+            failed.push(name.to_string());
+        }
+        Ok(ok)
+    };
+    for name in &plan.generations {
+        if delete(runner, top.join(SNAPSHOTS_SUBVOL).join(name), name)? {
+            let _ = std::fs::remove_file(notes::note_path(root, name));
+        }
+    }
+    for name in &plan.replaced {
+        delete(runner, top.join(name), name)?;
+    }
+    Ok(failed)
 }
 
 #[cfg(test)]
@@ -217,6 +306,76 @@ mod tests {
         let names: Vec<_> = gens.iter().map(|g| g.name.as_str()).collect();
         assert_eq!(names, ["bunny-20261101-090000", "bunny-20261116-204336"]);
         assert_eq!(gens[1].when(), "2026-11-16 20:43:36 UTC");
+    }
+
+    #[test]
+    fn notes_and_files_are_not_generations() {
+        let root = system_with(&["bunny-a"]);
+        std::fs::write(root.path().join(".snapshots/bunny-a.toml"), "").unwrap();
+        std::fs::write(root.path().join(".snapshots/bunny-state.toml"), "").unwrap();
+        assert_eq!(list(root.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rollback_leaves_notes() {
+        let root = system_with(&["bunny-a"]);
+        rollback(
+            root.path(),
+            "bunny-a",
+            MOUNTINFO,
+            &mut Recorder::default(),
+            "X",
+        )
+        .unwrap();
+        let note = notes::read_note(root.path(), "bunny-X-before-rollback").unwrap();
+        assert_eq!(note.to.as_deref(), Some("bunny-a"));
+        let state = notes::read_state(root.path()).unwrap();
+        assert_eq!(state.last, Kind::Rollback);
+        assert_eq!(state.to.as_deref(), Some("bunny-a"));
+    }
+
+    #[test]
+    fn plans_cleanup() {
+        let gens: Vec<_> = ["bunny-1", "bunny-2", "bunny-3"]
+            .iter()
+            .map(|n| Generation {
+                name: n.to_string(),
+            })
+            .collect();
+        let top = ["@", "@home", "@replaced-b", "@replaced-a", "@snapshots"].map(String::from);
+        let plan = clean_plan(&gens, 2, &top, "@");
+        assert_eq!(plan.generations, ["bunny-1"]);
+        assert_eq!(plan.replaced, ["@replaced-a", "@replaced-b"]);
+
+        // Not rebooted after a rollback yet: / still runs from @replaced-b.
+        let plan = clean_plan(&gens, 5, &top, "@replaced-b");
+        assert!(plan.generations.is_empty());
+        assert_eq!(plan.replaced, ["@replaced-a"]);
+    }
+
+    #[test]
+    fn cleans() {
+        let root = system_with(&["bunny-1"]);
+        std::fs::write(
+            notes::note_path(root.path(), "bunny-1"),
+            "kind = \"switch\"",
+        )
+        .unwrap();
+        let plan = CleanPlan {
+            generations: vec!["bunny-1".into()],
+            replaced: vec!["@replaced-a".into()],
+        };
+        let mut runner = Recorder::default();
+        let failed = clean(root.path(), Path::new("/top"), &plan, &mut runner).unwrap();
+        assert!(failed.is_empty());
+        assert_eq!(
+            runner.commands,
+            [
+                "btrfs subvolume delete /top/@snapshots/bunny-1",
+                "btrfs subvolume delete /top/@replaced-a"
+            ]
+        );
+        assert!(!notes::note_path(root.path(), "bunny-1").exists());
     }
 
     #[test]

@@ -11,6 +11,7 @@ use anyhow::{bail, Context, Result};
 use crate::config::Config;
 use crate::import;
 use crate::init;
+use crate::notes::{self, Kind, Note, State};
 use crate::plan::Plan;
 use crate::portage;
 
@@ -94,6 +95,15 @@ pub fn switch(
             );
         }
         outcome.snapshot = Some(target);
+        notes::write_note(
+            root,
+            &format!("bunny-{}", opts.stamp),
+            &Note {
+                kind: Kind::Switch,
+                summary: plan.summary(),
+                to: None,
+            },
+        )?;
     } else {
         outcome.notes.push(
             "No /.snapshots folder, so no snapshot was taken. Undo would need the backups.".into(),
@@ -175,6 +185,14 @@ pub fn switch(
         }
     }
 
+    notes::write_state(
+        root,
+        &State {
+            last: Kind::Switch,
+            at: opts.stamp.clone(),
+            to: None,
+        },
+    )?;
     Ok(outcome)
 }
 

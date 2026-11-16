@@ -4,6 +4,7 @@ mod apply;
 mod config;
 mod import;
 mod init;
+mod notes;
 mod plan;
 mod portage;
 mod rollback;
@@ -74,6 +75,18 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
+    /// Remove old generations and leftovers from rollbacks (shows them and asks first)
+    Clean {
+        /// How many of the newest generations to keep
+        #[arg(long, default_value_t = 5)]
+        keep: usize,
+        /// Don't ask first
+        #[arg(short, long)]
+        yes: bool,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Write a bunny.toml that describes this system as it is now (changes nothing)
     Import {
         /// Save to this file instead of printing it
@@ -121,6 +134,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
+        Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
         Command::Import {
             output,
             force,
@@ -255,21 +269,149 @@ fn generations(root: &Path) -> anyhow::Result<ExitCode> {
         println!("No generations yet. One is saved every time you run `bunny switch`.");
         return Ok(ExitCode::SUCCESS);
     }
+    let number = |name: &str| {
+        gens.iter()
+            .position(|g| g.name == name)
+            .map(|i| format!("#{}", i + 1))
+            .unwrap_or_else(|| name.to_string())
+    };
+    let state = notes::read_state(root);
+    let running = match &state {
+        Some(notes::State {
+            last: notes::Kind::Rollback,
+            to: Some(to),
+            ..
+        }) => Some(to.as_str()),
+        _ => None,
+    };
+
     println!("Saved generations (oldest first):\n");
     for (i, g) in gens.iter().enumerate() {
-        let what = if g.is_pre_rollback() {
-            "your system just before a rollback"
-        } else {
-            "your system just before a switch"
+        let what = match notes::read_note(root, &g.name) {
+            Some(n) if n.kind == notes::Kind::Rollback => match &n.to {
+                Some(to) => format!("before rolling back to {}", number(to)),
+                None => "before a rollback".to_string(),
+            },
+            Some(n) if !n.summary.is_empty() => format!("before a switch: {}", n.summary),
+            Some(_) => "before a switch".to_string(),
+            None if g.is_pre_rollback() => "before a rollback".to_string(),
+            None => "before a switch".to_string(),
         };
-        println!("  {:>2}. {}   {what}", i + 1, g.when());
+        let marker = if running == Some(g.name.as_str()) {
+            "   ← running a copy of this"
+        } else {
+            ""
+        };
+        println!("  {:>2}. {}   {what}{marker}", i + 1, g.when());
         println!("      {}", g.name);
+    }
+
+    match &state {
+        Some(s) if s.last == notes::Kind::Switch => println!(
+            "\nRunning now: your system after the switch at {}.",
+            rollback::Generation {
+                name: format!("bunny-{}", s.at)
+            }
+            .when()
+        ),
+        _ => {}
+    }
+    if root == Path::new("/") {
+        if let Ok(info) = std::fs::read_to_string("/proc/self/mountinfo") {
+            if let Ok((_, subvol)) = rollback::root_mount(&info) {
+                if subvol.starts_with("@replaced-") {
+                    println!("\nReboot to finish the rollback: doas reboot");
+                }
+            }
+        }
     }
     println!(
         "\nTo go back to one: bunny rollback <number>   (for example: bunny rollback {})",
         gens.len()
     );
     Ok(ExitCode::SUCCESS)
+}
+
+fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    let real_system = root == Path::new("/");
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
+    }
+    let keep = keep.max(1);
+    let (device, running) = if real_system {
+        let info = std::fs::read_to_string("/proc/self/mountinfo")
+            .context("Couldn't read the list of mounted filesystems")?;
+        rollback::root_mount(&info)?
+    } else {
+        ("test-device".to_string(), "@".to_string())
+    };
+
+    let mut runner: Box<dyn apply::Runner> = if real_system {
+        Box::new(apply::SystemRunner)
+    } else {
+        Box::new(apply::PrintRunner)
+    };
+    let top = root.join("run/bunny/top");
+    std::fs::create_dir_all(&top)?;
+    let top_str = top.to_string_lossy().into_owned();
+    let run = |runner: &mut Box<dyn apply::Runner>, parts: &[&str]| {
+        runner.run(&parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    };
+    if !run(
+        &mut runner,
+        &["mount", "-o", "subvolid=5", &device, &top_str],
+    )? {
+        anyhow::bail!("Couldn't open the btrfs volume, so nothing was removed.");
+    }
+
+    let result = (|| -> anyhow::Result<ExitCode> {
+        let top_names: Vec<String> = std::fs::read_dir(&top)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        let gens = rollback::list(root)?;
+        let plan = rollback::clean_plan(&gens, keep, &top_names, &running);
+        if plan.is_empty() {
+            println!(
+                "✓ Nothing to clean. You have {} generation(s), and bunny keeps the newest {keep}.",
+                gens.len()
+            );
+            return Ok(ExitCode::SUCCESS);
+        }
+        if !plan.generations.is_empty() {
+            println!("Old generations to remove (keeping the newest {keep}):");
+            for name in &plan.generations {
+                let g = rollback::Generation { name: name.clone() };
+                println!("  - {}   {name}", g.when());
+            }
+        }
+        if !plan.replaced.is_empty() {
+            println!("Old systems left behind by rollbacks:");
+            for name in &plan.replaced {
+                println!("  - {name}");
+            }
+        }
+        if !real_system {
+            println!("\nThis is a test root, so commands are only printed, not run.");
+        }
+        println!("\nThis can't be undone: you won't be able to roll back to these anymore.");
+        if !yes && !confirm("Remove them?", Default::No)? {
+            println!("Nothing was removed.");
+            return Ok(ExitCode::SUCCESS);
+        }
+        let failed = rollback::clean(root, &top, &plan, runner.as_mut())?;
+        if failed.is_empty() {
+            println!("✓ Removed.");
+        } else {
+            println!("Some couldn't be removed: {}", failed.join(", "));
+        }
+        Ok(ExitCode::SUCCESS)
+    })();
+
+    run(&mut runner, &["umount", &top_str])?;
+    result
 }
 
 fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {

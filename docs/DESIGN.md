@@ -117,6 +117,14 @@ isolated = false       # compile inside a clean container
   writable copy of the chosen snapshot the new `@`. It takes effect on reboot.
   If restoring fails, the current system is moved back unchanged.
 - `/boot` lives inside `@`, so the kernel rolls back together with the system.
+- Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
+  right after it (a switch with a short summary, or a rollback and its
+  target), and `/.snapshots/bunny-state.toml` remembers the last action, so
+  `bunny generations` can say what each one is and which one is running.
+  `/.snapshots` is its own subvolume, so notes survive rollbacks.
+- `bunny clean [--keep N]` removes old generations (keeps the newest 5 by
+  default) and `@replaced-*` leftovers, never the subvolume `/` is running
+  from. It shows the list first and defaults to No, because it can't be undone.
 - **Next:** a GRUB "Undo last switch" entry for systems that won't boot. It
   will use the same swap, triggered early in boot (needs an initramfs step),
   because Gentoo doesn't boot cleanly from a read-only snapshot directly.
@@ -155,6 +163,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny switch` | Apply the lock as a new generation |
 | `bunny generations` | List saved generations |
 | `bunny rollback [number or name]` | Restore a generation (takes effect on reboot); `bunny rollback list` lists them |
+| `bunny clean [--keep N]` | Remove old generations and rollback leftovers |
 | `bunny try` | Build and boot a generation without making it permanent |
 | `bunny status` | Show drift (anything changed outside bunny) |
 | `bunny diff [--baseline]` | Show differences from the config or from the Baseline |

@@ -49,6 +49,35 @@ impl Plan {
             && self.enable_services.is_empty()
     }
 
+    /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
+    pub fn summary(&self) -> String {
+        let short = |atom: &String| {
+            let name = atom.split(':').next().unwrap_or(atom);
+            name.rsplit('/').next().unwrap_or(name).to_string()
+        };
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(self.add_packages.iter().map(|a| format!("+ {}", short(a))));
+        parts.extend(
+            self.remove_packages
+                .iter()
+                .map(|a| format!("- {}", short(a))),
+        );
+        if !self.use_changes.is_empty() {
+            let names: Vec<_> = self.use_changes.iter().map(|c| short(&c.atom)).collect();
+            parts.push(format!("USE flags for {}", names.join(", ")));
+        }
+        parts.extend(self.enable_services.iter().map(|s| format!("start {s}")));
+
+        const MAX: usize = 6;
+        let extra = parts.len().saturating_sub(MAX);
+        parts.truncate(MAX);
+        let mut text = parts.join(", ");
+        if extra > 0 {
+            text.push_str(&format!(" and {extra} more"));
+        }
+        text
+    }
+
     /// The plan, explained for humans.
     pub fn render(&self) -> String {
         let mut out = String::new();
@@ -255,6 +284,10 @@ mod tests {
         assert_eq!(plan.extra_services, ["elogind"]);
         assert!(!plan.is_empty());
         assert!(plan.render().contains("Packages to install"));
+        assert_eq!(
+            plan.summary(),
+            "+ firefox, - old-thing, USE flags for firefox, start bluetooth, start sshd"
+        );
     }
 
     #[test]

@@ -12,10 +12,28 @@ polished, quiet experience from power button to desktop.
 > **Status:** early development. Nothing here is ready for real machines yet.
 > Test only in a VM (see `tools/bunny-vm.sh`).
 
+## Progress
+
+| Phase | Status |
+|---|---|
+| 1. Read a system (`import`, `check`, `plan`) | ✅ Done |
+| 2. Change a system (`switch`) | ✅ Done |
+| 3. Undo (`generations`, `rollback`, `clean`) | ✅ Done (boot-menu undo to do) |
+| 4. Same system everywhere (lockfile) | ⬜ Next |
+| 5. Understandable errors | ⬜ |
+| 6. Fast installs (package cache) | ⬜ |
+| 7. The look (boot animation, GRUB, login) | ⬜ |
+| 8. Security + gaming | ⬜ |
+| 9. Installer + ISO | ⬜ |
+
+Version 1 (phases 1–5) is roughly half done. Details and the full to-do list
+are in the [roadmap](docs/ROADMAP.md).
+
 ## Documentation
 
 - [Design](docs/DESIGN.md): what BunnyOS is, every decision so far, and the
   version 1 scope.
+- [Roadmap](docs/ROADMAP.md): what's done and what's next.
 
 ## Building `bunny`
 

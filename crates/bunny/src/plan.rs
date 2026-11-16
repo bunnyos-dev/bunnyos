@@ -27,6 +27,9 @@ pub struct Plan {
     pub missing_services: Vec<String>,
     /// Services enabled at boot that the config doesn't mention.
     pub extra_services: Vec<String>,
+    /// Services set to start at boot whose start script no longer exists,
+    /// usually left behind when a package was removed.
+    pub leftover_services: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -96,6 +99,18 @@ impl Plan {
             out.push_str(
                 "  If a package in your config provides them, they'll be enabled after it's installed.\n\n",
             );
+        }
+
+        if !self.leftover_services.is_empty() {
+            out.push_str(
+                "Warning: these are set to start at boot, but they're no longer installed\n\
+                 (probably left behind when a package was removed). Your init system will\n\
+                 complain about them on every boot:\n",
+            );
+            for name in &self.leftover_services {
+                let _ = writeln!(out, "  ! {name}    fix: doas rc-update del {name}");
+            }
+            out.push('\n');
         }
 
         if !self.extra_services.is_empty() {
@@ -174,10 +189,19 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
         enable_services: wanted_services.difference(&enabled).cloned().collect(),
         missing_services: wanted_services
             .iter()
+            .filter(|s| !init.service_exists(s) && !enabled.contains(*s))
+            .cloned()
+            .collect(),
+        extra_services: user_enabled
+            .difference(&wanted_services)
+            .filter(|s| init.service_exists(s))
+            .cloned()
+            .collect(),
+        leftover_services: enabled
+            .iter()
             .filter(|s| !init.service_exists(s))
             .cloned()
             .collect(),
-        extra_services: user_enabled.difference(&wanted_services).cloned().collect(),
     })
 }
 
@@ -251,6 +275,18 @@ mod tests {
                 to: vec![],
             }]
         );
+    }
+
+    #[test]
+    fn finds_leftover_services() {
+        let root = fake_root();
+        // Enabled at boot, but no start script: left behind by a removed package.
+        std::fs::write(root.path().join("etc/runlevels/default/tlp"), "").unwrap();
+        let config = Config::parse("services = [\"elogind\", \"tlp\"]").unwrap();
+        let plan = make(&config, root.path()).unwrap();
+        assert_eq!(plan.leftover_services, ["tlp"]);
+        assert!(plan.missing_services.is_empty());
+        assert!(plan.render().contains("doas rc-update del tlp"));
     }
 
     #[test]

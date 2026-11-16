@@ -25,6 +25,9 @@ pub struct Imported {
     pub versioned: usize,
     /// Whether make.conf sets global USE flags (not managed by bunny yet).
     pub global_use: bool,
+    /// Services set to start at boot whose start script is gone. Left out of
+    /// the config so another machine doesn't try to enable them.
+    pub leftover_services: Vec<String>,
 }
 
 pub fn from_system(root: &Path) -> Result<Imported> {
@@ -32,11 +35,12 @@ pub fn from_system(root: &Path) -> Result<Imported> {
         .context("Couldn't read the world set")?
         .into_iter()
         .collect();
-    let services = init::for_config(Init::Openrc, root)
+    let init = init::for_config(Init::Openrc, root);
+    let (services, leftover_services): (Vec<String>, Vec<String>) = init
         .user_services()
         .context("Couldn't read which services start at boot")?
         .into_iter()
-        .collect();
+        .partition(|s| init.service_exists(s));
 
     let package_use = read_package_use(root)?;
     Ok(Imported {
@@ -47,6 +51,7 @@ pub fn from_system(root: &Path) -> Result<Imported> {
         use_flags: package_use.flags,
         skipped: package_use.skipped,
         versioned: package_use.versioned,
+        leftover_services,
     })
 }
 
@@ -273,6 +278,15 @@ impl Imported {
             );
         }
 
+        if !self.leftover_services.is_empty() {
+            let _ = write!(
+                out,
+                "\n# Left out of `services`: set to start at boot, but no longer installed\n\
+                 # (probably left behind by a removed package): {}\n",
+                self.leftover_services.join(", ")
+            );
+        }
+
         if self.global_use {
             out.push_str(
                 "\n# Your make.conf sets global USE flags. bunny doesn't manage make.conf yet,\n\
@@ -309,6 +323,15 @@ impl Imported {
             self.services.len(),
             self.use_flags.values().filter(|f| !f.is_empty()).count(),
         );
+        if !self.leftover_services.is_empty() {
+            let _ = write!(
+                text,
+                "\nLeft out {} service(s) that start at boot but aren't installed anymore: {}.\n\
+                 Clean up with: doas rc-update del <name>",
+                self.leftover_services.len(),
+                self.leftover_services.join(", ")
+            );
+        }
         if self.versioned > 0 {
             let _ = write!(
                 text,
@@ -363,6 +386,8 @@ mod tests {
             write(root, &format!("etc/runlevels/{level}/{service}"), "");
             write(root, &format!("etc/init.d/{service}"), "");
         }
+        // Left behind by a removed package: enabled, but no start script.
+        write(root, "etc/runlevels/default/tlp", "");
         write(
             root,
             "etc/portage/package.use/browser",
@@ -388,6 +413,7 @@ mod tests {
         let imported = from_system(root.path()).unwrap();
         assert_eq!(imported.packages.len(), 3);
         assert_eq!(imported.services, ["sshd", "tailscale"]);
+        assert_eq!(imported.leftover_services, ["tlp"]);
         assert!(imported.multilib);
         assert!(imported.global_use);
         assert_eq!(

@@ -6,6 +6,7 @@ mod import;
 mod init;
 mod plan;
 mod portage;
+mod rollback;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -56,6 +57,23 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
+    /// List the saved generations you can roll back to
+    Generations {
+        /// System root (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Put the system back to a saved generation (the latest one if no name is given)
+    Rollback {
+        /// Generation name from `bunny generations`
+        name: Option<String>,
+        /// Don't ask first
+        #[arg(short, long)]
+        yes: bool,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Write a bunny.toml that describes this system as it is now (changes nothing)
     Import {
         /// Save to this file instead of printing it
@@ -101,6 +119,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
+        Command::Generations { root } => generations(&root),
+        Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
         Command::Import {
             output,
             force,
@@ -138,18 +158,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
 
 fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     let real_system = root == Path::new("/");
-    if real_system && !is_root() {
-        // Ask for elevation ourselves, so nobody has to type `doas bunny`.
-        let status = std::process::Command::new("doas")
-            .arg(std::env::current_exe()?)
-            .args(std::env::args_os().skip(1))
-            .status()
-            .context("bunny needs to run as root to change the system, and couldn't start doas")?;
-        return Ok(if status.success() {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        });
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
     }
 
     let cfg = Config::load(config)?;
@@ -205,6 +215,106 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     for note in &outcome.notes {
         println!("  Note: {note}");
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Re-runs bunny through doas when changing the real system without root,
+/// so nobody has to type `doas bunny`. Returns the exit code if it did.
+fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
+    if !real_system || is_root() {
+        return Ok(None);
+    }
+    let status = std::process::Command::new("doas")
+        .arg(std::env::current_exe()?)
+        .args(std::env::args_os().skip(1))
+        .status()
+        .context("bunny needs to run as root to change the system, and couldn't start doas")?;
+    Ok(Some(if status.success() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }))
+}
+
+fn generations(root: &Path) -> anyhow::Result<ExitCode> {
+    let gens = rollback::list(root)?;
+    if gens.is_empty() {
+        println!("No generations yet. One is saved every time you run `bunny switch`.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!("Saved generations (oldest first):\n");
+    for g in &gens {
+        let label = if g.is_pre_rollback() {
+            "  (your system just before a rollback)"
+        } else {
+            "  (your system just before a switch)"
+        };
+        println!("  {}   {}{label}", g.name, g.when());
+    }
+    println!("\nTo go back to one: bunny rollback <name>");
+    Ok(ExitCode::SUCCESS)
+}
+
+fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    let real_system = root == Path::new("/");
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
+    }
+    let gens = rollback::list(root)?;
+    let name = match name {
+        Some(name) => name,
+        None => match gens.iter().rev().find(|g| !g.is_pre_rollback()) {
+            Some(g) => g.name.clone(),
+            None => anyhow::bail!(
+                "There are no generations to roll back to yet.\n  \
+                 One is saved every time you run `bunny switch`."
+            ),
+        },
+    };
+    let when = gens
+        .iter()
+        .find(|g| g.name == name)
+        .map(|g| g.when())
+        .unwrap_or_default();
+
+    // Check this before asking anything.
+    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo")
+        .context("Couldn't read the list of mounted filesystems")?;
+    rollback::root_mount(&mountinfo)?;
+    if !gens.iter().any(|g| g.name == name) {
+        anyhow::bail!(
+            "There's no generation called \"{name}\".\n  \
+             Run `bunny generations` to see the ones you have."
+        );
+    }
+
+    println!("This will put your system back the way it was at {when} ({name}).");
+    println!("Your files in /home, logs and caches are not touched.");
+    println!("The system as it is now will be saved first, so you can undo this.");
+    if !real_system {
+        println!("\nThis is a test root, so commands are only printed, not run.");
+    }
+    if !yes && !confirm("\nRoll back?")? {
+        println!("Nothing was changed.");
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let stamp = timestamp();
+    let outcome = if real_system {
+        rollback::rollback(root, &name, &mountinfo, &mut apply::SystemRunner, &stamp)?
+    } else {
+        rollback::rollback(root, &name, &mountinfo, &mut apply::PrintRunner, &stamp)?
+    };
+
+    println!("\n✓ Done. Reboot to start the restored system: doas reboot");
+    println!(
+        "  Changed your mind? After rebooting, run: bunny rollback {}",
+        outcome.before
+    );
+    println!(
+        "  The replaced system is kept as the subvolume {} until you remove it.",
+        outcome.replaced
+    );
     Ok(ExitCode::SUCCESS)
 }
 

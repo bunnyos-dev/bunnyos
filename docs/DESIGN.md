@@ -108,6 +108,19 @@ isolated = false       # compile inside a clean container
 - `/home`, logs, caches and build scratch space live on separate subvolumes and
   are never rolled back.
 
+### Rollback (current behaviour)
+
+- `bunny generations` lists the snapshots in `/.snapshots/bunny-*`.
+- `bunny rollback [name]` (default: the latest switch) mounts the btrfs top
+  level, snapshots the current `@` as `bunny-<time>-before-rollback` (so the
+  rollback can be undone), moves `@` aside to `@replaced-<time>`, and makes a
+  writable copy of the chosen snapshot the new `@`. It takes effect on reboot.
+  If restoring fails, the current system is moved back unchanged.
+- `/boot` lives inside `@`, so the kernel rolls back together with the system.
+- **Next:** a GRUB "Undo last switch" entry for systems that won't boot. It
+  will use the same swap, triggered early in boot (needs an initramfs step),
+  because Gentoo doesn't boot cleanly from a read-only snapshot directly.
+
 ### Explaining and fixing errors
 
 - bunny recognises the common emerge failures (slot conflicts, blockers, masked
@@ -140,6 +153,8 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny plan` | Show what would change, how long it takes, what loses prebuilt binaries |
 | `bunny update` | Sync the tree and refresh `bunny.lock` |
 | `bunny switch` | Apply the lock as a new generation |
+| `bunny generations` | List saved generations |
+| `bunny rollback [name]` | Restore a generation (takes effect on reboot) |
 | `bunny try` | Build and boot a generation without making it permanent |
 | `bunny status` | Show drift (anything changed outside bunny) |
 | `bunny diff [--baseline]` | Show differences from the config or from the Baseline |

@@ -164,6 +164,14 @@ pub fn switch(
             outcome
                 .notes
                 .push(format!("Couldn't enable \"{service}\" at boot."));
+            continue;
+        }
+        // Start it now too, so it doesn't wait for the next reboot.
+        if !runner.run(&cmd(&["rc-service", service, "start"]))? {
+            outcome.notes.push(format!(
+                "\"{service}\" will start at boot, but didn't start now. \
+                 Check it with: doas rc-service {service} status"
+            ));
         }
     }
 
@@ -303,8 +311,8 @@ mod tests {
         let mut runner = Recorder::default();
         let outcome = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap();
 
-        // Commands, in order: snapshot, install, remove (asks), enable service.
-        assert_eq!(runner.commands.len(), 4, "{:#?}", runner.commands);
+        // Commands, in order: snapshot, install, remove (asks), enable + start service.
+        assert_eq!(runner.commands.len(), 5, "{:#?}", runner.commands);
         assert!(runner.commands[0].starts_with("btrfs subvolume snapshot -r "));
         assert!(runner.commands[0].ends_with(".snapshots/bunny-20261116-120000"));
         assert_eq!(
@@ -313,6 +321,7 @@ mod tests {
         );
         assert_eq!(runner.commands[2], "emerge --depclean --ask");
         assert_eq!(runner.commands[3], "rc-update add sshd default");
+        assert_eq!(runner.commands[4], "rc-service sshd start");
 
         // bluetooth isn't installed: noted, not enabled.
         assert!(outcome.notes.iter().any(|n| n.contains("bluetooth")));

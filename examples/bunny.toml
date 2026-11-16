@@ -1,0 +1,33 @@
+# Example bunny.toml
+#
+# This describes a whole system. Run `bunny check` to validate it and
+# `bunny plan` to see what would change. (Version 1 is read-only so far.)
+
+# Top-level settings go first: in TOML, everything below a [section] header
+# belongs to that section.
+
+# Everything you want installed (the "world set").
+packages = [
+    "app-editors/neovim",
+    "app-shells/zsh",
+    "gui-wm/hyprland",
+    "www-client/firefox",
+]
+
+# Services to start at boot, by plain name.
+services = [
+    "NetworkManager",
+    "elogind",
+    "sshd",
+]
+
+[system]
+init = "openrc"
+multilib = true        # 32-bit support, needed for Steam
+
+# Per-package settings.
+[pkg."www-client/firefox"]
+use = ["pgo", "wayland", "-telemetry"]
+
+[pkg."gui-wm/hyprland"]
+use = ["-X"]           # on Hyprland, "X" means XWayland, not X11 support

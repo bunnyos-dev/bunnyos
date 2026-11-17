@@ -13,7 +13,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 |---|---|---|
 | 1. Read a system | `import`, `check`, `plan` | ✅ Done, tested on a real desktop |
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
-| 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
+| 3. Undo | snapshots, `generations`, `rollback`, `clean`, boot-menu undo | ✅ Done, tested in the VM |
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ✅ Done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
@@ -99,7 +99,7 @@ feature PRs now update it as they go.)
       `persist`, `admins`. Installs the tool, writes and checks
       `/etc/sudoers.d/bunny` or `/etc/doas.conf`, adds admins to `wheel`, never
       locks you out. bunny's own messages use whichever tool you have. **(VM)**
-- [~] **GRUB "Undo last switch" entry:** `[boot] undo_entry = true` adds a
+- [x] **GRUB "Undo last switch" entry:** `[boot] undo_entry = true` adds a
       dracut step (the same swap as `bunny rollback`, before mounting) and,
       after each switch, a GRUB entry that boots the generation's own kernel
       with `bunny.rollback=<generation>`. **(VM)**

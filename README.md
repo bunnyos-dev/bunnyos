@@ -18,7 +18,7 @@ polished, quiet experience from power button to desktop.
 |---|---|
 | 1. Read a system (`import`, `check`, `plan`) | ✅ Done |
 | 2. Change a system (`switch`) | ✅ Done |
-| 3. Undo (`generations`, `rollback`, `clean`) | ✅ Done (boot-menu undo to do) |
+| 3. Undo (`generations`, `rollback`, `clean`, boot menu) | ✅ Done |
 | 4. Same system everywhere (lockfile) | ✅ Done |
 | 5. Understandable errors | ✅ Done |
 | 6. Fast installs (package cache) | ⬜ |
@@ -26,8 +26,9 @@ polished, quiet experience from power button to desktop.
 | 8. Security + gaming | ⬜ |
 | 9. Installer + ISO | ⬜ |
 
-Version 1 (phases 1–5) is roughly two-thirds done. Details and the full to-do list
-are in the [roadmap](docs/ROADMAP.md).
+Version 1 (phases 1–5) is done and tested in the VM. Next: one known issue
+(the config after an undo), then testing on real machines and phase 6. Details
+and the full to-do list are in the [roadmap](docs/ROADMAP.md).
 
 ## Documentation
 

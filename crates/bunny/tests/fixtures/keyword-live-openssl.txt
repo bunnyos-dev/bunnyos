@@ -1,0 +1,19 @@
+The following keyword changes are necessary to proceed:
+ (see "package.accept_keywords" in the portage(5) man page for more details)
+# required by app-crypt/mit-krb5-1.22.2-r2::gentoo[pkinit]
+# required by virtual/krb5-0-r1::gentoo
+# required by net-fs/cifs-utils-7.8-r1::gentoo[ads]
+# required by @selected
+# required by @world (argument)
+=dev-libs/openssl-3.6.9999 **
+
+NOTE: The --autounmask-keep-masks option will prevent emerge
+      from creating package.unmask or ** keyword changes.
+
+Would you like to add these changes to your config files? [Yes/No] 
+
+Autounmask changes successfully written.
+
+ * IMPORTANT: 2 config files in '/etc/portage' need updating.
+ * See the CONFIGURATION FILES and CONFIGURATION FILES UPDATE TOOLS
+ * sections of the emerge man page to learn how to update config files.

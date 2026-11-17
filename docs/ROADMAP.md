@@ -15,7 +15,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
-| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ⬜ |
+| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | 🔶 Part 1 in review |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
@@ -54,11 +54,21 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [x] **Lockfile, part 2:** `bunny update` syncs the tree, runs the switch, and
       rewrites the lock. `bunny switch` refuses to silently drift from the lock
       (explains what changed). **(VM)**
-- [ ] **Error translation, part 1:** recognise emerge's "USE changes are
+- [~] **Error translation, part 1:** recognise emerge's "USE changes are
       necessary", masked/keyworded package, slot conflict, blocker and fetch
       failure messages and explain each in plain English with the fix. Use real
       outputs as test fixtures (see `tests/fixtures/` once created). Live
       `9999` / `**` suggestions must be flagged as risky, never auto-applied.
+- [ ] **Error translation, part 2:** run emerge so bunny sees its output
+      (while still showing it live), and explain failures automatically at the
+      end of `switch` / `update` instead of asking the user to paste them. **(VM)**
+- [ ] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
+      published to GitHub Pages by a GitHub Actions workflow. Two tracks:
+      "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
+      install/remove a program, update, undo a mistake, what the lock is) and
+      "Going further" (full `bunny.toml` reference, pins, generations, how bunny
+      drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
+      experienced Linux user who has never used NixOS.
 - [ ] **`bunny status`:** drift report: hand-edited files in package.use
       outside `zz-bunny`, world entries added by `emerge` directly, services
       enabled/disabled by hand. Read-only.

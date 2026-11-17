@@ -159,7 +159,8 @@ pub fn switch(
             bail!(
                 "emerge didn't finish, so some changes weren't installed.\n  \
                  Your old files are backed up in {}.{}\n  \
-                 Fix the problem emerge showed, then run `bunny switch` again.",
+                 To understand emerge's message, copy it and run `bunny explain`, then paste it.\n  \
+                 Fix the problem, then run `bunny switch` again.",
                 outcome.backup_dir.display(),
                 outcome
                     .snapshot

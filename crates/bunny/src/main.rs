@@ -2,6 +2,7 @@
 
 mod apply;
 mod config;
+mod explain;
 mod import;
 mod init;
 mod lock;
@@ -100,6 +101,11 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
+    /// Explain an emerge message in plain English (paste it in, or give a file)
+    Explain {
+        /// A file with emerge's output. Without it, paste the message and press Ctrl+D.
+        file: Option<PathBuf>,
+    },
     /// Record the exact versions installed now in bunny.lock, next to the config
     Lock {
         /// Path to the config (the lock is written next to it)
@@ -165,6 +171,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
         Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
         Command::Lock { config, root } => lock_cmd(&config, &root),
+        Command::Explain { file } => explain_cmd(file.as_deref()),
         Command::Update { config, yes, root } => update_cmd(&config, yes, &root),
         Command::Import {
             output,
@@ -697,6 +704,38 @@ fn lock_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
         new.repos.len(),
         if new.repos.len() == 1 { "" } else { "s" }
     );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn explain_cmd(file: Option<&Path>) -> anyhow::Result<ExitCode> {
+    use std::io::{IsTerminal, Read};
+    let text = match file {
+        Some(path) => std::fs::read_to_string(path)
+            .with_context(|| format!("Couldn't read {}", path.display()))?,
+        None => {
+            if std::io::stdin().is_terminal() {
+                eprintln!("Paste emerge's message, then press Ctrl+D on an empty line:");
+            }
+            let mut text = String::new();
+            std::io::stdin().read_to_string(&mut text)?;
+            text
+        }
+    };
+    let found = explain::explain(&text);
+    if found.is_empty() {
+        println!(
+            "bunny doesn't recognise this message yet.\n\
+             If it's an error, please share it so bunny can learn to explain it."
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!();
+    for (i, e) in found.iter().enumerate() {
+        if i > 0 {
+            println!();
+        }
+        print!("{}", e.render());
+    }
     Ok(ExitCode::SUCCESS)
 }
 

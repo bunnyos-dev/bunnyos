@@ -1,0 +1,5 @@
+The following keyword changes are necessary to proceed:
+ (see "package.accept_keywords" in the portage(5) man page for more details)
+# required by gui-apps/quickshell-0.2.1::guru
+# required by gui-apps/quickshell (argument)
+=dev-qt/qtbase-6.10.1 ~amd64

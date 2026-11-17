@@ -174,6 +174,13 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   - Can't fix (but helps): upstream compile errors.
 - **Every fix is written into `bunny.toml` with a comment explaining why**,
   never hidden in `/etc/portage`.
+- **Current behaviour (part 1):** `bunny explain [file]` (or pasted text)
+  recognises required USE changes (both message forms), keyword changes
+  (testing versions, and live `9999` / `**` versions flagged as risky with a
+  "don't accept" warning), masked packages (with Gentoo's reason), slot
+  conflicts, blockers, fetch failures, waiting config-file updates, unread
+  news and the depclean reminder. Unknown messages are reported honestly.
+  Real outputs live in `crates/bunny/tests/fixtures/` as test cases.
 
 ### Commands (planned)
 

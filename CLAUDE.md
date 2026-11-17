@@ -34,6 +34,8 @@ decision changes. `docs/ROADMAP.md` is the to-do list.
 - Rust workspace; the CLI lives in `crates/bunny`.
 - `cargo fmt`, `cargo clippy -- -D warnings` and `cargo test` must pass.
 - Prefer small modules with unit tests over large untested ones.
+- Changes people would notice get a line under `## [Unreleased]` in
+  `CHANGELOG.md`, in plain words. Releases: `docs/RELEASING.md`.
 
 ## Daily work sessions
 

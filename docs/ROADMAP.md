@@ -142,7 +142,7 @@ Portage for structured answers instead.
 Agreed with the maintainer: automate what would otherwise be weekly chores,
 so the maintainer's time goes to testing and decisions.
 
-- [ ] **Releases:** version tags (`v0.1.0`, …), a `CHANGELOG.md`, and a
+- [x] **Releases:** version tags (`v0.1.0`, …), a `CHANGELOG.md`, and a
       GitHub Actions workflow that builds bunny and attaches it to a GitHub
       Release when a tag is pushed. Write down the release steps in
       `docs/RELEASING.md`. Release when a few features have piled up and have

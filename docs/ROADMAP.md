@@ -85,7 +85,7 @@ feature PRs now update it as they go.)
       config applied (packages or flags added outside bunny show up here),
       services enabled by hand, versions vs the lock, the last change,
       undo available, and when the package tree was last synced. Read-only.
-- [~] **`bunny diff`:** the config and the system side by side: packages,
+- [x] **`bunny diff`:** the config and the system side by side: packages,
       USE flags (only the flags that differ, in words), services and
       versions, each marked "config only" or "system only", with both ways
       to fix it (`bunny switch`, or config edits + `bunny lock`). Exits 1 when

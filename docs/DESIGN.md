@@ -267,12 +267,13 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny disk backup-header` | Back up the LUKS header |
 
 Read-only commands never need root. Commands that change the system ask for
-elevation themselves through the configured tool (doas by default).
+elevation themselves through the configured tool (see `[security]`; sudo
+when nothing is set and both are installed).
 
 ### `bunny switch` (current behaviour)
 
 1. Shows the plan and asks before changing anything (`--yes` skips this).
-   Re-runs itself through doas when not root.
+   Re-runs itself through sudo or doas (see `[security]`) when not root.
 2. Takes a read-only btrfs snapshot of `/` in `/.snapshots/bunny-<time>`. If
    that fails, nothing is changed.
 3. Backs up the world file and package.use to `/var/lib/bunny/backups/<time>/`.

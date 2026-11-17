@@ -10,7 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
-The first release, `0.1.0`, will be version 1 of bunny:
+## [0.1.0] - 2026-11-17
+
+The first release: version 1 of bunny.
 
 ### Reading a system
 - `bunny import` writes a `bunny.toml` from the system as it is (world set,

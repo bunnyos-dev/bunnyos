@@ -46,6 +46,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [x] Automatic explanations: `switch`/`update` explain emerge failures
       themselves, turn its notices into tips, and catch misspelled package
       names before changing anything
+- [x] `bunny search` / `add` / `remove`: search names and descriptions,
+      short names and typo suggestions, config edits that keep comments
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -70,7 +72,7 @@ list, with the CI check along the way, and the Guide last.
 - [x] **Error translation, part 2:** run emerge so bunny sees its output
       (while still showing it live), and explain failures automatically at the
       end of `switch` / `update` instead of asking the user to paste them. **(VM)**
-- [~] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.
+- [x] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.
       `search` finds packages fast (by name and description, from a local
       index of the package tree) and shows plain-English descriptions.
       `add <name>` and `remove <name>` edit `bunny.toml` for you (keeping your

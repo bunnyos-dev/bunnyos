@@ -31,6 +31,9 @@ are in the [roadmap](docs/ROADMAP.md).
 
 ## Documentation
 
+- **[The BunnyOS Guide](https://bunnyos-dev.github.io/bunnyos/)**: how to use
+  bunny, from first steps to every setting. Source in `docs/guide/`.
+
 - [Design](docs/DESIGN.md): what BunnyOS is, every decision so far, and the
   version 1 scope.
 - [Roadmap](docs/ROADMAP.md): what's done and what's next.

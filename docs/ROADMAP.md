@@ -91,7 +91,7 @@ list, with the CI check along the way, and the Guide last.
 - [ ] **GRUB "Undo last switch" entry:** boot-menu rollback for systems that
       won't boot (initramfs step that does the same swap as `bunny rollback`).
       **(VM)**
-- [ ] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
+- [~] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
       published to GitHub Pages by a GitHub Actions workflow. Two tracks:
       "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
       install/remove a program, update, undo a mistake, what the lock is) and

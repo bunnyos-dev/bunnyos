@@ -1,0 +1,11 @@
+[book]
+title = "The BunnyOS Guide"
+authors = ["The BunnyOS project"]
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/bunnyos-dev/bunnyos"
+edit-url-template = "https://github.com/bunnyos-dev/bunnyos/edit/main/docs/guide/{path}"
+default-theme = "navy"
+preferred-dark-theme = "navy"

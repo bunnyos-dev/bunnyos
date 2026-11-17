@@ -552,8 +552,18 @@ fn install_quietly(
     pretend.insert(1, "--pretend".into());
     pretend.push("@world".into());
     let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
+    // --color=n should mean no color codes, but strip any that slip through:
+    // an invisible code breaks reading the message.
+    let raw = output;
+    let output = explain::strip_ansi(&raw);
     if !ok {
         restore_files(root, &outcome.backup_dir)?;
+        let log = save_log(
+            root,
+            &opts.stamp,
+            "emerge",
+            &format!("$ {}\n{raw}", pretend.join(" ")),
+        );
         let explained = explain::explain(&output);
         let mut text = String::from(
             "emerge found a problem before installing anything, so nothing was changed.\n",
@@ -572,6 +582,9 @@ fn install_quietly(
                 text.push('\n');
             }
             text.push_str("Fix the problem, then run the same bunny command again.");
+        }
+        if let Some(log) = log {
+            text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
         }
         return Err(Refused(text).into());
     }
@@ -608,6 +621,7 @@ fn install_quietly(
     };
     println!();
     let (ok, install_output) = runner.run_quiet(&install, &mut on_line)?;
+    let install_output = explain::strip_ansi(&install_output);
     progress.clear();
     let log_text = format!(
         "$ {}\n{output}\n$ {}\n{install_output}",

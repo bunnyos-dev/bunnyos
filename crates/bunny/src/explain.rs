@@ -78,6 +78,8 @@ impl Explanation {
 
 /// Explains everything bunny recognises in `output`, most important first.
 pub fn explain(output: &str) -> Vec<Explanation> {
+    // Color codes are invisible on screen but break reading the text.
+    let output = strip_ansi(output);
     let lines: Vec<&str> = output.lines().map(str::trim_end).collect();
     let mut found = Vec::new();
     found.extend(use_changes(&lines));
@@ -231,11 +233,13 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             }
             // emerge's own suggestion breaks the package's rules: it couldn't
             // find a working set of flags at all.
-            if let Some((suggested, rest)) = line.split_once(", this change violates") {
+            if let Some(at) = line.find("this change violates") {
+                let (suggested, rest) = line.split_at(at);
                 let flags = suggested
                     .split_whitespace()
                     .skip(1)
-                    .map(String::from)
+                    .map(|f| f.trim_end_matches(',').to_string())
+                    .filter(|f| !f.is_empty())
                     .collect();
                 let rule = rest
                     .split_once('\'')
@@ -1000,5 +1004,28 @@ mod tests {
                 "at least one of: g"
             ]
         );
+    }
+
+    #[test]
+    fn broken_flag_rules_are_found_through_color_codes_and_spacing() {
+        let plain = fixture("required-use-mpv.txt");
+        let colored = plain.replace(
+            ">=media-video/mpv-0.41.0-r2 -X, this change",
+            ">=media-video/mpv-0.41.0-r2 \x1b[31;01m-X\x1b[39;49;00m,  this change",
+        );
+        for text in [plain, colored] {
+            let found = explain(&text);
+            let text = found
+                .iter()
+                .map(Explanation::render)
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(
+                text.contains("couldn't find a set of features that works for mpv"),
+                "{text}"
+            );
+            assert!(text.contains("(turning X off)"), "{text}");
+            assert!(!text.contains("\"violates\""), "{text}");
+        }
     }
 }

@@ -43,6 +43,9 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       `bunny update` syncs, updates everything and relocks
 - [x] `bunny explain`: emerge messages in plain English with a fix; risky
       live/`**` versions flagged
+- [x] Automatic explanations: `switch`/`update` explain emerge failures
+      themselves, turn its notices into tips, and catch misspelled package
+      names before changing anything
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -61,7 +64,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       failure messages and explain each in plain English with the fix. Use real
       outputs as test fixtures (see `tests/fixtures/` once created). Live
       `9999` / `**` suggestions must be flagged as risky, never auto-applied.
-- [~] **Error translation, part 2:** run emerge so bunny sees its output
+- [x] **Error translation, part 2:** run emerge so bunny sees its output
       (while still showing it live), and explain failures automatically at the
       end of `switch` / `update` instead of asking the user to paste them. **(VM)**
 - [ ] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.
@@ -90,6 +93,12 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [ ] **GRUB "Undo last switch" entry:** boot-menu rollback for systems that
       won't boot (initramfs step that does the same swap as `bunny rollback`).
       **(VM)**
+
+## Repository housekeeping
+
+- [x] `main` protected from force pushes and deletion
+- [ ] GitHub Actions check that runs `cargo fmt --check`, `clippy` and
+      `cargo test` on every pull request; then require it in the ruleset
 
 ## After version 1
 

@@ -204,7 +204,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny clean [--keep N]` | Remove old generations and rollback leftovers |
 | `bunny try` | Build and boot a generation without making it permanent |
 | `bunny status` | One screen: config applied?, versions vs lock, last change, undo, last sync |
-| `bunny diff [--baseline]` | Show differences from the config or from the Baseline |
+| `bunny diff [--baseline]` | Config vs system side by side, with both ways to fix each difference (`--baseline`: later) |
 | `bunny why <pkg>` | Explain why a package or flag is set |
 | `bunny flags <pkg>` | Explain a package's USE flags in plain English |
 | `bunny pin <pkg> <ver>` | Pin a package (keeps a copy of its ebuild and binary) |
@@ -257,6 +257,13 @@ commands are only printed.
 - `bunny remove <names>` takes full or short names and works the same way;
   removing from the system goes through `emerge --depclean --ask`.
 - `plan`'s "doesn't exist" check uses the same package index.
+- `bunny diff` is read-only. It shows packages, USE flags (only the flags
+  that differ, as "x on"/"x off"), services and lock versions, each marked
+  "config only" or "system only", then both ways to resolve them:
+  `bunny switch`, or the config edits (and `bunny lock`) that keep the system
+  as it is. It suggests edits rather than `bunny add`/`remove`, because those
+  switch and would apply the other differences too. Exit status: 0 when
+  there are no differences, 1 when there are.
 - `bunny status` is read-only and needs no root. One line each, marked
   ✓/⚠/✗ with what to do underneath:
   - **Config:** applied or not (anything added outside bunny, like `emerge

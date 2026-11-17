@@ -235,7 +235,7 @@ impl Status {
                 );
                 more(
                     &mut out,
-                    "`bunny plan` shows them; `bunny switch` applies them.",
+                    "`bunny diff` shows them side by side, and how to keep or undo each.",
                 );
             }
         }
@@ -514,7 +514,7 @@ mod tests {
         assert!(!s.all_good());
         let text = s.render();
         assert!(text.contains("⚠ Config        2 changes not applied yet: + mpv, start sshd"));
-        assert!(text.contains("`bunny switch` applies them"));
+        assert!(text.contains("`bunny diff` shows them side by side"));
     }
 
     #[test]

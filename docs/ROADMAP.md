@@ -85,7 +85,11 @@ feature PRs now update it as they go.)
       config applied (packages or flags added outside bunny show up here),
       services enabled by hand, versions vs the lock, the last change,
       undo available, and when the package tree was last synced. Read-only.
-- [ ] **`bunny diff`:** show the config vs the system as a unified, readable diff.
+- [~] **`bunny diff`:** the config and the system side by side: packages,
+      USE flags (only the flags that differ, in words), services and
+      versions, each marked "config only" or "system only", with both ways
+      to fix it (`bunny switch`, or config edits + `bunny lock`). Exits 1 when
+      they differ.
 - [ ] **Quieter emerge output:** run emerge with less noise and summarise news
       items and post-install messages instead of printing them raw. **(VM)**
 - [ ] **`[security]` section:** generate `/etc/doas.conf` (with `persist`) from

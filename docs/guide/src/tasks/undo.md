@@ -55,7 +55,9 @@ Changed your mind? After rebooting, run: bunny rollback 3
 Rollback restores the **system**. If your `bunny.toml` lives somewhere outside
 the system (like your home folder), it isn't rolled back. Run `bunny plan`
 afterwards: it shows any difference between the config and the restored
-system, and you can either edit the config or `bunny switch` again.
+system, and you can either edit the config or `bunny switch` again. `bunny
+diff` shows the same differences side by side, with the edits that would
+make the config match.
 
 ## If the system doesn't start at all
 

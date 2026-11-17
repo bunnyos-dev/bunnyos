@@ -13,6 +13,7 @@
 //!   means its modules match after the swap, even if the change updated the
 //!   kernel.
 
+use anyhow::{Context, Result};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -234,6 +235,24 @@ pub fn merge_custom_cfg(existing: &str, block: &str) -> String {
     out
 }
 
+/// Removes bunny's undo entry from a restored system (mounted at `system`).
+/// The restored system brings back its own, older custom.cfg, whose entry
+/// would undo one change further back; picking it again and again would keep
+/// going back. After a rollback there's no "last change" to undo until the
+/// next switch, so the entry goes. Returns true if one was removed.
+pub fn drop_entry_in(system: &Path) -> Result<bool> {
+    let path = system.join(CUSTOM_CFG);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(false);
+    };
+    let without = merge_custom_cfg(&text, "");
+    if without == text {
+        return Ok(false);
+    }
+    std::fs::write(&path, without).with_context(|| format!("Couldn't write {}", path.display()))?;
+    Ok(true)
+}
+
 /// The path of a kernel's startup image.
 pub fn initramfs(root: &Path, version: &str) -> PathBuf {
     root.join(format!("boot/initramfs-{version}.img"))
@@ -345,6 +364,26 @@ mod tests {
     }
 
     #[test]
+    fn a_restored_system_loses_its_old_undo_entry() {
+        let system = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(system.path().join("boot/grub")).unwrap();
+        let mine = "menuentry 'Windows' {\n    chainloader /x\n}\n";
+        let block = render_entry("bunny-old", "earlier", "6", "u", "c");
+        std::fs::write(
+            system.path().join(CUSTOM_CFG),
+            merge_custom_cfg(mine, &block),
+        )
+        .unwrap();
+        assert!(drop_entry_in(system.path()).unwrap());
+        let left = std::fs::read_to_string(system.path().join(CUSTOM_CFG)).unwrap();
+        assert!(!left.contains("undo the last change"));
+        assert!(left.contains("Windows"));
+        assert!(!drop_entry_in(system.path()).unwrap());
+        let empty = tempfile::tempdir().unwrap();
+        assert!(!drop_entry_in(empty.path()).unwrap());
+    }
+
+    #[test]
     fn finds_the_generations_kernel() {
         let root = fake_root();
         assert_eq!(
@@ -420,6 +459,67 @@ mod tests {
         )
         .unwrap();
         assert_eq!(state.last, crate::notes::Kind::Rollback);
+    }
+
+    #[test]
+    fn boot_step_removes_the_restored_systems_old_entry() {
+        let top = fake_top();
+        let t = top.path();
+        let grub = t.join("@snapshots/bunny-20261117-091500/boot/grub");
+        std::fs::create_dir_all(&grub).unwrap();
+        let mine = "menuentry 'Windows' {\n    chainloader /x\n}\n";
+        let older = render_entry("bunny-20261116-080000", "earlier", "6", "u", "c");
+        std::fs::write(grub.join("custom.cfg"), merge_custom_cfg(mine, &older)).unwrap();
+        let log = run_hook("bunny-20261117-091500", t);
+        let left = std::fs::read_to_string(t.join("@/boot/grub/custom.cfg")).unwrap();
+        assert!(!left.contains("undo the last change"), "{log}\n{left}");
+        assert!(left.contains("chainloader /x"), "{left}");
+    }
+
+    #[test]
+    fn boot_step_does_nothing_when_already_undone() {
+        let top = fake_top();
+        let t = top.path();
+        std::fs::write(
+            t.join("@snapshots/bunny-state.toml"),
+            "last = \"rollback\"\nat = \"20261117-100000\"\nto = \"bunny-20261117-091500\"\n",
+        )
+        .unwrap();
+        let log = run_hook("bunny-20261117-091500", t);
+        assert!(log.contains("already undone"), "{log}");
+        assert!(
+            t.join("@/broken").exists(),
+            "the system was swapped anyway: {log}"
+        );
+        assert!(!t.join("@replaced-20261117-120000").exists());
+    }
+
+    #[test]
+    fn boot_step_puts_the_matching_config_back() {
+        let top = fake_top();
+        let t = top.path();
+        let generation = t.join("@snapshots/bunny-20261117-091500");
+        let applied = generation.join(crate::applied::DIR);
+        std::fs::create_dir_all(&applied).unwrap();
+        std::fs::create_dir_all(generation.join("etc/bunny")).unwrap();
+        std::fs::write(
+            generation.join("etc/bunny/bunny.toml"),
+            "edited after the snapshot",
+        )
+        .unwrap();
+        std::fs::write(applied.join("bunny.toml"), "as applied").unwrap();
+        std::fs::write(applied.join("bunny.lock"), "lock as applied").unwrap();
+        std::fs::write(applied.join("config-path"), "/etc/bunny/bunny.toml\n").unwrap();
+        let log = run_hook("bunny-20261117-091500", t);
+        assert_eq!(
+            std::fs::read_to_string(t.join("@/etc/bunny/bunny.toml")).unwrap(),
+            "as applied",
+            "{log}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(t.join("@/etc/bunny/bunny.lock")).unwrap(),
+            "lock as applied"
+        );
     }
 
     #[test]

@@ -48,6 +48,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       names before changing anything
 - [x] `bunny search` / `add` / `remove`: search names and descriptions,
       short names and typo suggestions, config edits that keep comments
+- [x] Boot-menu undo can't walk further back: the entry is removed after
+      any rollback, and picking it twice does nothing
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -234,3 +236,5 @@ Rough order. These get split into PR-sized items when we reach them.
 
 - `bunny rollback --root <fake>` still reads the real machine's mount info.
 - Kept package.use lines lose their original file name on a second switch.
+- The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
+  `GRUB_DISTRIBUTOR`; part of the boot menu work).

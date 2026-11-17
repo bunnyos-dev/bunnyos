@@ -114,6 +114,8 @@ pub struct Outcome {
     pub left_behind: Vec<String>,
     /// The config put back as it was at that generation, if any.
     pub config_restored: Option<PathBuf>,
+    /// The restored system's old "undo the last change" entry was removed.
+    pub undo_entry_dropped: bool,
 }
 
 /// Parses `btrfs subvolume list` output into paths relative to the top level.
@@ -201,6 +203,7 @@ pub fn rollback(
     let mut carried = Vec::new();
     let mut left_behind = Vec::new();
     let mut config_restored = None;
+    let mut undo_entry_dropped = false;
     let result = (|| -> Result<()> {
         let before_path = t(&format!("{SNAPSHOTS_SUBVOL}/{before}"));
         if !run(
@@ -249,6 +252,10 @@ pub fn rollback(
             Ok(path) => config_restored = path,
             Err(e) => eprintln!("  Note: couldn't put the config back as it was ({e:#})."),
         }
+        match crate::boot::drop_entry_in(&top.join(ROOT_SUBVOL)) {
+            Ok(dropped) => undo_entry_dropped = dropped,
+            Err(e) => eprintln!("  Note: couldn't tidy the boot menu ({e:#})."),
+        }
         Ok(())
     })();
 
@@ -278,6 +285,7 @@ pub fn rollback(
         carried,
         left_behind,
         config_restored,
+        undo_entry_dropped,
     })
 }
 

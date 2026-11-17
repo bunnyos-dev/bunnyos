@@ -85,6 +85,12 @@ the system starts as it was before the change. It's the same as `bunny
 rollback`, done while starting up: the broken system is saved too, so you can
 go back to it with `bunny rollback list`.
 
+After you've used it, the entry is gone until your next change, so you
+can't go further back by picking it again. (The same happens after `bunny
+rollback`.) To move between saved versions after that, use `bunny rollback
+list`. If the entry is somehow picked twice for the same change, the second
+time does nothing and the computer starts normally.
+
 If the boot menu doesn't show up when you start the computer, hold **Shift**
 (or press **Esc**) while it starts.
 

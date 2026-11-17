@@ -39,6 +39,16 @@ bunny_rollback() {
         return 0
     fi
 
+    # Already undone to this generation (the entry was picked again, or GRUB
+    # remembered it): nothing to do. Undoing twice would only add clutter.
+    if [ -f "$bunny_top/@snapshots/bunny-state.toml" ] && \
+        grep -q '^last = "rollback"' "$bunny_top/@snapshots/bunny-state.toml" && \
+        grep -q "^to = \"$bunny_target\"" "$bunny_top/@snapshots/bunny-state.toml"; then
+        info "bunny: this change was already undone; starting normally"
+        umount "$bunny_top"
+        return 0
+    fi
+
     bunny_stamp="$(date -u +%Y%m%d-%H%M%S)"
     bunny_before="bunny-$bunny_stamp-before-rollback"
     info "bunny: undoing the change, going back to $bunny_target"
@@ -75,6 +85,23 @@ bunny_rollback() {
                 fi
                 ;;
         esac
+    fi
+
+    # The restored system brings back its own, older boot menu, whose undo
+    # entry would go one change further back. Remove it: there's no "last
+    # change" to undo until the next switch.
+    bunny_cfg="$bunny_top/@/boot/grub/custom.cfg"
+    if [ -f "$bunny_cfg" ]; then
+        bunny_skip=0
+        : > "$bunny_cfg.bunny-new"
+        while IFS= read -r bunny_line || [ -n "$bunny_line" ]; do
+            case "$bunny_line" in
+                "### BEGIN bunny: undo entry"*) bunny_skip=1; continue ;;
+                "### END bunny") bunny_skip=0; continue ;;
+            esac
+            [ "$bunny_skip" = 1 ] || printf '%s\n' "$bunny_line" >> "$bunny_cfg.bunny-new"
+        done < "$bunny_cfg"
+        mv "$bunny_cfg.bunny-new" "$bunny_cfg" || rm -f "$bunny_cfg.bunny-new"
     fi
 
     # Notes, so `bunny rollback list` can say what happened.

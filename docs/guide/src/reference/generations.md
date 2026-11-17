@@ -77,6 +77,15 @@ With `[boot] undo_entry = true`:
   `@replaced-<time>`, and makes a copy of the generation the new `@`. If any
   step fails, the current system is left (or put back) as it was, and it
   starts normally.
+- `/boot/grub` is part of the system, so the restored system brings back its
+  own, older `custom.cfg`, whose entry would undo one change further back.
+  Both `bunny rollback` and the boot-menu undo remove bunny's entry from the
+  restored system (other entries in the file stay). The next switch adds a
+  fresh one.
+- If `/.snapshots/bunny-state.toml` says the last thing was a rollback to the
+  same generation the entry points at, the step does nothing and the system
+  starts normally. That covers picking the entry twice, or GRUB remembering
+  the last choice.
 
 Limits:
 

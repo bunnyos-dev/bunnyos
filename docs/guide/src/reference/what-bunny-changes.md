@@ -15,6 +15,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
 | `/usr/lib/dracut/modules.d/90bunny-rollback/` | The boot menu's undo step, with [`[boot] undo_entry`](config.md#boot). Added to the startup image (`/boot/initramfs-<version>.img`), which is rebuilt once; the old image goes to the backup folder. |
 | `/boot/grub/custom.cfg` | The boot menu's undo entry, between `### BEGIN bunny` and `### END bunny`. The rest of the file is kept. |
+| `/var/lib/bunny/applied/` | A copy of the config and lock from the last successful switch, so undoing a later change can put them back. Part of the system, so each generation carries its own. |
 | `/var/log/bunny/<time>-emerge.log` | emerge's full output from each switch or update. |
 | `/var/lib/bunny/backups/<time>/` | Copies of the files above, from before each switch. |
 

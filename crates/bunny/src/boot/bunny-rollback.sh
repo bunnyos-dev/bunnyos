@@ -60,6 +60,23 @@ bunny_rollback() {
         return 0
     fi
 
+    # The config that matched that generation goes back too, so config and
+    # system agree. Only a config under /etc (one in /home isn't rolled back).
+    bunny_applied="$bunny_top/@/var/lib/bunny/applied"
+    if [ -f "$bunny_applied/config-path" ] && [ -f "$bunny_applied/bunny.toml" ]; then
+        read -r bunny_config < "$bunny_applied/config-path"
+        case "$bunny_config" in
+            *..*) ;;
+            /etc/*.toml)
+                cp "$bunny_applied/bunny.toml" "$bunny_top/@$bunny_config" || \
+                    warn "bunny: couldn't put $bunny_config back as it was"
+                if [ -f "$bunny_applied/bunny.lock" ]; then
+                    cp "$bunny_applied/bunny.lock" "$bunny_top/@${bunny_config%.toml}.lock" || true
+                fi
+                ;;
+        esac
+    fi
+
     # Notes, so `bunny rollback list` can say what happened.
     printf 'kind = "rollback"\nsummary = ""\nto = "%s"\n' "$bunny_target" \
         > "$bunny_top/@snapshots/$bunny_before.toml"

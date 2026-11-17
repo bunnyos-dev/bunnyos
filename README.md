@@ -19,14 +19,14 @@ polished, quiet experience from power button to desktop.
 | 1. Read a system (`import`, `check`, `plan`) | ✅ Done |
 | 2. Change a system (`switch`) | ✅ Done |
 | 3. Undo (`generations`, `rollback`, `clean`) | ✅ Done (boot-menu undo to do) |
-| 4. Same system everywhere (lockfile) | 🔶 Part 1 done, part 2 next |
-| 5. Understandable errors | ⬜ |
+| 4. Same system everywhere (lockfile) | ✅ Done |
+| 5. Understandable errors | ⬜ Next |
 | 6. Fast installs (package cache) | ⬜ |
 | 7. The look (boot animation, GRUB, login) | ⬜ |
 | 8. Security + gaming | ⬜ |
 | 9. Installer + ISO | ⬜ |
 
-Version 1 (phases 1–5) is roughly half done. Details and the full to-do list
+Version 1 (phases 1–5) is roughly two-thirds done. Details and the full to-do list
 are in the [roadmap](docs/ROADMAP.md).
 
 ## Documentation

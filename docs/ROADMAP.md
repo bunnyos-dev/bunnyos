@@ -14,7 +14,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 1. Read a system | `import`, `check`, `plan` | ✅ Done, tested on a real desktop |
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
-| 4. Same system everywhere | lockfile, `update` | 🔶 Part 2 in review |
+| 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ⬜ |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
@@ -22,7 +22,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 9. Installing BunnyOS | installer, ISO, hosting | ⬜ |
 
 **Version 1** (phases 1–5, running on an existing Gentoo install) is roughly
-**half done**. The **whole vision** (all 9 phases) is roughly **a fifth done**.
+**two-thirds done**. The **whole vision** (all 9 phases) is roughly **a fifth done**.
 
 ### Done so far
 
@@ -39,6 +39,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [x] `bunny clean`: remove old generations and leftovers safely
 - [x] `bunny lock`: exact installed versions and package-tree snapshot in
       `bunny.lock`; `bunny plan` shows drift from it
+- [x] Version pins: `bunny switch` keeps to the lock and updates it;
+      `bunny update` syncs, updates everything and relocks
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -49,7 +51,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       installed version of every package (from `/var/db/pkg`). `bunny plan`
       shows packages whose installed version differs from the lock. Tests on
       fake roots. **(VM)**
-- [~] **Lockfile, part 2:** `bunny update` syncs the tree, runs the switch, and
+- [x] **Lockfile, part 2:** `bunny update` syncs the tree, runs the switch, and
       rewrites the lock. `bunny switch` refuses to silently drift from the lock
       (explains what changed). **(VM)**
 - [ ] **Error translation, part 1:** recognise emerge's "USE changes are

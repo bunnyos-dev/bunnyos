@@ -147,7 +147,7 @@ so the maintainer's time goes to testing and decisions.
       Release when a tag is pushed. Write down the release steps in
       `docs/RELEASING.md`. Release when a few features have piled up and have
       run on a real machine for a while, not on every merge.
-- [~] **Weekly canary check:** a scheduled GitHub Actions job runs bunny in a
+- [x] **Weekly canary check:** a scheduled GitHub Actions job runs bunny in a
       fresh Gentoo container (`gentoo/stage3`) against the latest package
       tree: `bunny import`, `check`, `plan`, and a dry-run install
       (`emerge --pretend`) read by bunny. If anything breaks (emerge changed

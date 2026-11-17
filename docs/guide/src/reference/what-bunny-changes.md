@@ -8,6 +8,8 @@ Everything bunny writes, so nothing is a mystery.
 | `/etc/portage/package.use/zz-bunny` | USE flags from your config. Named so Portage reads it **last**, so it wins. |
 | `/etc/portage/package.use/00-bunny-kept` | package.use lines bunny can't manage yet (version ranges like `<pkg-2`, wildcards), copied word for word. |
 | `/etc/portage/package.mask/zz-bunny-lock` | The [version pins](lock-and-pins.md) from `bunny.lock`. |
+| `/etc/sudoers.d/bunny` or `/etc/doas.conf` | Admin rights for the `wheel` group, from [`[security]`](config.md#security). Only if that section is in your config. |
+| `/etc/group` (`wheel` only) | `admins` from `[security]` are added with `gpasswd`. Nobody is ever removed. |
 | `/etc/runlevels/default/*` | Services from `services`, added with `rc-update`. |
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
@@ -35,6 +37,7 @@ config, nothing is lost:
 | Install / update | `emerge --update --deep --newuse --verbose --ask @world` |
 | Remove unused | `emerge --depclean --ask` (always asks) |
 | Services | `rc-update add <name> default`, `rc-service <name> start` |
+| Admin rights | `visudo -cf <file>` or `doas -C <file>` to check, `gpasswd -a <user> wheel` |
 | Update | `emerge --sync` first |
 
 emerge's output is shown live, as usual. bunny keeps a copy to explain any

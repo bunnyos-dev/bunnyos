@@ -10,12 +10,13 @@
   subvolume. That's what lets bunny undo changes. Without it bunny still
   works, but switches can't be rolled back (it warns you each time). The
   recommended layout is in [The disk layout](../reference/disk-layout.md).
-- **doas** set up for your user. bunny asks for your password through it when
-  it needs to change the system.
+- **sudo** or **doas** set up for your user. bunny asks for your password
+  through whichever one you have when it needs to change the system. (bunny
+  can also manage this for you: see [`[security]`](../reference/config.md#security).)
 - **Rust**, to build bunny. The prebuilt one is quickest:
 
   ```sh
-  doas emerge -av dev-lang/rust-bin
+  sudo emerge -av dev-lang/rust-bin
   ```
 
 > **Try it in a virtual machine first.** The repository has a script that
@@ -28,7 +29,7 @@
 git clone https://github.com/bunnyos-dev/bunnyos
 cd bunnyos
 cargo build --release
-doas install -m 755 target/release/bunny /usr/local/bin/bunny
+sudo install -m 755 target/release/bunny /usr/local/bin/bunny
 ```
 
 Check it works:
@@ -43,7 +44,7 @@ bunny --help
 cd bunnyos
 git pull
 cargo build --release
-doas install -m 755 target/release/bunny /usr/local/bin/bunny
+sudo install -m 755 target/release/bunny /usr/local/bin/bunny
 ```
 
 Next: [Your first five minutes](first-five-minutes.md).

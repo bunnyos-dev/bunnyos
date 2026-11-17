@@ -1,7 +1,8 @@
 # Every command
 
 `[config]` defaults to `/etc/bunny/bunny.toml`. Commands that change the
-system ask for your password through `doas` by themselves.
+system ask for your password by themselves, through sudo or doas
+(whichever your system uses; see [`[security]`](config.md#security)).
 `--root <folder>` (where offered) points bunny at another system's files: it
 reads and writes there and only *prints* commands instead of running them.
 That's useful for testing.

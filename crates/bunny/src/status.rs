@@ -193,7 +193,10 @@ impl Status {
                 line(&mut out, "✗", "Config", &format!("there's no {config}"));
                 more(
                     &mut out,
-                    &format!("Create one from this system: doas bunny import -o {config}"),
+                    &format!(
+                        "Create one from this system: {} bunny import -o {config}",
+                        crate::security::admin()
+                    ),
                 );
             }
             ConfigState::Unreadable => {
@@ -307,7 +310,13 @@ impl Status {
             }
         }
         if self.reboot_pending {
-            more(&mut out, "⚠ Restart to finish the rollback: doas reboot");
+            more(
+                &mut out,
+                &format!(
+                    "⚠ Restart to finish the rollback: {} reboot",
+                    crate::security::admin()
+                ),
+            );
         }
 
         // Undo
@@ -550,7 +559,10 @@ mod tests {
         s.reboot_pending = true;
         let text = s.render();
         assert!(text.contains("rolled back to generation 1"));
-        assert!(text.contains("Restart to finish the rollback: doas reboot"));
+        assert!(text.contains(&format!(
+            "Restart to finish the rollback: {} reboot",
+            crate::security::admin()
+        )));
     }
 
     #[test]
@@ -562,7 +574,10 @@ mod tests {
         s.last = None;
         s.tree_synced = None;
         let text = s.render();
-        assert!(text.contains("doas bunny import -o /etc/bunny/bunny.toml"));
+        assert!(text.contains(&format!(
+            "{} bunny import -o /etc/bunny/bunny.toml",
+            crate::security::admin()
+        )));
         assert!(text.contains("no bunny.lock yet"));
         assert!(text.contains("Undo          not available"));
         assert!(text.contains("Last change   none yet (bunny hasn't changed anything"));

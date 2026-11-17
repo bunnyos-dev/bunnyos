@@ -22,6 +22,9 @@ pub struct Config {
     /// Per-package settings, keyed by `category/name`.
     #[serde(default)]
     pub pkg: BTreeMap<String, PkgSettings>,
+    /// Admin rights: sudo or doas, and who gets them. Not managed if absent.
+    #[serde(default)]
+    pub security: Option<crate::security::Security>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

@@ -28,6 +28,10 @@ pub struct Imported {
     /// Services set to start at boot whose start script is gone. Left out of
     /// the config so another machine doesn't try to enable them.
     pub leftover_services: Vec<String>,
+    /// The admin tool installed ("sudo" or "doas"), for the suggested [security].
+    pub admin_tool: Option<&'static str>,
+    /// Users in the wheel group (except root), for the suggested [security].
+    pub wheel: Vec<String>,
 }
 
 pub fn from_system(root: &Path) -> Result<Imported> {
@@ -51,8 +55,36 @@ pub fn from_system(root: &Path) -> Result<Imported> {
         use_flags: package_use.flags,
         skipped: package_use.skipped,
         versioned: package_use.versioned,
+        admin_tool: if packages_has(root, "app-admin/doas") {
+            Some("doas")
+        } else if packages_has(root, "app-admin/sudo") {
+            Some("sudo")
+        } else {
+            None
+        },
+        wheel: crate::security::group_members(root, "wheel")
+            .into_iter()
+            .filter(|u| u != "root")
+            .collect(),
         leftover_services,
     })
+}
+
+/// Whether a package is installed (any version).
+fn packages_has(root: &Path, atom: &str) -> bool {
+    let Some((category, name)) = atom.split_once('/') else {
+        return false;
+    };
+    std::fs::read_dir(root.join("var/db/pkg").join(category))
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                let dir = e.file_name().to_string_lossy().into_owned();
+                dir.strip_prefix(name)
+                    .and_then(|rest| rest.strip_prefix('-'))
+                    .is_some_and(|v| v.starts_with(|c: char| c.is_ascii_digit()))
+            })
+        })
+        .unwrap_or(false)
 }
 
 /// Per-package USE flags from every file in `/etc/portage/package.use`.
@@ -313,6 +345,23 @@ impl Imported {
                 let _ = writeln!(out, "#   {}: {line}", file.display());
             }
         }
+        let admins: Vec<String> = if self.wheel.is_empty() {
+            vec!["\"you\"".to_string()]
+        } else {
+            self.wheel.iter().map(|u| quote(u)).collect()
+        };
+        let _ = write!(
+            out,
+            "\n# Admin rights. Uncomment these lines to let bunny manage them: it writes\n\
+             # /etc/sudoers.d/bunny (sudo) or /etc/doas.conf (doas) and keeps these users\n\
+             # in the wheel group.\n\
+             # [security]\n\
+             # privilege = \"{}\"   # \"sudo\" or \"doas\"\n\
+             # persist = true       # remember your password for a few minutes\n\
+             # admins = [{}]\n",
+            self.admin_tool.unwrap_or("sudo"),
+            admins.join(", ")
+        );
         out
     }
 
@@ -327,9 +376,10 @@ impl Imported {
             let _ = write!(
                 text,
                 "\nLeft out {} service(s) that start at boot but aren't installed anymore: {}.\n\
-                 Clean up with: doas rc-update del <name>",
+                 Clean up with: {} rc-update del <name>",
                 self.leftover_services.len(),
-                self.leftover_services.join(", ")
+                self.leftover_services.join(", "),
+                crate::security::admin()
             );
         }
         if self.versioned > 0 {

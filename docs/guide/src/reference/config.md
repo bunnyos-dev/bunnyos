@@ -72,6 +72,47 @@ Settings for one package.
 Group flags (Gentoo's `PYTHON_TARGETS: python3_12` style) are written as one
 word: `python_targets_python3_12`.
 
+## `[security]`
+
+Which tool gives admin rights, and who gets them. bunny only manages this if
+the section is there; `bunny import` writes it commented out, with what it
+found on your system.
+
+```toml
+[security]
+privilege = "sudo"   # "sudo" (the default) or "doas"
+persist = true       # remember your password for a few minutes
+admins = ["you"]     # users who get admin rights
+```
+
+| Setting | Values | Default | Meaning |
+|---|---|---|---|
+| `privilege` | `"sudo"` / `"doas"` | `"sudo"` | The admin tool. bunny installs it. |
+| `persist` | `true` / `false` | `true` | Remember your password for a few minutes after typing it. |
+| `admins` | user names | none | Added to the `wheel` group, which is what gets admin rights. |
+
+On a switch, bunny:
+
+1. installs the tool (it's added to your packages automatically)
+2. writes `/etc/sudoers.d/bunny` (sudo) or `/etc/doas.conf` (doas) giving the
+   `wheel` group admin rights, **after checking it with the tool's own
+   checker** (`visudo -c` or `doas -C`)
+3. adds `admins` to the `wheel` group
+
+Safety:
+
+- bunny **never removes anyone** from `wheel`.
+- If nobody would be in `wheel`, or an admin's name isn't a real user, bunny
+  stops before changing anything, because that could lock everyone out.
+- If the checker rejects the file, it's not put in place, and no packages are
+  removed, so the tool you have keeps working.
+- Switching from doas to sudo (or back) installs and sets up the new one
+  before the old one can be removed. Take the old one out of `packages` once
+  you're happy.
+
+`sudo-rs` (a memory-safe rewrite of sudo) is planned once Gentoo marks it
+stable.
+
 ## The TOML section trap
 
 In TOML, **everything below a `[section]` header belongs to that section**.

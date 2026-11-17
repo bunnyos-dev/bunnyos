@@ -622,6 +622,25 @@ fn restore_files(root: &Path, backup: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Nothing was installed after all (emerge refused, or the user said no):
+/// put the files back and delete the snapshot taken for this switch, so it
+/// doesn't show up as a generation that changed nothing.
+fn discard(root: &Path, runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
+    restore_files(root, &outcome.backup_dir)?;
+    if let Some(snapshot) = outcome.snapshot.take() {
+        let (ok, _) = runner.run_quiet(
+            &cmd(&["btrfs", "subvolume", "delete", &snapshot.to_string_lossy()]),
+            &mut |_| {},
+        )?;
+        if ok {
+            let mut note = snapshot.into_os_string();
+            note.push(".toml");
+            let _ = std::fs::remove_file(note);
+        }
+    }
+    Ok(())
+}
+
 /// One line that updates in place on a terminal ("[3/9] Installing …"),
 /// or one line per step when the output is a file or pipe.
 struct ProgressLine {
@@ -687,7 +706,7 @@ fn install_quietly(
     let raw = output;
     let output = explain::strip_ansi(&raw);
     if !ok {
-        restore_files(root, &outcome.backup_dir)?;
+        discard(root, runner, outcome)?;
         let log = save_log(
             root,
             &opts.stamp,
@@ -735,7 +754,7 @@ fn install_quietly(
     };
     let more_than_planned = list.iter().any(|m| !planned(&m.name));
     if !opts.yes && more_than_planned && !(opts.confirm)("\nInstall these?", true)? {
-        restore_files(root, &outcome.backup_dir)?;
+        discard(root, runner, outcome)?;
         return Err(Cancelled.into());
     }
 
@@ -1365,6 +1384,14 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.is::<Cancelled>());
+        assert!(
+            runner
+                .commands
+                .iter()
+                .any(|c| c.starts_with("btrfs subvolume delete")),
+            "the empty generation is deleted: {:?}",
+            runner.commands
+        );
         assert!(!runner.commands.iter().any(|c| c.contains("--quiet-build")));
         assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
         let mut files_after: Vec<_> = std::fs::read_dir(&use_dir)

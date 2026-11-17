@@ -12,7 +12,7 @@ depends() {
 }
 
 install() {
-    inst_multiple btrfs mv cp mkdir date printf umount mount
+    inst_multiple btrfs mv cp rm grep mkdir date printf umount mount
     # shellcheck disable=SC2154  # $moddir is set by dracut
     inst_hook pre-mount 90 "$moddir/bunny-rollback.sh"
 }

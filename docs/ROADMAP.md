@@ -234,3 +234,8 @@ Rough order. These get split into PR-sized items when we reach them.
 
 - `bunny rollback --root <fake>` still reads the real machine's mount info.
 - Kept package.use lines lose their original file name on a second switch.
+- [~] Boot-menu undo walked further back each time it was picked (the
+      restored system brought back its older entry). Now the entry is removed
+      after any rollback, and picking it twice does nothing.
+- The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
+  `GRUB_DISTRIBUTOR`; part of the boot menu work).

@@ -44,6 +44,13 @@ dependencies nothing else needs.
 
 `bunny add` and `bunny remove` edit this list for you.
 
+Two things are kept even if they're not in the list:
+
+- the admin tool chosen in [`[security]`](#security) (sudo or doas), and
+- bunny itself, when it was installed from the BunnyOS overlay
+  (`app-admin/bunny-bin` or `app-admin/bunny`), so a switch never removes
+  bunny.
+
 ## `services`
 
 Services that start at boot, by their plain name (as in `/etc/init.d/`).

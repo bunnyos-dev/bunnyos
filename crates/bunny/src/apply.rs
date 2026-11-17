@@ -336,7 +336,7 @@ pub fn switch(
     } else if let Some(parent) = world.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&world, portage::render_world(config))
+    std::fs::write(&world, portage::render_world(config, root))
         .context("Couldn't write the world file")?;
 
     // 4. Install and update.

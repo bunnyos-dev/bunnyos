@@ -34,6 +34,8 @@ pub enum LockState {
     Matches(usize),
     /// This many packages (or package trees) differ from the lock.
     Differs(usize),
+    /// Installed packages the lock doesn't list yet, and nothing else.
+    NewPackages(usize),
 }
 
 #[derive(Debug, PartialEq)]
@@ -105,6 +107,8 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
                 let drift = lock::compare(&locked, &now_lock);
                 if drift.is_empty() {
                     LockState::Matches(locked.packages.len())
+                } else if drift.only_new_packages() {
+                    LockState::NewPackages(drift.extra.len())
                 } else {
                     LockState::Differs(
                         drift.changed.len()
@@ -289,6 +293,18 @@ impl Status {
                 "Versions",
                 &format!("all {n} packages match bunny.lock"),
             ),
+            LockState::NewPackages(n) => {
+                line(
+                    &mut out,
+                    "⚠",
+                    "Versions",
+                    &format!("{n} installed package{} not in bunny.lock yet", plural(*n)),
+                );
+                more(
+                    &mut out,
+                    "`bunny plan` lists them. `bunny switch` records them in the lock.",
+                );
+            }
             LockState::Differs(n) => {
                 line(
                     &mut out,

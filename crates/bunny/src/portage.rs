@@ -22,11 +22,39 @@ pub fn package_use_dir(root: &Path) -> PathBuf {
     root.join(PACKAGE_USE_DIR)
 }
 
-/// The packages the config asks for, sorted and de-duplicated.
-pub fn wanted_world(config: &Config) -> BTreeSet<String> {
+/// bunny's own packages, from the BunnyOS overlay: the prebuilt release and
+/// the one built from git.
+pub const BUNNY_PACKAGES: [&str; 2] = ["app-admin/bunny-bin", "app-admin/bunny"];
+
+/// Which of bunny's own packages is installed, if bunny came from the overlay.
+pub fn bunny_itself(root: &Path) -> Option<&'static str> {
+    let dir = root.join("var/db/pkg/app-admin");
+    let installed: Vec<String> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    BUNNY_PACKAGES.into_iter().find(|atom| {
+        let name = atom.rsplit('/').next().unwrap_or(atom);
+        installed.iter().any(|entry| {
+            entry
+                .strip_prefix(name)
+                .and_then(|rest| rest.strip_prefix('-'))
+                .is_some_and(|version| version.starts_with(|c: char| c.is_ascii_digit()))
+        })
+    })
+}
+
+/// The packages the config asks for, sorted and de-duplicated, plus the ones
+/// bunny keeps by itself: the admin tool from `[security]`, and bunny's own
+/// package, so a switch never removes bunny.
+pub fn wanted_world(config: &Config, root: &Path) -> BTreeSet<String> {
     let mut world: BTreeSet<String> = config.packages.iter().cloned().collect();
     if let Some(sec) = &config.security {
         world.insert(sec.privilege.package().to_string());
+    }
+    if let Some(own) = bunny_itself(root) {
+        world.insert(own.to_string());
     }
     world
 }
@@ -46,9 +74,9 @@ pub fn read_world(root: &Path) -> std::io::Result<BTreeSet<String>> {
 }
 
 /// The world file for the config: one package per line, sorted.
-pub fn render_world(config: &Config) -> String {
+pub fn render_world(config: &Config, root: &Path) -> String {
     let mut out = String::new();
-    for atom in wanted_world(config) {
+    for atom in wanted_world(config, root) {
         out.push_str(&atom);
         out.push('\n');
     }
@@ -81,6 +109,30 @@ mod tests {
         let text = render_package_use(&config);
         assert!(text.contains("www-client/firefox pgo -telemetry\n"));
         assert!(!text.contains("app-misc/empty"));
+    }
+
+    #[test]
+    fn keeps_bunny_itself_in_the_world_set() {
+        let config = Config::parse("packages = [\"app-misc/tmux\"]").unwrap();
+        let root = tempfile::tempdir().unwrap();
+        // Not installed from the overlay: nothing extra.
+        assert_eq!(render_world(&config, root.path()), "app-misc/tmux\n");
+
+        let pkg = root.path().join("var/db/pkg/app-admin");
+        // A different package whose name starts the same way doesn't count.
+        std::fs::create_dir_all(pkg.join("bunnyfoo-1.0")).unwrap();
+        assert_eq!(bunny_itself(root.path()), None);
+
+        std::fs::create_dir_all(pkg.join("bunny-bin-0.1.0")).unwrap();
+        assert_eq!(bunny_itself(root.path()), Some("app-admin/bunny-bin"));
+        assert_eq!(
+            render_world(&config, root.path()),
+            "app-admin/bunny-bin\napp-misc/tmux\n"
+        );
+
+        std::fs::remove_dir(pkg.join("bunny-bin-0.1.0")).unwrap();
+        std::fs::create_dir_all(pkg.join("bunny-9999")).unwrap();
+        assert_eq!(bunny_itself(root.path()), Some("app-admin/bunny"));
     }
 
     #[test]

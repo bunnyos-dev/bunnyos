@@ -66,8 +66,10 @@ def plan(atoms):
             except Exception as e:  # an unreachable binhost: plan without it
                 sys.stderr.write("bunny-portage: prebuilt packages unavailable: %s\n" % e)
 
+    # No spinner animation: our output is JSON. (Don't rely on the spinner's
+    # method names; they change between Portage versions.)
     spinner = stdout_spinner()
-    spinner.update = spinner.update_quiet
+    spinner.update = lambda *args, **kwargs: True
     params = create_depgraph_params(opts, "")
     ok, graph, _favorites = backtrack_depgraph(settings, trees, opts, params, "", files, spinner)
     if not ok:

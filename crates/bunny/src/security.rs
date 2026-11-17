@@ -52,6 +52,17 @@ impl Privilege {
         }
     }
 
+    /// USE flags BunnyOS sets for the tool unless the config has its own
+    /// `[pkg]` entry for it. sudo's `sendmail` flag pulls in a mail server
+    /// (nullmailer) just to email root about failed attempts; desktops don't
+    /// need that.
+    pub fn default_use(self) -> &'static [(&'static str, &'static [&'static str])] {
+        match self {
+            Privilege::Sudo => &[("app-admin/sudo", &["-sendmail"])],
+            Privilege::Doas => &[],
+        }
+    }
+
     /// The file bunny manages, relative to the root.
     pub fn file(self) -> &'static str {
         match self {
@@ -84,7 +95,8 @@ pub fn render(sec: &Security) -> String {
                   # Edit bunny.toml instead of this file.\n";
     match sec.privilege {
         Privilege::Sudo => {
-            let mut out = format!("{header}%wheel ALL=(ALL:ALL) ALL\n");
+            let mut out =
+                format!("{header}%wheel ALL=(ALL:ALL) ALL\nDefaults:%wheel lecture=never\n");
             if !sec.persist {
                 out.push_str("Defaults:%wheel timestamp_timeout=0\n");
             }
@@ -244,7 +256,8 @@ mod tests {
         assert!(render(&sec(Privilege::Doas, true, &[])).ends_with("permit persist :wheel\n"));
         assert!(render(&sec(Privilege::Doas, false, &[])).ends_with("permit :wheel\n"));
         let sudo = render(&sec(Privilege::Sudo, true, &[]));
-        assert!(sudo.ends_with("%wheel ALL=(ALL:ALL) ALL\n"));
+        assert!(sudo.contains("%wheel ALL=(ALL:ALL) ALL\n"));
+        assert!(sudo.ends_with("Defaults:%wheel lecture=never\n"));
         assert!(render(&sec(Privilege::Sudo, false, &[]))
             .ends_with("Defaults:%wheel timestamp_timeout=0\n"));
     }

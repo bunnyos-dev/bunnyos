@@ -32,9 +32,12 @@ That's useful for testing.
 | `bunny rollback [number]` | Puts the system back to a generation (the last switch if no number). Takes effect after a reboot. |
 | `bunny clean [--keep N]` | Removes old generations and rollback leftovers. Keeps the newest 5 by default. |
 
-`switch`, `add`, `remove` and `update` take `-y` / `--yes` to skip bunny's
-question and emerge's install question. **Removing packages from the system
-always asks**, even with `--yes`.
+`switch`, `add`, `remove` and `update` take:
+
+- `-y` / `--yes`: skip the questions. **Removing packages from the system
+  always asks**, even with `--yes`.
+- `-v` / `--verbose`: show emerge's full output as it runs, and let emerge ask
+  its own questions, instead of bunny's list and progress line.
 
 ## How questions work
 

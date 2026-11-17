@@ -254,12 +254,8 @@ fn unknown_packages(root: &Path, wanted: &[String]) -> Vec<String> {
 /// Order doesn't matter: `pgo -telemetry` equals `-telemetry pgo`.
 fn use_changes(config: &Config, root: &Path) -> Result<Vec<UseChange>> {
     let current = import::read_package_use(root)?.flags;
-    let wanted: BTreeMap<&String, &Vec<String>> = config
-        .pkg
-        .iter()
-        .filter(|(_, s)| !s.use_flags.is_empty())
-        .map(|(atom, s)| (atom, &s.use_flags))
-        .collect();
+    let effective = config.use_flags();
+    let wanted: BTreeMap<&String, &Vec<String>> = effective.iter().collect();
 
     let as_set = |flags: &[String]| flags.iter().cloned().collect::<BTreeSet<_>>();
     let mut atoms: BTreeSet<&String> = wanted.keys().copied().collect();

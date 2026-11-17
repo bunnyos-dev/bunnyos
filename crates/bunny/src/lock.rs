@@ -577,6 +577,8 @@ mod tests {
             stamp: "20261116-120000".into(),
             update_all: false,
             color: false,
+            verbose: true,
+            confirm: |_, _| Ok(true),
         }
     }
 

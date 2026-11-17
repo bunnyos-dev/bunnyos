@@ -1,0 +1,45 @@
+name: Guide
+
+on:
+  pull_request:
+    paths: ["docs/guide/**"]
+  push:
+    branches: [main]
+    paths: ["docs/guide/**", ".github/workflows/guide.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: guide
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the guide
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook
+      - run: mdbook build docs/guide
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: docs/guide/book
+
+  deploy:
+    name: Publish to GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

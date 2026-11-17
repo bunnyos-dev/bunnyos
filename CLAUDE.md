@@ -19,6 +19,16 @@ decision changes. `docs/ROADMAP.md` is the to-do list.
   `desktop`, `laptop`.
 - **Licence:** GPL-3.0 for this repo. Ebuilds in the overlay are GPL-2.
 
+## The Guide
+
+- `docs/guide/` is the user guide (mdBook). **Any change to what a command
+  does or prints updates the matching guide page in the same PR.**
+- "Start here" and "Everyday tasks" pages: plain words, one task per page,
+  copy-paste commands, written for an experienced Linux user new to Gentoo's
+  and NixOS's ideas. "Going further": exact behaviour and every option.
+- Describe what bunny does today; mark planned things as planned.
+- Check it builds: `mdbook build docs/guide`.
+
 ## Code
 
 - Rust workspace; the CLI lives in `crates/bunny`.

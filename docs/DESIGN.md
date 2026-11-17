@@ -390,8 +390,23 @@ admins = ["you"]
 
 ## Desktop
 
-- Hyprland and MangoWM, with Quickshell for the shell.
-- One of them is the polished default; the other is "supported, less polished".
+Decided November 2026. The installer offers, in this order:
+
+1. **BunnyOS Desktop** (the selling point, recommended): Hyprland with
+   BunnyOS's own Quickshell shell that works like a full desktop (settings,
+   app launcher, notifications, file and Wi-Fi panels), so someone who never
+   wants to open a terminal doesn't have to.
+2. **KDE Plasma**: a full, familiar desktop (works on OpenRC with elogind).
+3. **Xfce**: light and classic.
+4. **Hyprland, set it up yourself**: plain Hyprland and a terminal.
+5. **MangoWM, set it up yourself.**
+6. **No desktop**: terminal only.
+
+GNOME leans heavily on systemd, so it isn't offered while OpenRC is the only
+init system. BunnyOS Desktop is the one that gets the polish and testing;
+the others are packaged and supported, the "set it up yourself" ones on
+purpose bare. Config: `[desktop] name = "bunny" | "plasma" | "xfce" |
+"hyprland" | "mango" | "none"`, `accent = "#…"`.
 
 ## Boot experience
 
@@ -466,12 +481,40 @@ GPT
 - UI toolkit: **Slint** (Rust, draws directly to the screen via `linuxkms`, no
   compositor, software-render fallback). Plain Qt Quick is the fallback choice.
 - The installer only writes a `bunny.toml`; `bunny install` does the work.
-- Flow: language → Wi-Fi → disk (Erase & Install, Encrypt on) → account →
-  look → summary → progress bar → reboot.
-- "Advanced" reveals everything else. "Restore from config" rebuilds a machine
-  from a git repo or USB. A Utilities menu holds a terminal, disk tool and logs.
+- **Layout (decided November 2026):** not the sidebar-and-steps layout
+  most Linux installers share. One centered window over a dark background, a
+  small top bar (installer name, a Utilities menu, language, Wi-Fi,
+  battery), and **one decision per screen**: a big picture or title, a line of
+  explanation, the choice, and Back / Continue at the bottom with step dots.
+  Mockups: "BunnyOS: boot and installer mockups" (claude.ai artifact).
+- Flow: welcome (language) → disk (whole disk or next to Windows, encryption
+  on) → account → desktop → color → summary (with "Show bunny.toml") →
+  installing → done.
+- **Utilities menu:** "Use the terminal instead" switches to a text console
+  that says: welcome to the BunnyOS installer (terminal mode), how to get back
+  (`bunny-install --gui`, or Ctrl+Alt+F1), the install guide's URL ("Installing
+  by hand"), and the commands to start from the Baseline config or install
+  from your own. For people who want to leave the Baseline and set up
+  everything themselves. Also: Reset an installed BunnyOS, Disks, logs.
+- "Restore from config" rebuilds a machine from a git repo or USB.
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
+
+### Reset ("factory reset")
+
+Back to the latest tested Baseline, kept up to date (not the original
+install). Two kinds:
+
+- **Reset the system, keep my files** (from the running system or the USB):
+  the current system is saved as a generation first (so the reset itself can
+  be undone from the boot menu), a fresh, up-to-date Baseline image becomes the
+  new `@`, `/home` is untouched, the desktop and color choices are kept, and
+  the old config is kept as `bunny.toml.before-reset` so things can be brought
+  back one at a time.
+- **Erase everything** (USB only): wipes the disk and installs fresh, for
+  selling or giving a computer away. Can't be undone; asks to type ERASE.
+
+Needs the Baseline image (phase 6 and 9).
 
 ### ISO
 

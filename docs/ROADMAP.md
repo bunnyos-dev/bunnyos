@@ -200,7 +200,18 @@ Rough order. These get split into PR-sized items when we reach them.
 ### Phase 9: installing BunnyOS
 - [ ] `bunny install` (from `tools/vm-install-gentoo.sh`), encryption by default
 - [ ] Baseline system image built on the server
-- [ ] Slint installer (straight to the installer, no desktop)
+- [ ] Slint installer (straight to the installer, no desktop): one centered
+      window, one decision per screen (see the mockups), Utilities menu
+- [ ] Installer terminal mode: a console with a welcome, how to get back to
+      the graphical installer, the install guide's URL, and the commands to
+      start from the Baseline or your own config
+- [ ] Guide: "Installing by hand" chapter (what terminal mode points to)
+- [ ] **Reset:** `bunny reset` (keep files; undoable, saves the system first)
+      and "Erase everything" from the USB
+- [ ] **BunnyOS Desktop:** Hyprland + BunnyOS's own Quickshell shell that works
+      like a full desktop (settings, launcher, notifications, panels); the
+      selling point. Plus KDE Plasma, Xfce, bare Hyprland, bare MangoWM and
+      "no desktop" as installer choices (`[desktop]` section)
 - [ ] ISO build (Net and Offline editions), checksums and signatures
 - [ ] Hosting: GitHub Releases + Cloudflare R2
 - [ ] Quickshell, MangoWM and theme ebuilds in `bunny-overlay` (the repo

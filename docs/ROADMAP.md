@@ -51,6 +51,9 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 
 ## Version 1 — still to do
 
+Order agreed with the maintainer: search/add/remove, then the rest of the
+list, with the CI check along the way, and the Guide last.
+
 - [x] **Lockfile, part 1:** `bunny lock` writes `bunny.lock` next to the
       config: the `::gentoo` snapshot (git commit or timestamp) and the exact
       installed version of every package (from `/var/db/pkg`). `bunny plan`
@@ -75,13 +78,6 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       unambiguous (`firefox` → `www-client/firefox`), show the plan, and run
       the switch. "Installing" stays declarative: it's always "add to the
       config, then switch". **(VM)**
-- [ ] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
-      published to GitHub Pages by a GitHub Actions workflow. Two tracks:
-      "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
-      install/remove a program, update, undo a mistake, what the lock is) and
-      "Going further" (full `bunny.toml` reference, pins, generations, how bunny
-      drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
-      experienced Linux user who has never used NixOS.
 - [ ] **`bunny status`:** drift report: hand-edited files in package.use
       outside `zz-bunny`, world entries added by `emerge` directly, services
       enabled/disabled by hand. Read-only.
@@ -93,6 +89,13 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [ ] **GRUB "Undo last switch" entry:** boot-menu rollback for systems that
       won't boot (initramfs step that does the same swap as `bunny rollback`).
       **(VM)**
+- [ ] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
+      published to GitHub Pages by a GitHub Actions workflow. Two tracks:
+      "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
+      install/remove a program, update, undo a mistake, what the lock is) and
+      "Going further" (full `bunny.toml` reference, pins, generations, how bunny
+      drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
+      experienced Linux user who has never used NixOS.
 
 ## Repository housekeeping
 

@@ -54,7 +54,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 ## Version 1 — still to do
 
 Order agreed with the maintainer: search/add/remove, then the rest of the
-list, with the CI check along the way, and the Guide last.
+list, with the CI check along the way. (The Guide was moved up and is done;
+feature PRs now update it as they go.)
 
 - [x] **Lockfile, part 1:** `bunny lock` writes `bunny.lock` next to the
       config: the `::gentoo` snapshot (git commit or timestamp) and the exact
@@ -91,7 +92,7 @@ list, with the CI check along the way, and the Guide last.
 - [ ] **GRUB "Undo last switch" entry:** boot-menu rollback for systems that
       won't boot (initramfs step that does the same swap as `bunny rollback`).
       **(VM)**
-- [~] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
+- [x] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
       published to GitHub Pages by a GitHub Actions workflow. Two tracks:
       "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
       install/remove a program, update, undo a mistake, what the lock is) and

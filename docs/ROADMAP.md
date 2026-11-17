@@ -92,7 +92,7 @@ feature PRs now update it as they go.)
       they differ.
 - [ ] **Quieter emerge output:** run emerge with less noise and summarise news
       items and post-install messages instead of printing them raw. **(VM)**
-- [~] **`[security]` section:** `privilege` ("sudo" by default, or "doas"),
+- [x] **`[security]` section:** `privilege` ("sudo" by default, or "doas"),
       `persist`, `admins`. Installs the tool, writes and checks
       `/etc/sudoers.d/bunny` or `/etc/doas.conf`, adds admins to `wheel`, never
       locks you out. bunny's own messages use whichever tool you have. **(VM)**

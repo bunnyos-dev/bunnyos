@@ -95,6 +95,10 @@ pub fn explain(output: &str) -> Vec<Explanation> {
         Severity::Warning => 1,
         Severity::Info => 2,
     });
+    // emerge repeats some notices (news at the start and the end), so show
+    // each explanation once.
+    let mut seen = std::collections::HashSet::new();
+    found.retain(|e| seen.insert(e.title.clone()));
     found
 }
 
@@ -769,6 +773,13 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert!(found.iter().all(|e| e.severity == Severity::Info));
         assert!(found[0].title.contains("26 announcements"));
+    }
+
+    #[test]
+    fn repeated_notices_are_shown_once() {
+        let news = fixture("news-and-depclean.txt");
+        let found = explain(&format!("{news}\nlots of output\n{news}"));
+        assert_eq!(found.len(), 2, "{found:#?}");
     }
 
     #[test]

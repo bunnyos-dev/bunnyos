@@ -156,7 +156,7 @@ so the maintainer's time goes to testing and decisions.
       packages, and to run `bunny update` if so.
 - [ ] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
       a release ebuild and a `-9999` one, so bunny installs with `emerge`.
-      Moved up from phase 9.
+      Moved up from the installing phase.
 
 ## Repository housekeeping
 
@@ -167,6 +167,11 @@ so the maintainer's time goes to testing and decisions.
 ## After version 1
 
 Rough order. These get split into PR-sized items when we reach them.
+
+**Function first (decided November 2026):** each thing is made to work well,
+plainly styled, before it gets its finished look. The mockups ("BunnyOS:
+boot, installer and desktop mockups") are the reference for later, not the
+to-do list. Appearance work comes last and a little at a time.
 
 ### Phase 6: fast installs
 - [ ] **Clean build container** (`[build] isolated = true`): compile inside
@@ -183,25 +188,12 @@ Rough order. These get split into PR-sized items when we reach them.
       baseline instead of whatever the tree had that morning. Off-baseline
       setups still work; they just aren't tested by us.
 
-### Phase 7: the look (design work, done together)
-- [ ] BunnyOS logo and color palette (pick from options)
-- [ ] Plymouth boot animation, Esc shows the kernel log
-- [ ] GRUB theme, hidden menu, flicker-free handoff to Plymouth
-- [ ] greetd + Quickshell login screen
-- [ ] `[boot]` config section; `bunny boot list` / `preview`
-
-### Phase 8: security + gaming
-- [ ] `secure_boot = true`: sbctl keys (keeping Microsoft's), automatic signing
-- [ ] `bunny doctor secureboot` / `gaming` checklists
-- [ ] Gaming kernel boot entry (lockdown, IOMMU, BPF LSM)
-- [ ] Dual-boot helpers (BitLocker check, clock, boot order)
-- [ ] TPM disk unlock
-
-### Phase 9: installing BunnyOS
+### Phase 7: installing BunnyOS
 - [ ] `bunny install` (from `tools/vm-install-gentoo.sh`), encryption by default
 - [ ] Baseline system image built on the server
-- [ ] Slint installer (straight to the installer, no desktop): one centered
-      window, one decision per screen (see the mockups), Utilities menu
+- [ ] Slint installer (straight to the installer, no desktop): centered, one
+      decision per screen, Utilities menu. Working and plainly styled first;
+      the mockups' finished look comes in phase 9
 - [ ] Installer terminal mode: a console with a welcome, how to get back to
       the graphical installer, the install guide's URL, and the commands to
       start from the Baseline or your own config
@@ -210,13 +202,30 @@ Rough order. These get split into PR-sized items when we reach them.
       and "Erase everything" from the USB
 - [ ] **BunnyOS Desktop:** Hyprland + BunnyOS's own Quickshell shell that works
       like a full desktop (settings, launcher, notifications, panels); the
-      selling point. Plus KDE Plasma, Xfce, bare Hyprland, bare MangoWM and
+      selling point. Function first: Settings that edit `bunny.toml` and
+      Apply / Undo, a launcher that can get apps, notifications with Undo. Plus KDE Plasma, Xfce, bare Hyprland, bare MangoWM and
       "no desktop" as installer choices (`[desktop]` section)
 - [ ] ISO build (Net and Offline editions), checksums and signatures
 - [ ] Hosting: GitHub Releases + Cloudflare R2
 - [ ] Quickshell, MangoWM and theme ebuilds in `bunny-overlay` (the repo
       itself is set up during Upkeep), with a job that opens a PR when upstream
       releases a new version
+
+### Phase 8: security + gaming
+- [ ] `secure_boot = true`: sbctl keys (keeping Microsoft's), automatic signing
+- [ ] `bunny doctor secureboot` / `gaming` checklists
+- [ ] Gaming kernel boot entry (lockdown, IOMMU, BPF LSM)
+- [ ] Dual-boot helpers (BitLocker check, clock, boot order)
+- [ ] TPM disk unlock
+
+### Phase 9: the look (design work, done together, a little at a time)
+- [ ] BunnyOS logo (hired designer) and the palette from DESIGN.md "Look and feel"
+- [ ] Installer and BunnyOS Desktop styled to match the mockups, one screen
+      per PR
+- [ ] Plymouth boot animation, Esc shows the kernel log
+- [ ] GRUB theme, hidden menu, flicker-free handoff to Plymouth
+- [ ] greetd + Quickshell login screen
+- [ ] `[boot]` config section; `bunny boot list` / `preview`
 
 ### Long-term: Portage-free systems
 - [ ] Portage (Python, its tools) lives only inside the build container;

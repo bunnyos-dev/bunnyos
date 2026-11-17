@@ -579,7 +579,7 @@ install). Two kinds:
 - **Erase everything** (USB only): wipes the disk and installs fresh, for
   selling or giving a computer away. Can't be undone; asks to type ERASE.
 
-Needs the Baseline image (phase 6 and 9).
+Needs the Baseline image (phases 6 and 7).
 
 ### ISO
 

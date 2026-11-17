@@ -165,6 +165,7 @@ impl Status {
     /// True when nothing needs attention.
     pub fn all_good(&self) -> bool {
         matches!(self.config_state, ConfigState::Matches)
+            && self.extra_services.is_empty()
             && matches!(self.lock_state, LockState::Matches(_))
             && self.generations.is_some()
             && !self.reboot_pending
@@ -211,8 +212,16 @@ impl Status {
                     "Run `bunny check` to see them and how to fix them.",
                 );
             }
-            ConfigState::Matches => {
+            ConfigState::Matches if self.extra_services.is_empty() => {
                 line(&mut out, "✓", "Config", "the system matches your config");
+            }
+            ConfigState::Matches => {
+                line(
+                    &mut out,
+                    "⚠",
+                    "Config",
+                    "your packages match, but services were changed outside bunny",
+                );
             }
             ConfigState::Differs { count, summary } => {
                 line(
@@ -285,7 +294,12 @@ impl Status {
 
         // The last change
         match &self.last {
-            None => line(&mut out, "·", "Last change", "none yet"),
+            None => line(
+                &mut out,
+                "·",
+                "Last change",
+                "none yet (bunny hasn't changed anything on this system)",
+            ),
             Some(s) => {
                 let when = self.when(&s.at);
                 let what = s.kind_label(self.last_to_number);
@@ -507,7 +521,10 @@ mod tests {
     fn services_enabled_by_hand_are_mentioned() {
         let mut s = good();
         s.extra_services = vec!["tlp".into()];
+        assert!(!s.all_good());
         let text = s.render();
+        assert!(text.contains("⚠ Config        your packages match, but services"));
+        assert!(!text.contains("Everything is in order"));
         assert!(text.contains("Also starting at boot, not in your config: tlp"));
     }
 
@@ -548,7 +565,7 @@ mod tests {
         assert!(text.contains("doas bunny import -o /etc/bunny/bunny.toml"));
         assert!(text.contains("no bunny.lock yet"));
         assert!(text.contains("Undo          not available"));
-        assert!(text.contains("Last change   none yet"));
+        assert!(text.contains("Last change   none yet (bunny hasn't changed anything"));
         assert!(text.contains("never synced"));
     }
 

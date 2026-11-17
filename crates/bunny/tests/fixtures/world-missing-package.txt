@@ -1,0 +1,11 @@
+Total: 8 packages (3 new, 5 reinstalls, 8 binaries), Size of downloads: 4,990 KiB
+
+!!! Problems have been detected with your world file
+!!! Please run emaint --check world
+
+
+!!! Ebuilds for the following packages are either all
+!!! masked or don't exist:
+app-misc/tmuxx
+
+Would you like to merge these packages? [Yes/No]

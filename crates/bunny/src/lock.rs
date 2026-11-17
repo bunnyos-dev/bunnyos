@@ -358,8 +358,15 @@ pub fn update(
              Check your internet connection and try again."
         );
     }
-    remove_pins(root)?;
     let plan = crate::plan::make(config, root)?;
+    if !plan.unknown_packages.is_empty() {
+        anyhow::bail!(
+            "These packages don't exist in your package repositories: {}.\n  \
+             Nothing was changed. Fix the names in your config, then run `bunny update` again.",
+            plan.unknown_packages.join(", ")
+        );
+    }
+    remove_pins(root)?;
     let opts = Options {
         update_all: true,
         ..opts.clone()
@@ -569,6 +576,7 @@ mod tests {
             yes: true,
             stamp: "20261116-120000".into(),
             update_all: false,
+            color: false,
         }
     }
 

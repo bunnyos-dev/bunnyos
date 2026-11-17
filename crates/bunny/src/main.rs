@@ -221,6 +221,13 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     }
     let plan = plan::make(&cfg, root)?;
     print!("{}", plan.render());
+    if !plan.unknown_packages.is_empty() {
+        eprintln!(
+            "Nothing was changed. Fix the package names in {}, then run `bunny switch` again.",
+            config.display()
+        );
+        return Ok(ExitCode::FAILURE);
+    }
     let lock_path = lock::path_for(config);
     if plan.is_empty() {
         for message in lock::ensure(root, &lock_path)? {
@@ -270,6 +277,7 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
         yes,
         stamp: timestamp(),
         update_all: false,
+        color: std::io::IsTerminal::is_terminal(&std::io::stdout()),
     };
     let mut runner = runner_for(real_system);
     let (outcome, change) = lock::switch(&cfg, root, &plan, &lock_path, runner.as_mut(), &opts)?;
@@ -289,7 +297,20 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
         println!("  Note: {note}");
     }
     report_lock_change(&change);
+    print_tips(&outcome.tips);
     Ok(ExitCode::SUCCESS)
+}
+
+fn print_tips(tips: &[String]) {
+    if tips.is_empty() {
+        return;
+    }
+    println!("\nFrom emerge:");
+    for tip in tips {
+        for line in tip.lines() {
+            println!("  {line}");
+        }
+    }
 }
 
 fn runner_for(real_system: bool) -> Box<dyn apply::Runner> {
@@ -361,6 +382,7 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
         yes,
         stamp: timestamp(),
         update_all: true,
+        color: std::io::IsTerminal::is_terminal(&std::io::stdout()),
     };
     let mut runner = runner_for(real_system);
     let (outcome, change) =
@@ -377,6 +399,7 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
         println!("  Note: {note}");
     }
     report_lock_change(&change);
+    print_tips(&outcome.tips);
     Ok(ExitCode::SUCCESS)
 }
 

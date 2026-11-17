@@ -25,6 +25,9 @@ pub struct Plan {
     pub enable_services: Vec<String>,
     /// Services in the config that aren't installed (yet).
     pub missing_services: Vec<String>,
+    /// Packages to install that don't exist in any package repository
+    /// (usually a typo). switch refuses to start while there are any.
+    pub unknown_packages: Vec<String>,
     /// Services enabled at boot that the config doesn't mention.
     pub extra_services: Vec<String>,
     /// Services set to start at boot whose start script no longer exists,
@@ -85,7 +88,23 @@ impl Plan {
             out.push_str("✓ This system already matches your config. Nothing to do.\n");
         }
 
-        section(&mut out, "Packages to install", "+", &self.add_packages);
+        if !self.unknown_packages.is_empty() {
+            out.push_str("✗ These packages don't exist in your package repositories:\n");
+            for name in &self.unknown_packages {
+                let _ = writeln!(out, "  ? {name}");
+            }
+            out.push_str(
+                "  Check the spelling at https://packages.gentoo.org and fix it in your config.\n\n",
+            );
+        }
+
+        let installable: Vec<String> = self
+            .add_packages
+            .iter()
+            .filter(|p| !self.unknown_packages.contains(p))
+            .cloned()
+            .collect();
+        section(&mut out, "Packages to install", "+", &installable);
         if !self.remove_packages.is_empty() {
             section(
                 &mut out,
@@ -165,6 +184,44 @@ fn section(out: &mut String, heading: &str, mark: &str, items: &[String]) {
     out.push('\n');
 }
 
+/// Packages in `wanted` that no repository in `/var/db/repos` has and that
+/// aren't installed. Skipped (empty) when there are no repositories to check.
+fn unknown_packages(root: &Path, wanted: &[String]) -> Vec<String> {
+    let repos: Vec<_> = match std::fs::read_dir(root.join("var/db/repos")) {
+        Ok(entries) => entries
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+            .map(|e| e.path())
+            .collect(),
+        Err(_) => return Vec::new(),
+    };
+    if repos.is_empty() {
+        return Vec::new();
+    }
+    let installed = |cat: &str, name: &str| {
+        std::fs::read_dir(root.join("var/db/pkg").join(cat))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|e| {
+                let pf = e.file_name().to_string_lossy().into_owned();
+                crate::import::strip_version(&format!("{cat}/{pf}"))
+                    .is_some_and(|n| n == format!("{cat}/{name}"))
+            })
+    };
+    wanted
+        .iter()
+        .filter(|atom| {
+            let plain = atom.split(':').next().unwrap_or(atom);
+            let Some((cat, name)) = plain.split_once('/') else {
+                return false;
+            };
+            !repos.iter().any(|r| r.join(cat).join(name).is_dir()) && !installed(cat, name)
+        })
+        .cloned()
+        .collect()
+}
+
 /// Compares the flags in effect (from every package.use file) with the config.
 /// Order doesn't matter: `pgo -telemetry` equals `-telemetry pgo`.
 fn use_changes(config: &Config, root: &Path) -> Result<Vec<UseChange>> {
@@ -212,6 +269,13 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
 
     Ok(Plan {
         init_name: init.name(),
+        unknown_packages: unknown_packages(
+            root,
+            &wanted_world
+                .difference(&current_world)
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
         add_packages: wanted_world.difference(&current_world).cloned().collect(),
         remove_packages: current_world.difference(&wanted_world).cloned().collect(),
         use_changes,
@@ -320,6 +384,26 @@ mod tests {
         assert_eq!(plan.leftover_services, ["tlp"]);
         assert!(plan.missing_services.is_empty());
         assert!(plan.render().contains("doas rc-update del tlp"));
+    }
+
+    #[test]
+    fn finds_packages_that_dont_exist() {
+        let root = fake_root();
+        let r = root.path();
+        std::fs::create_dir_all(r.join("var/db/repos/gentoo/app-misc/tmux")).unwrap();
+        std::fs::create_dir_all(r.join("var/db/repos/gentoo/net-misc/freerdp")).unwrap();
+        // Installed from a repository that's gone: still counts as known.
+        std::fs::create_dir_all(r.join("var/db/pkg/app-misc/oldtool-1.0")).unwrap();
+        let config = Config::parse(
+            r#"packages = ["app-misc/tmux", "app-misc/tmuxx", "net-misc/freerdp:3", "app-misc/oldtool"]"#,
+        )
+        .unwrap();
+        let plan = make(&config, r).unwrap();
+        assert_eq!(plan.unknown_packages, ["app-misc/tmuxx"]);
+        assert!(plan
+            .render()
+            .contains("don't exist in your package repositories"));
+        assert!(!plan.render().contains("+ app-misc/tmuxx"));
     }
 
     #[test]

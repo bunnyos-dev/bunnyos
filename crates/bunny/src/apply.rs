@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::config::Config;
+use crate::explain;
 use crate::import;
 use crate::init;
 use crate::notes::{self, Kind, Note, State};
@@ -25,6 +26,12 @@ pub trait Runner {
     fn output(&mut self, _cmd: &[String]) -> Result<Option<String>> {
         Ok(None)
     }
+
+    /// Runs a command, showing its output live (including questions it asks)
+    /// while keeping a copy. Returns whether it succeeded and what it printed.
+    fn run_captured(&mut self, cmd: &[String]) -> Result<(bool, String)> {
+        Ok((self.run(cmd)?, String::new()))
+    }
 }
 
 /// Runs commands for real.
@@ -37,6 +44,56 @@ impl Runner for SystemRunner {
             .status()
             .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
         Ok(status.success())
+    }
+
+    fn run_captured(&mut self, cmd: &[String]) -> Result<(bool, String)> {
+        use std::io::{Read, Write};
+        use std::process::Stdio;
+        use std::sync::{Arc, Mutex};
+
+        let mut child = std::process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
+        let copy = Arc::new(Mutex::new(Vec::new()));
+
+        // Pass output through as it arrives, byte by byte rather than line by
+        // line, so questions without a newline ("[Yes/No]") still show up.
+        fn pump<R: Read + Send + 'static>(
+            mut from: R,
+            to_stderr: bool,
+            copy: Arc<Mutex<Vec<u8>>>,
+        ) -> std::thread::JoinHandle<()> {
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                while let Ok(n) = from.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    let _ = if to_stderr {
+                        let mut e = std::io::stderr();
+                        e.write_all(&buf[..n]).and_then(|_| e.flush())
+                    } else {
+                        let mut o = std::io::stdout();
+                        o.write_all(&buf[..n]).and_then(|_| o.flush())
+                    };
+                    if let Ok(mut c) = copy.lock() {
+                        c.extend_from_slice(&buf[..n]);
+                    }
+                }
+            })
+        }
+        let out = pump(child.stdout.take().expect("piped"), false, copy.clone());
+        let err = pump(child.stderr.take().expect("piped"), true, copy.clone());
+        let status = child.wait()?;
+        let _ = out.join();
+        let _ = err.join();
+        let text = String::from_utf8_lossy(&copy.lock().map(|c| c.clone()).unwrap_or_default())
+            .into_owned();
+        Ok((status.success(), text))
     }
 
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
@@ -70,6 +127,9 @@ pub struct Options {
     /// Run the world update even if the plan has no package changes
     /// (for `bunny update`).
     pub update_all: bool,
+    /// Ask emerge for colors (its output is captured, so it can't tell it's
+    /// talking to a terminal). Only when bunny's own output is a terminal.
+    pub color: bool,
 }
 
 /// What happened, for the summary at the end.
@@ -78,6 +138,8 @@ pub struct Outcome {
     pub snapshot: Option<PathBuf>,
     pub backup_dir: PathBuf,
     pub notes: Vec<String>,
+    /// emerge's notices (news, reminders), explained. Shown after the summary.
+    pub tips: Vec<String>,
 }
 
 fn cmd(parts: &[&str]) -> Vec<String> {
@@ -154,24 +216,21 @@ pub fn switch(
         if !opts.yes {
             emerge.push("--ask".into());
         }
-        emerge.push("@world".into());
-        if !runner.run(&emerge)? {
-            bail!(
-                "emerge didn't finish, so some changes weren't installed.\n  \
-                 Your old files are backed up in {}.{}\n  \
-                 To understand emerge's message, copy it and run `bunny explain`, then paste it.\n  \
-                 Fix the problem, then run `bunny switch` again.",
-                outcome.backup_dir.display(),
-                outcome
-                    .snapshot
-                    .as_ref()
-                    .map(|s| format!(
-                        "\n  The system before this switch is saved in {}.",
-                        s.display()
-                    ))
-                    .unwrap_or_default()
-            );
+        if opts.color {
+            emerge.push("--color=y".into());
         }
+        emerge.push("@world".into());
+        let (ok, output) = runner.run_captured(&emerge)?;
+        let explained = explain::explain(&explain::strip_ansi(&output));
+        if !ok {
+            bail!("{}", emerge_failed(&explained, &outcome));
+        }
+        outcome.tips.extend(
+            explained
+                .iter()
+                .filter(|e| e.severity != explain::Severity::Problem)
+                .map(|e| e.render()),
+        );
     }
 
     // 5. Remove packages that aren't in the config. Always asks.
@@ -216,6 +275,36 @@ pub fn switch(
         },
     )?;
     Ok(outcome)
+}
+
+/// What to tell the user when emerge stops: bunny's explanation if it
+/// recognised the message, and where their old system is.
+fn emerge_failed(explained: &[explain::Explanation], outcome: &Outcome) -> String {
+    let mut text = String::from("emerge stopped, so the changes weren't installed.\n");
+    if explained.is_empty() {
+        text.push_str(
+            "\nbunny doesn't recognise emerge's message yet (it's shown above).\n\
+             If you share it, bunny can learn to explain it.\n",
+        );
+    } else {
+        text.push_str("\nHere's what happened:\n\n");
+        for e in explained {
+            text.push_str(&e.render());
+            text.push('\n');
+        }
+    }
+    text.push_str(&format!(
+        "Nothing is lost: your old files are backed up in {}.",
+        outcome.backup_dir.display()
+    ));
+    if let Some(snapshot) = &outcome.snapshot {
+        text.push_str(&format!(
+            "\nThe system before this change is saved in {} (see `bunny rollback list`).",
+            snapshot.display()
+        ));
+    }
+    text.push_str("\nFix the problem, then run the same bunny command again.");
+    text
 }
 
 /// package.use files that aren't bunny's (they'll be moved to the backup).
@@ -293,6 +382,8 @@ mod tests {
     struct Recorder {
         commands: Vec<String>,
         fail: Option<&'static str>,
+        /// What emerge "prints" when its output is captured.
+        emerge_output: String,
     }
 
     impl Runner for Recorder {
@@ -302,6 +393,106 @@ mod tests {
             self.commands.push(line);
             Ok(ok)
         }
+
+        fn run_captured(&mut self, cmd: &[String]) -> Result<(bool, String)> {
+            Ok((self.run(cmd)?, self.emerge_output.clone()))
+        }
+    }
+
+    fn fixture(name: &str) -> String {
+        std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn system_runner_captures_and_passes_through() {
+        // A question with no newline (like emerge's "[Yes/No]"), output on
+        // both stdout and stderr, and a failing exit code.
+        let cmd = cmd(&[
+            "sh",
+            "-c",
+            "printf 'Continue? [Yes/No] '; echo oops >&2; echo done; exit 3",
+        ]);
+        let (ok, text) = SystemRunner.run_captured(&cmd).unwrap();
+        assert!(!ok);
+        assert!(text.contains("Continue? [Yes/No] "), "{text}");
+        assert!(text.contains("oops"), "{text}");
+        assert!(text.contains("done"), "{text}");
+    }
+
+    #[test]
+    fn failed_emerge_is_explained() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Recorder {
+            fail: Some("@world"),
+            emerge_output: fixture("use-change-swtpm.txt"),
+            ..Default::default()
+        };
+        let err = switch(&config, root.path(), &plan, &mut runner, &opts())
+            .unwrap_err()
+            .to_string();
+        assert!(err.starts_with("emerge stopped"), "{err}");
+        assert!(err.contains("✗ swtpm needs gnutls"), "{err}");
+        assert!(err.contains("[pkg.\"net-libs/gnutls\"]"), "{err}");
+        assert!(err.contains("Nothing is lost"), "{err}");
+        assert!(err.contains("bunny-20261116-120000"), "{err}");
+    }
+
+    #[test]
+    fn unknown_emerge_failure_says_so() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Recorder {
+            fail: Some("@world"),
+            emerge_output: "something new and strange\n".into(),
+            ..Default::default()
+        };
+        let err = switch(&config, root.path(), &plan, &mut runner, &opts())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("doesn't recognise emerge's message yet"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn emerge_notices_become_tips() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Recorder {
+            emerge_output: format!("\u{1b}[32m*\u{1b}[0m{}", fixture("news-and-depclean.txt")),
+            ..Default::default()
+        };
+        let outcome = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap();
+        assert_eq!(outcome.tips.len(), 2, "{:#?}", outcome.tips);
+        assert!(outcome.tips[0].contains("26 announcements"));
+    }
+
+    #[test]
+    fn asks_emerge_for_colors_on_a_terminal() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Recorder::default();
+        let opts = Options {
+            color: true,
+            ..opts()
+        };
+        switch(&config, root.path(), &plan, &mut runner, &opts).unwrap();
+        assert!(
+            runner.commands[1].contains("--color=y @world"),
+            "{}",
+            runner.commands[1]
+        );
     }
 
     fn write(root: &Path, path: &str, text: &str) {
@@ -334,6 +525,7 @@ mod tests {
             yes: false,
             stamp: "20261116-120000".into(),
             update_all: false,
+            color: false,
         }
     }
 
@@ -443,6 +635,7 @@ mod tests {
                 yes: true,
                 stamp: stamp.into(),
                 update_all: false,
+                color: false,
             };
             switch(&config, root.path(), &plan, &mut Recorder::default(), &opts).unwrap();
         }

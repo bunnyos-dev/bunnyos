@@ -15,7 +15,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
-| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | 🔶 Nearly done |
+| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ✅ Done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
@@ -90,7 +90,7 @@ feature PRs now update it as they go.)
       versions, each marked "config only" or "system only", with both ways
       to fix it (`bunny switch`, or config edits + `bunny lock`). Exits 1 when
       they differ.
-- [~] **Quieter emerge output:** a dry run first, shown as a short list
+- [x] **Quieter emerge output:** a dry run first, shown as a short list
       (with dependencies marked), one progress line while installing, the
       full output in `/var/log/bunny/`, package messages summarised at the
       end, and the same for removals. `--verbose` shows everything. Also:

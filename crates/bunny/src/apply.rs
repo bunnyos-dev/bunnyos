@@ -233,15 +233,20 @@ pub fn switch(
         );
     }
 
-    // 5. Remove packages that aren't in the config. Always asks.
+    // 5. Admin rights. After the install (so the tool and its checker exist)
+    //    and before depclean (so the old tool is only removed once the new
+    //    one works).
+    apply_security(plan, runner, &outcome)?;
+
+    // 6. Remove packages that aren't in the config. Always asks.
     if !plan.remove_packages.is_empty() && !runner.run(&cmd(&["emerge", "--depclean", "--ask"]))? {
-        outcome.notes.push(
-            "Unused packages weren't removed. Run `doas emerge --depclean --ask` when you're ready."
-                .into(),
-        );
+        outcome.notes.push(format!(
+            "Unused packages weren't removed. Run `{} emerge --depclean --ask` when you're ready.",
+            crate::security::admin()
+        ));
     }
 
-    // 6. Services. Check again: packages installed above may have added them.
+    // 7. Services. Check again: packages installed above may have added them.
     let init = init::for_config(config.system.init, root);
     for service in &plan.enable_services {
         if !init.service_exists(service) {
@@ -261,7 +266,8 @@ pub fn switch(
         if !runner.run(&cmd(&["rc-service", service, "start"]))? {
             outcome.notes.push(format!(
                 "\"{service}\" will start at boot, but didn't start now. \
-                 Check it with: doas rc-service {service} status"
+                 Check it with: {} rc-service {service} status",
+                crate::security::admin()
             ));
         }
     }
@@ -305,6 +311,54 @@ fn emerge_failed(explained: &[explain::Explanation], outcome: &Outcome) -> Strin
     }
     text.push_str("\nFix the problem, then run the same bunny command again.");
     text
+}
+
+/// Writes the sudo/doas file and adds admins to `wheel`. The file is checked
+/// with the tool's own checker first; if it fails, nothing is replaced and the
+/// switch stops before depclean, so the tool you have keeps working.
+fn apply_security(plan: &Plan, runner: &mut dyn Runner, outcome: &Outcome) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let (Some(privilege), Some((path, text))) = (plan.security.privilege, &plan.security.file)
+    else {
+        return add_admins(plan, runner);
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Couldn't create {}", parent.display()))?;
+    }
+    let mut staged = path.clone().into_os_string();
+    staged.push(".bunny-new");
+    let staged = std::path::PathBuf::from(staged);
+    std::fs::write(&staged, text)
+        .with_context(|| format!("Couldn't write {}", staged.display()))?;
+    std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(privilege.mode()))?;
+
+    if !runner.run(&privilege.check_command(&staged))? {
+        let _ = std::fs::remove_file(&staged);
+        bail!(
+            "{} rejected the file bunny generated for it, so it wasn't put in place,\n  \
+             and no packages were removed. Your current admin setup still works.\n  \
+             Please report this: https://github.com/bunnyos-dev/bunnyos/issues",
+            privilege.command()
+        );
+    }
+    if path.exists() {
+        let name = path.file_name().unwrap_or_default();
+        std::fs::copy(path, outcome.backup_dir.join(name))
+            .with_context(|| format!("Couldn't back up {}", path.display()))?;
+    }
+    std::fs::rename(&staged, path)
+        .with_context(|| format!("Couldn't put {} in place", path.display()))?;
+    add_admins(plan, runner)
+}
+
+fn add_admins(plan: &Plan, runner: &mut dyn Runner) -> Result<()> {
+    for user in &plan.security.add_to_wheel {
+        if !runner.run(&cmd(&["gpasswd", "-a", user, "wheel"]))? {
+            bail!("Couldn't add {user} to the wheel group.");
+        }
+    }
+    Ok(())
 }
 
 /// package.use files that aren't bunny's (they'll be moved to the backup).

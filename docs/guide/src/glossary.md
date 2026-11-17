@@ -92,6 +92,13 @@ write `dev-lang/python:3.12` to mean one slot.
 
 See **btrfs**.
 
+## sudo / doas
+
+Commands that run another command as root (the administrator), after asking
+for your password. **sudo** is the common one and the BunnyOS default;
+**doas** is a smaller, simpler alternative. Pick one in
+[`[security]`](reference/config.md#security).
+
 ## Subvolume
 
 A btrfs folder that can be snapshotted and mounted on its own. The BunnyOS
@@ -111,3 +118,8 @@ A switch for an optional feature of a package. `pgo` turns a feature on,
 
 The list of packages you asked for directly (in Gentoo, the file
 `/var/lib/portage/world`). bunny writes it from `packages`.
+
+## wheel
+
+The group whose members get admin rights through sudo or doas. `[security]
+admins` puts users in it.

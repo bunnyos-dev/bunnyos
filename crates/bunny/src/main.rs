@@ -13,6 +13,7 @@ mod plan;
 mod portage;
 mod repo;
 mod rollback;
+mod security;
 mod status;
 
 use std::path::{Path, PathBuf};
@@ -337,6 +338,13 @@ fn switch_inner(
         );
         return Ok(Switched::NotApplied(ExitCode::FAILURE));
     }
+    if !plan.security.problems.is_empty() {
+        eprintln!(
+            "Nothing was changed. Fix [security] in {}, then run `bunny switch` again.",
+            config.display()
+        );
+        return Ok(Switched::NotApplied(ExitCode::FAILURE));
+    }
     let lock_path = lock::path_for(config);
     if plan.is_empty() {
         for message in lock::ensure(root, &lock_path)? {
@@ -512,17 +520,21 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
     Ok(ExitCode::SUCCESS)
 }
 
-/// Re-runs bunny through doas when changing the real system without root,
-/// so nobody has to type `doas bunny`. Returns the exit code if it did.
+/// Re-runs bunny through sudo or doas (whichever this system uses) when
+/// changing the real system without root, so nobody has to type
+/// `sudo bunny`. Returns the exit code if it did.
 fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     if !real_system || is_root() {
         return Ok(None);
     }
-    let status = std::process::Command::new("doas")
+    let admin = security::admin();
+    let status = std::process::Command::new(admin)
         .arg(std::env::current_exe()?)
         .args(std::env::args_os().skip(1))
         .status()
-        .context("bunny needs to run as root to change the system, and couldn't start doas")?;
+        .with_context(|| {
+            format!("bunny needs to run as root to change the system, and couldn't start {admin}")
+        })?;
     Ok(Some(if status.success() {
         ExitCode::SUCCESS
     } else {
@@ -587,7 +599,10 @@ fn generations(root: &Path) -> anyhow::Result<ExitCode> {
         if let Ok(info) = std::fs::read_to_string("/proc/self/mountinfo") {
             if let Ok((_, subvol)) = rollback::root_mount(&info) {
                 if subvol.starts_with("@replaced-") {
-                    println!("\nReboot to finish the rollback: doas reboot");
+                    println!(
+                        "\nReboot to finish the rollback: {} reboot",
+                        security::admin()
+                    );
                 }
             }
         }
@@ -760,7 +775,10 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         rollback::rollback(root, &name, &mountinfo, &mut apply::PrintRunner, &stamp)?
     };
 
-    println!("\n✓ Done. Reboot to start the restored system: doas reboot");
+    println!(
+        "\n✓ Done. Reboot to start the restored system: {} reboot",
+        security::admin()
+    );
     // Refer to the undo point by its number in `bunny generations`.
     let undo = rollback::list(root)?
         .iter()
@@ -908,8 +926,9 @@ fn search_cmd(query: &str, root: &Path) -> anyhow::Result<ExitCode> {
     if packages.is_empty() {
         anyhow::bail!(
             "Couldn't find any package repositories in {}.\n  \
-             Sync them first: doas emerge --sync",
-            root.join("var/db/repos").display()
+             Sync them first: {} emerge --sync",
+            root.join("var/db/repos").display(),
+            security::admin()
         );
     }
     let results = repo::search(&packages, query);
@@ -956,8 +975,9 @@ fn resolve_all(root: &Path, names: &[String]) -> anyhow::Result<Option<Vec<Strin
     if packages.is_empty() {
         anyhow::bail!(
             "Couldn't find any package repositories in {}.\n  \
-             Sync them first: doas emerge --sync",
-            root.join("var/db/repos").display()
+             Sync them first: {} emerge --sync",
+            root.join("var/db/repos").display(),
+            security::admin()
         );
     }
     let mut resolved = Vec::new();

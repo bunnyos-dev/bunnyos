@@ -25,9 +25,9 @@ machine pulls the same setup and you have the history of every change:
 
 ```sh
 cd /etc/bunny
-doas git init
-doas git add bunny.toml bunny.lock
-doas git commit -m "My system"
+sudo git init
+sudo git add bunny.toml bunny.lock
+sudo git commit -m "My system"
 ```
 
 ## Things to know

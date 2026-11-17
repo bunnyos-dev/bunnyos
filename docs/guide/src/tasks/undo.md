@@ -32,7 +32,7 @@ bunny rollback 2
 Then restart:
 
 ```sh
-doas reboot
+sudo reboot
 ```
 
 After the restart you're running the system exactly as it was at that point:

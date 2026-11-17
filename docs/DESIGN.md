@@ -314,13 +314,28 @@ multilib = true        # decided at install, can't change later
 steam = true           # ensures glibc + multilib, or offers Flatpak Steam
 
 [security]
-privilege = "doas"     # "doas" | "sudo" | "sudo-rs"
+privilege = "sudo"     # "sudo" (default) | "doas"; "sudo-rs" later
 persist = true
 admins = ["you"]
 ```
 
 - Steam's Linux client went 64-bit in October 2026, but Valve still requires
   32-bit libraries. bunny enables 32-bit only for the packages Steam needs.
+- **sudo is the default** (decided November 2026): most scripts, guides and
+  answers online assume it, so it's the least surprising for new users. doas
+  is a one-word choice. sudo-rs is planned once Gentoo marks it stable (it's
+  `~amd64` only today, and bunny doesn't manage testing versions yet).
+- **Current behaviour:** `[security]` is optional; without it bunny doesn't
+  touch admin rights. With it, a switch installs the tool (added to the world
+  set), writes `/etc/sudoers.d/bunny` (mode 0440) or `/etc/doas.conf` (0600)
+  granting `wheel`, checked first with `visudo -cf` / `doas -C` from a staged
+  `.bunny-new` file, then adds `admins` to `wheel` with `gpasswd`. This
+  happens after emerge and before depclean, so a failed check stops the
+  switch while the old tool still exists. bunny never removes users from
+  `wheel`, and refuses to switch if `wheel` would be empty or an admin isn't a
+  user. `bunny import` writes the section commented out, with the installed
+  tool and wheel members. bunny's own elevation and every command it suggests
+  use the configured tool if installed, otherwise whichever of sudo/doas is.
 - On doas systems an optional `sudo` shim covers scripts that hardcode `sudo`.
 - GUI permission prompts use polkit with a BunnyOS-styled agent.
 

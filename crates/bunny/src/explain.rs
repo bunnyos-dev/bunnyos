@@ -297,10 +297,11 @@ fn keyword_changes(lines: &[&str]) -> Vec<Explanation> {
                      and paste that into `bunny explain`.",
                 );
                 if written {
-                    fix.push_str(
+                    let a = crate::security::admin();
+                    fix.push_str(&format!(
                         "\nemerge saved this suggestion in waiting files. Delete them, don't accept them:\n\
-                         doas find /etc/portage -name '._cfg*' -exec grep -l '9999' {} + | xargs -r doas rm -v",
-                    );
+                         {a} find /etc/portage -name '._cfg*' -exec grep -l '9999' {{}} + | xargs -r {a} rm -v",
+                    ));
                 }
                 found.push(e.fix(fix));
             } else {
@@ -317,7 +318,8 @@ fn keyword_changes(lines: &[&str]) -> Vec<Explanation> {
                 }
                 found.push(e.fix(format!(
                     "bunny can't manage testing versions yet. To allow this one, run:\n\
-                     echo '{line}' | doas tee /etc/portage/package.accept_keywords/{}",
+                     echo '{line}' | {} tee /etc/portage/package.accept_keywords/{}",
+                    crate::security::admin(),
                     short(&package)
                 )));
             }
@@ -560,7 +562,10 @@ fn config_updates(lines: &[&str]) -> Vec<Explanation> {
                     Severity::Info,
                     format!("{n} config files have new versions waiting to be merged."),
                 )
-                .fix("run `doas dispatch-conf` to review them.")
+                .fix(format!(
+                    "run `{} dispatch-conf` to review them.",
+                    crate::security::admin()
+                ))
             }
         })
         .collect()

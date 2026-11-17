@@ -6,8 +6,8 @@ bunny manages, **without changing anything** until the last step.
 ## 1. Write down your current system
 
 ```sh
-doas mkdir -p /etc/bunny
-doas bunny import -o /etc/bunny/bunny.toml
+sudo mkdir -p /etc/bunny
+sudo bunny import -o /etc/bunny/bunny.toml
 ```
 
 bunny looks at what's installed, which services start at boot and your USE

@@ -24,7 +24,11 @@ pub fn package_use_dir(root: &Path) -> PathBuf {
 
 /// The packages the config asks for, sorted and de-duplicated.
 pub fn wanted_world(config: &Config) -> BTreeSet<String> {
-    config.packages.iter().cloned().collect()
+    let mut world: BTreeSet<String> = config.packages.iter().cloned().collect();
+    if let Some(sec) = &config.security {
+        world.insert(sec.privilege.package().to_string());
+    }
+    world
 }
 
 /// Reads the current world set. A missing file means an empty set.

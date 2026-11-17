@@ -35,6 +35,8 @@ pub struct Plan {
     pub leftover_services: Vec<String>,
     /// The removals were asked for (`bunny remove`), so don't suggest keeping them.
     pub removal_requested: bool,
+    /// Admin rights (`[security]`).
+    pub security: crate::security::Changes,
 }
 
 #[derive(Debug, PartialEq)]
@@ -52,6 +54,7 @@ impl Plan {
             && self.remove_packages.is_empty()
             && self.use_changes.is_empty()
             && self.enable_services.is_empty()
+            && self.security.is_empty()
     }
 
     /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
@@ -72,6 +75,11 @@ impl Plan {
             parts.push(format!("USE flags for {}", names.join(", ")));
         }
         parts.extend(self.enable_services.iter().map(|s| format!("start {s}")));
+        if !self.security.is_empty() {
+            if let Some(p) = self.security.privilege {
+                parts.push(format!("admin rights: {}", p.command()));
+            }
+        }
 
         const MAX: usize = 6;
         let extra = parts.len().saturating_sub(MAX);
@@ -161,7 +169,34 @@ impl Plan {
                  complain about them on every boot:\n",
             );
             for name in &self.leftover_services {
-                let _ = writeln!(out, "  ! {name}    fix: doas rc-update del {name}");
+                let _ = writeln!(
+                    out,
+                    "  ! {name}    fix: {} rc-update del {name}",
+                    crate::security::admin()
+                );
+            }
+            out.push('\n');
+        }
+
+        if !self.security.problems.is_empty() {
+            out.push_str("✗ [security] would lock you out, so bunny won't apply it:\n");
+            for problem in &self.security.problems {
+                let _ = writeln!(out, "  • {problem}");
+            }
+            out.push('\n');
+        }
+        if let (false, Some(p)) = (self.security.is_empty(), self.security.privilege) {
+            let _ = writeln!(out, "Admin rights ({}):", p.command());
+            if let Some((path, _)) = &self.security.file {
+                let _ = writeln!(
+                    out,
+                    "  ~ write {} so the wheel group can use {} (checked before it's put in place)",
+                    path.display(),
+                    p.command()
+                );
+            }
+            for user in &self.security.add_to_wheel {
+                let _ = writeln!(out, "  + add {user} to the wheel group");
             }
             out.push('\n');
         }
@@ -284,6 +319,11 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             .cloned()
             .collect(),
         removal_requested: false,
+        security: config
+            .security
+            .as_ref()
+            .map(|s| crate::security::changes(s, root))
+            .unwrap_or_default(),
         leftover_services: enabled
             .iter()
             .filter(|s| !init.service_exists(s))
@@ -377,7 +417,9 @@ mod tests {
         let plan = make(&config, root.path()).unwrap();
         assert_eq!(plan.leftover_services, ["tlp"]);
         assert!(plan.missing_services.is_empty());
-        assert!(plan.render().contains("doas rc-update del tlp"));
+        assert!(plan
+            .render()
+            .contains(&format!("{} rc-update del tlp", crate::security::admin())));
     }
 
     #[test]

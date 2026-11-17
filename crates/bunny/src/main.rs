@@ -792,7 +792,7 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
 fn diff_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
     let cfg = Config::load(config)?;
     if !cfg.problems().is_empty() {
-        report_problems(&cfg, config);
+        let _ = report_problems(&cfg, config);
         eprintln!("Fix these first, then run `bunny diff` again.");
         return Ok(ExitCode::FAILURE);
     }

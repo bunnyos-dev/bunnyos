@@ -696,49 +696,62 @@ fn install_quietly(
 ) -> Result<()> {
     let update = ["emerge", "--update", "--deep", "--newuse", "--color=n"];
 
-    println!("\nAsking emerge what it needs to do…");
+    println!("\nAsking Portage what it needs to do…");
     let mut pretend = cmd(&update);
     pretend.insert(1, "--pretend".into());
     pretend.push("@world".into());
-    let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
-    // --color=n should mean no color codes, but strip any that slip through:
-    // an invisible code breaks reading the message.
-    let raw = output;
-    let output = explain::strip_ansi(&raw);
-    if !ok {
-        discard(root, runner, outcome)?;
-        let log = save_log(
-            root,
-            &opts.stamp,
-            "emerge",
-            &format!("$ {}\n{raw}", pretend.join(" ")),
-        );
-        let explained = explain::explain(&output);
-        let mut text = String::from(
-            "emerge found a problem before installing anything, so nothing was changed.\n",
-        );
-        if explained.is_empty() {
-            text.push_str("\nbunny doesn't recognise emerge's message yet. The end of it:\n\n");
-            text.push_str(&crate::emerge::tail(&output, 20));
-            text.push_str(
-                "\n\nPaste the full message into `bunny explain`, or run with --verbose to see it all.\n\
-                 If you share it, bunny can learn to explain it.",
-            );
-        } else {
-            text.push_str("\nHere's what happened:\n\n");
-            for e in &explained {
-                text.push_str(&e.render());
-                text.push('\n');
+    // Portage's own answer, as data. emerge's screen text only when that
+    // isn't available (and to explain a refusal).
+    let (list, dry_run_log) = match crate::helper::plan(runner) {
+        Some(list) => (
+            list,
+            "(the install list came from bunny's Portage helper)\n".to_string(),
+        ),
+        None => {
+            let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
+            // --color=n should mean no color codes, but strip any that slip through:
+            // an invisible code breaks reading the message.
+            let raw = output;
+            let output = explain::strip_ansi(&raw);
+            if !ok {
+                discard(root, runner, outcome)?;
+                let log = save_log(
+                    root,
+                    &opts.stamp,
+                    "emerge",
+                    &format!("$ {}\n{raw}", pretend.join(" ")),
+                );
+                let explained = explain::explain(&output);
+                let mut text = String::from(
+                    "emerge found a problem before installing anything, so nothing was changed.\n",
+                );
+                if explained.is_empty() {
+                    text.push_str(
+                        "\nbunny doesn't recognise emerge's message yet. The end of it:\n\n",
+                    );
+                    text.push_str(&crate::emerge::tail(&output, 20));
+                    text.push_str(
+                        "\n\nPaste the full message into `bunny explain`, or run with --verbose to see it all.\n\
+                         If you share it, bunny can learn to explain it.",
+                    );
+                } else {
+                    text.push_str("\nHere's what happened:\n\n");
+                    for e in &explained {
+                        text.push_str(&e.render());
+                        text.push('\n');
+                    }
+                    text.push_str("Fix the problem, then run the same bunny command again.");
+                }
+                if let Some(log) = log {
+                    text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
+                }
+                return Err(Refused(text).into());
             }
-            text.push_str("Fix the problem, then run the same bunny command again.");
-        }
-        if let Some(log) = log {
-            text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
-        }
-        return Err(Refused(text).into());
-    }
 
-    let list = crate::emerge::parse_merge_list(&output);
+            let list = crate::emerge::parse_merge_list(&output);
+            (list, format!("$ {}\n{output}", pretend.join(" ")))
+        }
+    };
     if list.is_empty() {
         println!("emerge has nothing to install.");
         return Ok(());
@@ -772,11 +785,7 @@ fn install_quietly(
     let (ok, install_output) = runner.run_quiet(&install, &mut on_line)?;
     let install_output = explain::strip_ansi(&install_output);
     progress.clear();
-    let log_text = format!(
-        "$ {}\n{output}\n$ {}\n{install_output}",
-        pretend.join(" "),
-        install.join(" ")
-    );
+    let log_text = format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" "));
     outcome.log = save_log(root, &opts.stamp, "emerge", &log_text);
 
     let explained = explain::explain(&install_output);

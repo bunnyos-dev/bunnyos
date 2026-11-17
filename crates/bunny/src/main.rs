@@ -7,6 +7,7 @@ mod diff;
 mod edit;
 mod emerge;
 mod explain;
+mod helper;
 mod import;
 mod init;
 mod lock;
@@ -80,6 +81,12 @@ enum Command {
         /// System root to compare against (for testing against another system)
         #[arg(long, default_value = "/")]
         root: PathBuf,
+    },
+    /// Run bunny's Portage helper directly and print its JSON (for checks and debugging)
+    #[command(hide = true)]
+    Helper {
+        /// What to ask, e.g. `plan app-misc/tmux`
+        args: Vec<String>,
     },
     /// Show your config and your system side by side, and how to fix each difference (changes nothing)
     Diff {
@@ -258,6 +265,19 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Diff { config, root } => diff_cmd(&config, &root),
+        Command::Helper { args } => {
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            let cmd = helper::command(&args);
+            let status = std::process::Command::new(&cmd[0])
+                .args(&cmd[1..])
+                .status()
+                .context("Couldn't start python3, which the Portage helper needs")?;
+            Ok(if status.success() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            })
+        }
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),

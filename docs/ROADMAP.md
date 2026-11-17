@@ -100,7 +100,7 @@ list, with the CI check along the way, and the Guide last.
 ## Repository housekeeping
 
 - [x] `main` protected from force pushes and deletion
-- [ ] GitHub Actions check that runs `cargo fmt --check`, `clippy` and
+- [x] GitHub Actions check that runs `cargo fmt --check`, `clippy` and
       `cargo test` on every pull request; then require it in the ruleset
 
 ## After version 1

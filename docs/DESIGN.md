@@ -181,6 +181,13 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   conflicts, blockers, fetch failures, waiting config-file updates, unread
   news and the depclean reminder. Unknown messages are reported honestly.
   Real outputs live in `crates/bunny/tests/fixtures/` as test cases.
+- **Part 2:** `switch` and `update` run emerge with its output passed
+  through live (byte by byte, so `[Yes/No]` questions still show and answers
+  still reach it) while keeping a copy (`--color=y` on terminals, color codes
+  stripped before explaining). If emerge fails, bunny prints its explanation
+  and where the old system is saved. If it succeeds, notices (news,
+  reminders) are shown as short tips after the summary. Also recognises
+  misspelled or removed package names.
 
 ### Commands (planned)
 

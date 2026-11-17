@@ -83,6 +83,7 @@ pub fn explain(output: &str) -> Vec<Explanation> {
     found.extend(use_changes(&lines));
     found.extend(keyword_changes(&lines));
     found.extend(masked(&lines));
+    found.extend(no_such_package(&lines));
     found.extend(slot_conflicts(&lines));
     found.extend(blockers(&lines));
     found.extend(fetch_failures(&lines));
@@ -94,6 +95,28 @@ pub fn explain(output: &str) -> Vec<Explanation> {
         Severity::Info => 2,
     });
     found
+}
+
+/// Removes terminal color codes (`ESC [ ... letter`) from captured output.
+pub fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                // Parameters, then one final letter.
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// `>=net-libs/gnutls-3.8.13:0/30::gentoo[ssl]` → `net-libs/gnutls`
@@ -358,6 +381,28 @@ fn masked(lines: &[&str]) -> Vec<Explanation> {
     found
 }
 
+/// "there are no ebuilds to satisfy" (but not the "built with USE flags"
+/// variant, which is a USE change): usually a typo or a removed package.
+fn no_such_package(lines: &[&str]) -> Vec<Explanation> {
+    lines
+        .iter()
+        .filter_map(|l| l.split("there are no ebuilds to satisfy \"").nth(1))
+        .map(|rest| base_name(rest.split('"').next().unwrap_or(rest)))
+        .map(|package| {
+            Explanation::new(
+                Severity::Problem,
+                format!("There's no package called {package}."),
+            )
+            .detail("It may be a typo, or the package was renamed or removed from Gentoo.")
+            .fix(format!(
+                "check the name at https://packages.gentoo.org and fix it in your bunny.toml\n\
+                 (look for \"{}\").",
+                short(&package)
+            ))
+        })
+        .collect()
+}
+
 fn slot_conflicts(lines: &[&str]) -> Vec<Explanation> {
     let mut found = Vec::new();
     for (i, line) in lines.iter().enumerate() {
@@ -521,6 +566,17 @@ mod tests {
     }
 
     #[test]
+    fn strips_colors() {
+        assert_eq!(
+            strip_ansi("\u{1b}[32;01m * \u{1b}[39;49;00mIMPORTANT: 3 news items"),
+            " * IMPORTANT: 3 news items"
+        );
+        let colored =
+            fixture("use-change-swtpm.txt").replace("emerge:", "\u{1b}[31;01memerge:\u{1b}[0m");
+        assert_eq!(explain(&strip_ansi(&colored)).len(), 1);
+    }
+
+    #[test]
     fn base_names() {
         assert_eq!(base_name(">=net-libs/gnutls-3.8.13"), "net-libs/gnutls");
         assert_eq!(
@@ -613,6 +669,17 @@ mod tests {
             found[0].details,
             ["Gentoo's reason: Unmaintained, many open security bugs. Removal on 2026-11-30."]
         );
+    }
+
+    #[test]
+    fn no_such_package() {
+        let found = explain(&fixture("no-such-package.txt"));
+        assert_eq!(found.len(), 1, "{found:#?}");
+        assert_eq!(found[0].title, "There's no package called app-misc/tmuxx.");
+        // The USE-flag variant of the message is not mistaken for this.
+        assert!(explain(&fixture("use-change-swtpm.txt"))
+            .iter()
+            .all(|e| !e.title.starts_with("There's no package")));
     }
 
     #[test]

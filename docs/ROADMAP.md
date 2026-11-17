@@ -61,7 +61,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       failure messages and explain each in plain English with the fix. Use real
       outputs as test fixtures (see `tests/fixtures/` once created). Live
       `9999` / `**` suggestions must be flagged as risky, never auto-applied.
-- [ ] **Error translation, part 2:** run emerge so bunny sees its output
+- [~] **Error translation, part 2:** run emerge so bunny sees its output
       (while still showing it live), and explain failures automatically at the
       end of `switch` / `update` instead of asking the user to paste them. **(VM)**
 - [ ] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.

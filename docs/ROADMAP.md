@@ -81,7 +81,7 @@ feature PRs now update it as they go.)
       unambiguous (`firefox` → `www-client/firefox`), show the plan, and run
       the switch. "Installing" stays declarative: it's always "add to the
       config, then switch". **(VM)**
-- [~] **`bunny status`:** one screen saying whether everything is in order:
+- [x] **`bunny status`:** one screen saying whether everything is in order:
       config applied (packages or flags added outside bunny show up here),
       services enabled by hand, versions vs the lock, the last change,
       undo available, and when the package tree was last synced. Read-only.

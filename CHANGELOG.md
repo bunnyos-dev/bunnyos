@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- bunny installs with emerge from the BunnyOS overlay (`app-admin/bunny-bin`
+  for releases, `app-admin/bunny` for the newest code). A switch keeps
+  bunny's own package installed even if it's not in `bunny.toml`.
+
 ## [0.1.0] - 2026-11-17
 
 The first release: version 1 of bunny.

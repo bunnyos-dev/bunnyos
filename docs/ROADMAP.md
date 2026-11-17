@@ -157,7 +157,7 @@ so the maintainer's time goes to testing and decisions.
 - [x] **Security advisories in `bunny status`:** a line saying whether any
       Gentoo security advisory (GLSA, via `glsa-check`) affects installed
       packages, and to run `bunny update` if so.
-- [ ] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
+- [~] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
       a release ebuild and a `-9999` one, so bunny installs with `emerge`.
       Moved up from the installing phase.
 

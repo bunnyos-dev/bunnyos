@@ -4,7 +4,7 @@ Everything bunny writes, so nothing is a mystery.
 
 | File | What it is |
 |---|---|
-| `/var/lib/portage/world` | Gentoo's list of wanted packages. bunny writes it from `packages`. |
+| `/var/lib/portage/world` | Gentoo's list of wanted packages. bunny writes it from `packages`, plus the `[security]` tool and bunny's own package. |
 | `/etc/portage/package.use/zz-bunny` | USE flags from your config. Named so Portage reads it **last**, so it wins. |
 | `/etc/portage/package.use/00-bunny-kept` | package.use lines bunny can't manage yet (version ranges like `<pkg-2`, wildcards), copied word for word. |
 | `/etc/portage/package.mask/zz-bunny-lock` | The [version pins](lock-and-pins.md) from `bunny.lock`. |

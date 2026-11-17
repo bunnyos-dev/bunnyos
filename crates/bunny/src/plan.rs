@@ -307,7 +307,7 @@ fn use_changes(config: &Config, root: &Path) -> Result<Vec<UseChange>> {
 /// Compare `config` to the system rooted at `root`.
 pub fn make(config: &Config, root: &Path) -> Result<Plan> {
     let current_world = portage::read_world(root).context("Couldn't read the world set")?;
-    let wanted_world = portage::wanted_world(config);
+    let wanted_world = portage::wanted_world(config, root);
 
     let use_changes = use_changes(config, root)?;
 

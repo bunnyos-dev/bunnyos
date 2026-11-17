@@ -48,6 +48,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       names before changing anything
 - [x] `bunny search` / `add` / `remove`: search names and descriptions,
       short names and typo suggestions, config edits that keep comments
+- [x] Boot-menu undo can't walk further back: the entry is removed after
+      any rollback, and picking it twice does nothing
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -110,7 +112,7 @@ feature PRs now update it as they go.)
       "Going further" (full `bunny.toml` reference, pins, generations, how bunny
       drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
       experienced Linux user who has never used NixOS.
-- [ ] **Undo restores the config too:** a generation is saved after `bunny
+- [x] **Undo restores the config too:** a generation is saved after `bunny
       add`/`remove` (or your own edit) has already changed `bunny.toml`, so
       after an undo (`bunny rollback` or the boot menu) the config still lists
       the change. Save the config from *before* the change with each
@@ -151,7 +153,7 @@ so the maintainer's time goes to testing and decisions.
       (`emerge --pretend`) read by bunny. If anything breaks (emerge changed
       its messages, a profile moved), it opens an issue so the daily session
       picks it up.
-- [ ] **Security advisories in `bunny status`:** a line saying whether any
+- [x] **Security advisories in `bunny status`:** a line saying whether any
       Gentoo security advisory (GLSA, via `glsa-check`) affects installed
       packages, and to run `bunny update` if so.
 - [ ] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
@@ -200,7 +202,18 @@ Rough order. These get split into PR-sized items when we reach them.
 ### Phase 9: installing BunnyOS
 - [ ] `bunny install` (from `tools/vm-install-gentoo.sh`), encryption by default
 - [ ] Baseline system image built on the server
-- [ ] Slint installer (straight to the installer, no desktop)
+- [ ] Slint installer (straight to the installer, no desktop): one centered
+      window, one decision per screen (see the mockups), Utilities menu
+- [ ] Installer terminal mode: a console with a welcome, how to get back to
+      the graphical installer, the install guide's URL, and the commands to
+      start from the Baseline or your own config
+- [ ] Guide: "Installing by hand" chapter (what terminal mode points to)
+- [ ] **Reset:** `bunny reset` (keep files; undoable, saves the system first)
+      and "Erase everything" from the USB
+- [ ] **BunnyOS Desktop:** Hyprland + BunnyOS's own Quickshell shell that works
+      like a full desktop (settings, launcher, notifications, panels); the
+      selling point. Plus KDE Plasma, Xfce, bare Hyprland, bare MangoWM and
+      "no desktop" as installer choices (`[desktop]` section)
 - [ ] ISO build (Net and Offline editions), checksums and signatures
 - [ ] Hosting: GitHub Releases + Cloudflare R2
 - [ ] Quickshell, MangoWM and theme ebuilds in `bunny-overlay` (the repo
@@ -221,5 +234,5 @@ Rough order. These get split into PR-sized items when we reach them.
 ## Known issues / small fixes
 
 
-- `bunny rollback --root <fake>` still reads the real machine's mount info.
-- Kept package.use lines lose their original file name on a second switch.
+- The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
+  `GRUB_DISTRIBUTOR`; part of the boot menu work).

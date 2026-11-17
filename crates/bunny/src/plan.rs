@@ -33,6 +33,8 @@ pub struct Plan {
     /// Services set to start at boot whose start script no longer exists,
     /// usually left behind when a package was removed.
     pub leftover_services: Vec<String>,
+    /// The removals were asked for (`bunny remove`), so don't suggest keeping them.
+    pub removal_requested: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -112,7 +114,10 @@ impl Plan {
                 "-",
                 &self.remove_packages,
             );
-            out.push_str("  Add them to `packages` if you want to keep them.\n\n");
+            if !self.removal_requested {
+                out.push_str("  Add them to `packages` if you want to keep them.\n");
+            }
+            out.push('\n');
         }
 
         if !self.use_changes.is_empty() {
@@ -186,37 +191,25 @@ fn section(out: &mut String, heading: &str, mark: &str, items: &[String]) {
 
 /// Packages in `wanted` that no repository in `/var/db/repos` has and that
 /// aren't installed. Skipped (empty) when there are no repositories to check.
+/// Uses the same package index as `bunny search` and `bunny add`.
 fn unknown_packages(root: &Path, wanted: &[String]) -> Vec<String> {
-    let repos: Vec<_> = match std::fs::read_dir(root.join("var/db/repos")) {
-        Ok(entries) => entries
-            .flatten()
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-            .map(|e| e.path())
-            .collect(),
-        Err(_) => return Vec::new(),
-    };
-    if repos.is_empty() {
+    if wanted.is_empty() {
         return Vec::new();
     }
-    let installed = |cat: &str, name: &str| {
-        std::fs::read_dir(root.join("var/db/pkg").join(cat))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .any(|e| {
-                let pf = e.file_name().to_string_lossy().into_owned();
-                crate::import::strip_version(&format!("{cat}/{pf}"))
-                    .is_some_and(|n| n == format!("{cat}/{name}"))
-            })
-    };
+    let available: BTreeSet<String> = crate::repo::all(root).into_iter().map(|p| p.name).collect();
+    if available.is_empty() {
+        return Vec::new();
+    }
+    let installed: BTreeSet<String> = crate::lock::installed_packages(root)
+        .unwrap_or_default()
+        .into_keys()
+        .map(|k| k.split(':').next().unwrap_or(&k).to_string())
+        .collect();
     wanted
         .iter()
         .filter(|atom| {
             let plain = atom.split(':').next().unwrap_or(atom);
-            let Some((cat, name)) = plain.split_once('/') else {
-                return false;
-            };
-            !repos.iter().any(|r| r.join(cat).join(name).is_dir()) && !installed(cat, name)
+            !available.contains(plain) && !installed.contains(plain)
         })
         .cloned()
         .collect()
@@ -290,6 +283,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             .filter(|s| init.service_exists(s))
             .cloned()
             .collect(),
+        removal_requested: false,
         leftover_services: enabled
             .iter()
             .filter(|s| !init.service_exists(s))

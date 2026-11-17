@@ -85,6 +85,23 @@ else
     pass "emerge would install mpv here (nothing to explain this week)"
 fi
 
+section "Security advisories"
+# bunny status reads `glsa-check --nocolor --list affected` (gentoolkit),
+# lines like "202501-03 [N] Title ( cat/pkg )".
+if emerge --quiet --getbinpkg app-portage/gentoolkit >"$work/gentoolkit.txt" 2>&1 \
+    || emerge --quiet app-portage/gentoolkit >>"$work/gentoolkit.txt" 2>&1; then
+    glsa-check --nocolor --list all >"$work/glsa.txt" 2>"$work/glsa-err.txt"
+    echo "      glsa-check's first lines:"
+    grep -E '^[0-9]{6}-[0-9]{2} ' "$work/glsa.txt" | head -3 | sed 's/^/      | /'
+    if grep -Eq '^[0-9]{6}-[0-9]{2} \[[ANU ]\] .+' "$work/glsa.txt"; then
+        pass "glsa-check's list still looks the way bunny reads it"
+    else
+        fail "glsa-check's list still looks the way bunny reads it" "$(head -5 "$work/glsa.txt") $(tail -2 "$work/glsa-err.txt")"
+    fi
+else
+    echo "SKIP  couldn't install gentoolkit here: $(tail -1 "$work/gentoolkit.txt")"
+fi
+
 echo
 if [ "$failed" -eq 0 ]; then
     echo "All checks passed."

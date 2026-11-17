@@ -59,9 +59,14 @@ impl Explanation {
             let _ = writeln!(out, "  {line}");
         }
         if let Some(fix) = &self.fix {
+            // Nothing is wrong with an info item, so it gets a tip, not a fix.
+            let label = match self.severity {
+                Severity::Info => "Tip:",
+                _ => "Fix:",
+            };
             let mut lines = fix.lines();
             if let Some(first) = lines.next() {
-                let _ = writeln!(out, "  Fix: {first}");
+                let _ = writeln!(out, "  {label} {first}");
             }
             for line in lines {
                 let _ = writeln!(out, "       {line}");
@@ -472,7 +477,7 @@ fn config_updates(lines: &[&str]) -> Vec<Explanation> {
                     Severity::Info,
                     format!("{n} config files have new versions waiting to be merged."),
                 )
-                .fix("review them with: doas dispatch-conf")
+                .fix("run `doas dispatch-conf` to review them.")
             }
         })
         .collect()
@@ -490,7 +495,7 @@ fn notices(lines: &[&str]) -> Vec<Explanation> {
                         format!("Gentoo has {n} announcements you haven't read."),
                     )
                     .detail("They're about changes that might need your attention. Most won't apply to you.")
-                    .fix("read them with: eselect news read"),
+                    .fix("run `eselect news read` to read them."),
                 );
             }
         }
@@ -652,6 +657,15 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert!(found.iter().all(|e| e.severity == Severity::Info));
         assert!(found[0].title.contains("26 announcements"));
+    }
+
+    #[test]
+    fn info_items_get_a_tip() {
+        let text = explain(&fixture("news-and-depclean.txt"))[0].render();
+        assert!(
+            text.contains("  Tip: run `eselect news read` to read them."),
+            "{text}"
+        );
     }
 
     #[test]

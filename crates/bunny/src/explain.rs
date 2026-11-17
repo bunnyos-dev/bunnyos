@@ -213,6 +213,10 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
     // Form 2: the list after "The following USE changes are necessary".
     for block in blocks_after(lines, "The following USE changes are necessary") {
         let mut needed_by = None;
+        // If emerge's suggestion breaks a package's rules, the other changes
+        // in the same suggestion are part of an attempt that doesn't work.
+        let start = found.len();
+        let mut conflict = None;
         for line in block {
             if let Some(rest) = line.strip_prefix("# required by ") {
                 needed_by.get_or_insert_with(|| {
@@ -225,11 +229,145 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             if !atom.contains('/') {
                 continue;
             }
+            // emerge's own suggestion breaks the package's rules: it couldn't
+            // find a working set of flags at all.
+            if let Some((suggested, rest)) = line.split_once(", this change violates") {
+                let flags = suggested
+                    .split_whitespace()
+                    .skip(1)
+                    .map(String::from)
+                    .collect();
+                let rule = rest
+                    .split_once('\'')
+                    .map(|(_, r)| r.trim_end().trim_end_matches('\''))
+                    .unwrap_or("");
+                conflict = Some(flag_rules_conflict(&base_name(atom), flags, rule));
+                needed_by.take();
+                continue;
+            }
             let flags = words.map(String::from).collect();
             found.push(use_change(&base_name(atom), flags, needed_by.take()));
         }
+        if let Some(mut c) = conflict {
+            let others: Vec<String> = found
+                .drain(start..)
+                .map(|e| e.title.trim_end_matches('.').to_string())
+                .collect();
+            if !others.is_empty() {
+                c = c.detail(format!(
+                    "emerge also suggested this as part of the same attempt; skip it too: {}.",
+                    others.join("; ")
+                ));
+            }
+            found.push(c);
+        }
     }
     found
+}
+
+/// emerge couldn't find USE flags that satisfy a package's rules
+/// (REQUIRED_USE): its suggested change breaks them.
+fn flag_rules_conflict(package: &str, suggested: Vec<String>, rule: &str) -> Explanation {
+    let name = short(package);
+    let describe = |f: &String| match f.strip_prefix('-') {
+        Some(off) => format!("turning {off} off"),
+        None => format!("turning {f} on"),
+    };
+    let suggestion: Vec<String> = suggested.iter().map(describe).collect();
+    let mut e = Explanation::new(
+        Severity::Problem,
+        format!("emerge couldn't find a set of features that works for {name}."),
+    );
+    if !suggestion.is_empty() {
+        e = e.detail(format!(
+            "Its suggested fix ({}) breaks {name}'s own rules, so don't use it.",
+            suggestion.join(", ")
+        ));
+    }
+    let rules = required_use_rules(rule);
+    if !rules.is_empty() {
+        e = e.detail(format!("{name}'s rules:"));
+        for r in rules {
+            e = e.detail(format!("  • {r}"));
+        }
+    }
+    let display = ["X", "wayland"]
+        .iter()
+        .all(|f| rule.split_whitespace().any(|t| t == *f));
+    let fix = if display {
+        format!(
+            "{name} needs a way to show things on screen, and nothing is turned on.\n\
+             On a desktop, turn on the one you use (wayland or X), for example:\n\
+             [pkg.\"{package}\"]\n\
+             use = [\"wayland\"]\n\
+             Then run the same bunny command again. If another package then needs the\n\
+             same flag, bunny will say so."
+        )
+    } else {
+        format!(
+            "turn on features that meet the rules above in [pkg.\"{package}\"], then run the\n\
+             same bunny command again."
+        )
+    };
+    e.fix(fix)
+}
+
+/// Gentoo's REQUIRED_USE syntax in words, one rule per line:
+/// `any-of ( X wayland )` → "at least one of: X, wayland",
+/// `egl? ( any-of ( X drm ) )` → "if egl is on: at least one of: X, drm".
+fn required_use_rules(rule: &str) -> Vec<String> {
+    let tokens: Vec<&str> = rule.split_whitespace().collect();
+    let mut pos = 0;
+    let mut rules = Vec::new();
+    while pos < tokens.len() {
+        match required_use_item(&tokens, &mut pos) {
+            Some(text) => rules.push(text),
+            None => break,
+        }
+    }
+    rules
+}
+
+fn required_use_item(tokens: &[&str], pos: &mut usize) -> Option<String> {
+    let token = *tokens.get(*pos)?;
+    *pos += 1;
+    let group = |tokens: &[&str], pos: &mut usize| -> Option<Vec<String>> {
+        if tokens.get(*pos) != Some(&"(") {
+            return None;
+        }
+        *pos += 1;
+        let mut items = Vec::new();
+        while tokens.get(*pos).is_some_and(|t| *t != ")") {
+            items.push(required_use_item(tokens, pos)?);
+        }
+        *pos += 1; // ")"
+        Some(items)
+    };
+    let quantified = |word: &str, tokens: &[&str], pos: &mut usize| {
+        group(tokens, pos).map(|items| format!("{word}: {}", items.join(", ")))
+    };
+    match token {
+        "||" | "any-of" => quantified("at least one of", tokens, pos),
+        "^^" | "exactly-one-of" => quantified("exactly one of", tokens, pos),
+        "??" | "at-most-one-of" => quantified("at most one of", tokens, pos),
+        "(" => {
+            *pos -= 1;
+            group(tokens, pos).map(|items| format!("all of: {}", items.join(", ")))
+        }
+        t if t.ends_with('?') => {
+            let flag = t.trim_end_matches('?');
+            let condition = match flag.strip_prefix('!') {
+                Some(off) => format!("if {off} is off"),
+                None => format!("if {flag} is on"),
+            };
+            let items = group(tokens, pos)?;
+            Some(format!("{condition}: {}", items.join("; ")))
+        }
+        t => Some(match t.strip_prefix('!') {
+            Some(off) => format!("{off} off"),
+            None => t.to_string(),
+        }),
+    }
 }
 
 /// Lines after a heading, up to the next blank line (skipping emerge's
@@ -809,6 +947,58 @@ mod tests {
         assert!(
             text.contains("\n       [pkg.\"net-libs/gnutls\"]\n"),
             "{text}"
+        );
+    }
+
+    #[test]
+    fn a_suggestion_that_breaks_the_rules_is_explained_in_words() {
+        let found = explain(&fixture("required-use-mpv.txt"));
+        let conflict = found
+            .iter()
+            .find(|e| e.title.contains("couldn't find a set of features"))
+            .expect("conflict explained");
+        let text = conflict.render();
+        assert!(text.contains("works for mpv."), "{text}");
+        assert!(
+            text.contains("Its suggested fix (turning X off) breaks mpv's own rules"),
+            "{text}"
+        );
+        assert!(text.contains("• at least one of: cli, libmpv"), "{text}");
+        assert!(
+            text.contains("• if egl is on: at least one of: X, drm, wayland"),
+            "{text}"
+        );
+        assert!(text.contains("• if xv is on: X"), "{text}");
+        assert!(text.contains("use = [\"wayland\"]"), "{text}");
+        // No flag salad from the rule text.
+        assert!(!found.iter().any(|e| e.render().contains("\"violates\"")));
+        // The other change was part of the same failed attempt: folded in,
+        // not offered as a fix of its own.
+        assert_eq!(
+            found
+                .iter()
+                .filter(|e| e.severity == Severity::Problem)
+                .count(),
+            1
+        );
+        assert!(
+            text.contains(
+                "skip it too: mpv needs vulkan-loader built with these features turned on: X"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn required_use_in_words() {
+        assert_eq!(
+            required_use_rules("^^ ( a b ) !c? ( d ) ( e f ) || ( g )"),
+            [
+                "exactly one of: a, b",
+                "if c is off: d",
+                "all of: e, f",
+                "at least one of: g"
+            ]
         );
     }
 }

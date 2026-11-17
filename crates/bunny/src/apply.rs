@@ -205,6 +205,19 @@ impl std::fmt::Display for Cancelled {
 
 impl std::error::Error for Cancelled {}
 
+/// emerge refused before installing anything (its dry run failed), and the
+/// files were put back, so nothing changed. Holds the explanation to show.
+#[derive(Debug)]
+pub struct Refused(pub String);
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Refused {}
+
 #[derive(Clone)]
 pub struct Options {
     /// Don't let emerge ask before installing. Removing packages always asks.
@@ -560,7 +573,7 @@ fn install_quietly(
             }
             text.push_str("Fix the problem, then run the same bunny command again.");
         }
-        bail!("{text}");
+        return Err(Refused(text).into());
     }
 
     let list = crate::emerge::parse_merge_list(&output);

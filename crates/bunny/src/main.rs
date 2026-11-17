@@ -425,6 +425,10 @@ fn switch_inner(
                 println!("Nothing was changed.");
                 return Ok(Switched::NotApplied(ExitCode::SUCCESS));
             }
+            Err(e) if e.is::<apply::Refused>() => {
+                eprintln!("✗ {e}");
+                return Ok(Switched::NotApplied(ExitCode::FAILURE));
+            }
             result => result?,
         };
 
@@ -567,6 +571,10 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
             Err(e) if e.is::<apply::Cancelled>() => {
                 println!("Nothing was changed.");
                 return Ok(ExitCode::SUCCESS);
+            }
+            Err(e) if e.is::<apply::Refused>() => {
+                eprintln!("✗ {e}");
+                return Ok(ExitCode::FAILURE);
             }
             result => result?,
         };

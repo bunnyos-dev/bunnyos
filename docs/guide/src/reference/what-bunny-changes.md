@@ -13,6 +13,8 @@ Everything bunny writes, so nothing is a mystery.
 | `/etc/runlevels/default/*` | Services from `services`, added with `rc-update`. |
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
+| `/usr/lib/dracut/modules.d/90bunny-rollback/` | The boot menu's undo step, with [`[boot] undo_entry`](config.md#boot). Added to the startup image (`/boot/initramfs-<version>.img`), which is rebuilt once; the old image goes to the backup folder. |
+| `/boot/grub/custom.cfg` | The boot menu's undo entry, between `### BEGIN bunny` and `### END bunny`. The rest of the file is kept. |
 | `/var/log/bunny/<time>-emerge.log` | emerge's full output from each switch or update. |
 | `/var/lib/bunny/backups/<time>/` | Copies of the files above, from before each switch. |
 

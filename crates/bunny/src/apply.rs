@@ -268,6 +268,14 @@ pub fn switch(
         ..Default::default()
     };
 
+    // 0. The boot menu's undo step goes into the startup image *before* the
+    //    snapshot, so this very generation can already be undone from the
+    //    boot menu. It only adds a module and rebuilds the image (the old
+    //    image is backed up); if that fails, nothing else has changed.
+    if let Some(versions) = &plan.boot.install_module {
+        install_boot_module(root, versions, runner, &outcome.backup_dir)?;
+    }
+
     // 1. Snapshot first, so there's always a way back.
     let snapshots = root.join(".snapshots");
     if snapshots.is_dir() {
@@ -408,6 +416,18 @@ pub fn switch(
         }
     }
 
+    // 8. The boot menu's undo entry, pointing at this switch's snapshot.
+    if config.boot.undo_entry && plan.boot.problems.is_empty() {
+        if let Some(note) = write_undo_entry(root, opts, &outcome)? {
+            outcome.notes.push(note);
+        }
+    } else if plan.boot.remove_entry {
+        let path = root.join(crate::boot::CUSTOM_CFG);
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        std::fs::write(&path, crate::boot::merge_custom_cfg(&text, ""))
+            .context("Couldn't remove the undo entry from the boot menu")?;
+    }
+
     notes::write_state(
         root,
         &State {
@@ -417,6 +437,116 @@ pub fn switch(
         },
     )?;
     Ok(outcome)
+}
+
+/// Installs the dracut module and rebuilds the startup image for each kernel.
+/// Each new image is built as a separate file and only swapped in once it's
+/// complete; the old one is backed up. If anything fails, the module is
+/// removed again and the old images stay.
+fn install_boot_module(
+    root: &Path,
+    versions: &[String],
+    runner: &mut dyn Runner,
+    backup: &Path,
+) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = root.join(crate::boot::MODULE_DIR);
+    std::fs::create_dir_all(&dir).with_context(|| format!("Couldn't create {}", dir.display()))?;
+    for (name, text) in [
+        ("module-setup.sh", crate::boot::MODULE_SETUP),
+        ("bunny-rollback.sh", crate::boot::HOOK),
+    ] {
+        let path = dir.join(name);
+        std::fs::write(&path, text)
+            .with_context(|| format!("Couldn't write {}", path.display()))?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    }
+    let undo = |why: String| -> anyhow::Error {
+        let _ = std::fs::remove_dir_all(&dir);
+        anyhow::anyhow!(
+            "{why}\n  The startup image wasn't changed, and nothing else was either.\n  \
+             To go ahead without the boot menu entry, set `undo_entry = false` under [boot]."
+        )
+    };
+
+    println!("\nAdding the undo step to the startup image…");
+    for version in versions {
+        let image = crate::boot::initramfs(root, version);
+        let mut staged = image.clone().into_os_string();
+        staged.push(".bunny-new");
+        let staged = PathBuf::from(staged);
+        let (ok, said) = runner.run_quiet(
+            &cmd(&["dracut", "--force", &staged.to_string_lossy(), version]),
+            &mut |_| {},
+        )?;
+        if runner.dry() {
+            continue;
+        }
+        if !ok || !staged.is_file() {
+            let _ = std::fs::remove_file(&staged);
+            return Err(undo(format!(
+                "Couldn't rebuild the startup image for kernel {version}. dracut said:\n{}",
+                crate::emerge::tail(&said, 10)
+            )));
+        }
+        std::fs::create_dir_all(backup)?;
+        if image.exists() {
+            std::fs::copy(&image, backup.join(image.file_name().unwrap_or_default()))
+                .with_context(|| format!("Couldn't back up {}", image.display()))?;
+        }
+        std::fs::rename(&staged, &image)
+            .with_context(|| format!("Couldn't put the new {} in place", image.display()))?;
+    }
+    Ok(())
+}
+
+/// Points the boot menu's undo entry at this switch's snapshot. Returns a
+/// note for the summary.
+fn write_undo_entry(root: &Path, opts: &Options, outcome: &Outcome) -> Result<Option<String>> {
+    use crate::boot;
+    if outcome.snapshot.is_none() {
+        return Ok(None);
+    }
+    let generation = format!("bunny-{}", opts.stamp);
+    let generation_dir = root.join(".snapshots").join(&generation);
+    let cmdline = std::fs::read_to_string(root.join("proc/cmdline")).unwrap_or_default();
+    let running =
+        std::fs::read_to_string(root.join("proc/sys/kernel/osrelease")).unwrap_or_default();
+    let not_added = |why: &str| {
+        Ok(Some(format!(
+            "The boot menu's undo entry wasn't updated: {why}."
+        )))
+    };
+
+    let Some(uuid) = boot::root_uuid(&cmdline) else {
+        return not_added("the system isn't started with root=UUID=…");
+    };
+    let Some(version) = boot::generation_kernel(&generation_dir, running.trim()) else {
+        return not_added("couldn't find a kernel in the saved generation");
+    };
+    if !boot::generation_has_module(&generation_dir, &version) {
+        return not_added("the saved generation's startup image doesn't have the undo step yet");
+    }
+    let when = crate::rollback::Generation {
+        name: generation.clone(),
+    }
+    .when();
+    let block = boot::render_entry(
+        &generation,
+        &when,
+        &version,
+        uuid,
+        &boot::undo_cmdline(&cmdline, &generation),
+    );
+    let path = root.join(boot::CUSTOM_CFG);
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    std::fs::write(&path, boot::merge_custom_cfg(&text, &block))
+        .with_context(|| format!("Couldn't write {}", path.display()))?;
+    Ok(Some(
+        "If this change stops the system from starting, pick \"BunnyOS: undo the last change\" \
+         in the boot menu (hold Shift or Esc while starting if the menu is hidden)."
+            .to_string(),
+    ))
 }
 
 /// What to tell the user when emerge stops: bunny's explanation if it
@@ -1372,5 +1502,136 @@ mod tests {
             .commands
             .iter()
             .any(|c| c.contains("--quiet-build=y")));
+    }
+
+    /// A system set up for the boot menu's undo entry: GRUB, dracut, one
+    /// kernel, booted with root=UUID=.
+    fn bootable_system() -> tempfile::TempDir {
+        let dir = fake_system();
+        let r = dir.path();
+        write(r, "boot/grub/grub.cfg", "");
+        write(r, "usr/bin/dracut", "");
+        write(r, "boot/vmlinuz-6.12.58", "kernel");
+        write(r, "boot/initramfs-6.12.58.img", "old image");
+        std::fs::create_dir_all(r.join("lib/modules/6.12.58")).unwrap();
+        write(
+            r,
+            "proc/cmdline",
+            "BOOT_IMAGE=/@/boot/vmlinuz-6.12.58 root=UUID=1234-abcd ro rootflags=subvol=@\n",
+        );
+        write(r, "proc/sys/kernel/osrelease", "6.12.58\n");
+        dir
+    }
+
+    const BOOT_CONFIG: &str = "packages = [\"app-editors/neovim\"]\n[boot]\nundo_entry = true\n";
+
+    /// Pretends to be btrfs and dracut: the snapshot copies the system's
+    /// /boot and dracut module into /.snapshots, and dracut writes an image.
+    struct Builder {
+        root: PathBuf,
+        dracut_ok: bool,
+        commands: Vec<String>,
+    }
+
+    impl Runner for Builder {
+        fn run(&mut self, cmd: &[String]) -> Result<bool> {
+            self.commands.push(cmd.join(" "));
+            Ok(true)
+        }
+
+        fn run_quiet(&mut self, cmd: &[String], _: &mut dyn FnMut(&str)) -> Result<(bool, String)> {
+            self.commands.push(cmd.join(" "));
+            match cmd[0].as_str() {
+                "dracut" if self.dracut_ok => {
+                    std::fs::write(&cmd[2], "new image with the undo step").unwrap();
+                    Ok((true, String::new()))
+                }
+                "dracut" => Ok((false, "dracut: something went wrong".into())),
+                "btrfs" => {
+                    let target = PathBuf::from(&cmd[5]);
+                    // Module first: copying sets new times, and the image must
+                    // look newer than the module, as it is on a real snapshot.
+                    for sub in [crate::boot::MODULE_DIR, "boot"] {
+                        let from = self.root.join(sub);
+                        if from.exists() {
+                            copy_tree(&from, &target.join(sub)).unwrap();
+                        }
+                    }
+                    Ok((true, String::new()))
+                }
+                _ => Ok((true, String::new())),
+            }
+        }
+    }
+
+    #[test]
+    fn undo_entry_is_set_up_in_one_switch() {
+        let root = bootable_system();
+        let r = root.path();
+        let config = Config::parse(BOOT_CONFIG).unwrap();
+        let plan = plan::make(&config, r).unwrap();
+        assert!(plan.boot.install_module.is_some(), "{:?}", plan.boot);
+        let mut runner = Builder {
+            root: r.to_path_buf(),
+            dracut_ok: true,
+            commands: vec![],
+        };
+        let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+
+        // Module first, then the snapshot (so the snapshot has it).
+        let dracut = runner
+            .commands
+            .iter()
+            .position(|c| c.starts_with("dracut"))
+            .unwrap();
+        let snap = runner
+            .commands
+            .iter()
+            .position(|c| c.starts_with("btrfs"))
+            .unwrap();
+        assert!(dracut < snap, "{:?}", runner.commands);
+        assert_eq!(
+            std::fs::read_to_string(r.join("boot/initramfs-6.12.58.img")).unwrap(),
+            "new image with the undo step"
+        );
+        assert!(outcome.backup_dir.join("initramfs-6.12.58.img").exists());
+
+        let cfg = std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap();
+        assert!(cfg.contains("linux /@snapshots/bunny-20261116-120000/boot/vmlinuz-6.12.58 root=UUID=1234-abcd ro rootflags=subvol=@ bunny.rollback=bunny-20261116-120000"), "{cfg}");
+        assert!(
+            outcome
+                .notes
+                .iter()
+                .any(|n| n.contains("undo the last change")),
+            "{:?}",
+            outcome.notes
+        );
+
+        // Next time the module is already there: nothing to plan for [boot].
+        assert!(plan::make(&config, r).unwrap().boot.is_empty());
+    }
+
+    #[test]
+    fn a_failed_startup_image_build_changes_nothing() {
+        let root = bootable_system();
+        let r = root.path();
+        let config = Config::parse(BOOT_CONFIG).unwrap();
+        let plan = plan::make(&config, r).unwrap();
+        let mut runner = Builder {
+            root: r.to_path_buf(),
+            dracut_ok: false,
+            commands: vec![],
+        };
+        let err = switch(&config, r, &plan, &mut runner, &opts())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Couldn't rebuild the startup image"), "{err}");
+        assert!(!runner.commands.iter().any(|c| c.starts_with("btrfs")));
+        assert!(!r.join(crate::boot::MODULE_DIR).exists());
+        assert_eq!(
+            std::fs::read_to_string(r.join("boot/initramfs-6.12.58.img")).unwrap(),
+            "old image"
+        );
+        assert!(!r.join(crate::boot::CUSTOM_CFG).exists());
     }
 }

@@ -72,6 +72,20 @@ Settings for one package.
 Group flags (Gentoo's `PYTHON_TARGETS: python3_12` style) are written as one
 word: `python_targets_python3_12`.
 
+## `[boot]`
+
+```toml
+[boot]
+undo_entry = true   # add "undo the last change" to the boot menu
+```
+
+| Setting | Values | Default | Meaning |
+|---|---|---|---|
+| `undo_entry` | `true` / `false` | `false` | After each change, add a boot menu entry that undoes it, for when the system won't start. See [Undo a change](../tasks/undo.md#if-the-system-doesnt-start-at-all). |
+
+It's off by default for now, while it's new, because it changes the startup
+image. The BunnyOS installer will turn it on.
+
 ## `[security]`
 
 Which tool gives admin rights, and who gets them. bunny only manages this if

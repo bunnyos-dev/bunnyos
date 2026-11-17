@@ -25,6 +25,9 @@ pub struct Config {
     /// Admin rights: sudo or doas, and who gets them. Not managed if absent.
     #[serde(default)]
     pub security: Option<crate::security::Security>,
+    /// Boot menu settings.
+    #[serde(default)]
+    pub boot: crate::boot::Boot,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

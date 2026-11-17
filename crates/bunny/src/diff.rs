@@ -24,6 +24,7 @@ impl Diff<'_> {
             && self.plan.extra_services.is_empty()
             && self.plan.missing_services.is_empty()
             && self.plan.security.is_empty()
+            && self.plan.boot.is_empty()
             && self.drift.is_none_or(Drift::is_empty)
     }
 
@@ -124,6 +125,14 @@ impl Diff<'_> {
             out.push('\n');
         }
 
+        // Boot menu
+        if self.plan.boot.install_module.is_some() {
+            out.push_str("Boot menu\n  config only   the undo step in the startup image   (not added yet)\n\n");
+        }
+        if self.plan.boot.remove_entry {
+            out.push_str("Boot menu\n  system only   the \"undo the last change\" entry   (turned off in your config)\n\n");
+        }
+
         // Versions
         if let Some(drift) = self.drift.filter(|d| !d.is_empty()) {
             out.push_str("Versions (bunny.lock)\n");
@@ -204,6 +213,12 @@ impl Diff<'_> {
             }
         }
 
+        if p.boot.install_module.is_some() {
+            edits.push_str("    • set `undo_entry = false` under [boot]\n");
+        }
+        if p.boot.remove_entry {
+            edits.push_str("    • set `undo_entry = true` under [boot]\n");
+        }
         if !p.security.is_empty() {
             edits.push_str(
                 "    • remove the [security] section (bunny then leaves admin rights as they are)\n",

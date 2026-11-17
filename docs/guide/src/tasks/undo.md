@@ -61,5 +61,27 @@ make the config match.
 
 ## If the system doesn't start at all
 
-A boot-menu "Undo last switch" entry is planned. Until then, `bunny rollback`
-needs a working system.
+Turn on the boot menu's undo entry once, in `bunny.toml`:
+
+```toml
+[boot]
+undo_entry = true
+```
+
+and run `bunny switch`. From then on, every change adds an entry to the boot
+menu:
+
+```
+BunnyOS: undo the last change (back to 2026-11-17 09:15:00 UTC)
+```
+
+If a change leaves the system unable to start, restart, pick that entry, and
+the system starts as it was before the change. It's the same as `bunny
+rollback`, done while starting up: the broken system is saved too, so you can
+go back to it with `bunny rollback list`.
+
+If the boot menu doesn't show up when you start the computer, hold **Shift**
+(or press **Esc**) while it starts.
+
+How it works and what it changes: [Generations and rollback, in
+detail](../reference/generations.md#undo-from-the-boot-menu).

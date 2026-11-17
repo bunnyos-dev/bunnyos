@@ -1,6 +1,7 @@
 //! bunny: declarative, reproducible system management for BunnyOS.
 
 mod apply;
+mod boot;
 mod config;
 mod diff;
 mod edit;

@@ -45,6 +45,34 @@ itself.
 deletes the subvolume you're currently running from, even if you haven't
 rebooted yet.
 
+## Undo from the boot menu
+
+With `[boot] undo_entry = true`:
+
+- bunny adds a small step to the startup image (a dracut module in
+  `/usr/lib/dracut/modules.d/90bunny-rollback/`) and rebuilds the image once.
+  The new image is built as a separate file and only swapped in when it's
+  complete; the old one is saved in the backup folder. This happens before
+  that switch's snapshot, so that very generation can be undone from the menu.
+- After each switch, bunny writes one entry to `/boot/grub/custom.cfg` (GRUB
+  reads that file at boot; anything else in it is kept). The entry boots
+  **the kernel and startup image saved in that generation**, with
+  `bunny.rollback=<generation>` added. Using the generation's own kernel means
+  everything matches after the swap, even if the change updated the kernel.
+- On a normal boot the step does nothing. When the entry is picked, it does
+  the same as `bunny rollback` before the system is mounted: saves the current
+  system as `bunny-<time>-before-rollback`, moves it aside to
+  `@replaced-<time>`, and makes a copy of the generation the new `@`. If any
+  step fails, the current system is left (or put back) as it was, and it
+  starts normally.
+
+Limits:
+
+- Nested subvolumes (see above) aren't carried over by the boot-menu undo.
+  `bunny rollback` from a running system does carry them.
+- The entry needs GRUB, dracut, and the system started with `root=UUID=…`.
+  `bunny plan` says if something's missing; everything else still works.
+
 ## Requirements
 
 - `/` on btrfs, mounted from a subvolume called `@`

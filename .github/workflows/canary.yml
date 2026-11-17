@@ -1,0 +1,51 @@
+name: Canary
+
+# Once a week, run bunny inside a fresh Gentoo with the latest package tree,
+# to catch Gentoo changes that break bunny before users do. If it fails on
+# the schedule, it opens (or updates) an issue labelled "canary".
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"   # Mondays, 09:17 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/canary.yml"
+      - "tools/canary.sh"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    name: bunny on the latest Gentoo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build bunny
+        run: cargo build --release
+      - name: Get the latest Gentoo package tree
+        run: docker create -v /var/db/repos/gentoo --name portage gentoo/portage:latest /bin/true
+      - name: Run the checks in a fresh Gentoo
+        id: checks
+        run: |
+          set -o pipefail
+          docker run --rm --volumes-from portage -v "$PWD:/src:ro" gentoo/stage3:latest \
+            sh /src/tools/canary.sh /src/target/release/bunny | tee canary.txt
+      - name: Open or update an issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="$(printf 'The weekly canary check failed: Gentoo changed something bunny relies on.\n\nRun: %s\n\n```\n%s\n```\n' \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "$(tail -c 60000 canary.txt)")"
+          gh label create canary --color E8875B --description "Weekly canary check" 2>/dev/null || true
+          existing="$(gh issue list --label canary --state open --json number --jq '.[0].number')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "Canary: bunny broke on the latest Gentoo" --label canary --body "$body"
+          fi

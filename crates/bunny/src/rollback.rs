@@ -112,6 +112,8 @@ pub struct Outcome {
     pub carried: Vec<String>,
     /// Nested subvolumes that couldn't be carried over (left in `replaced`).
     pub left_behind: Vec<String>,
+    /// The config put back as it was at that generation, if any.
+    pub config_restored: Option<PathBuf>,
 }
 
 /// Parses `btrfs subvolume list` output into paths relative to the top level.
@@ -191,6 +193,7 @@ pub fn rollback(
     let nested = nested_subvolumes(runner, &top, ROOT_SUBVOL)?;
     let mut carried = Vec::new();
     let mut left_behind = Vec::new();
+    let mut config_restored = None;
     let result = (|| -> Result<()> {
         let before_path = t(&format!("{SNAPSHOTS_SUBVOL}/{before}"));
         if !run(
@@ -233,6 +236,12 @@ pub fn rollback(
                 left_behind.push(format!("/{inside}"));
             }
         }
+        // The config that matched this generation, back in its place. A
+        // failure here doesn't undo the rollback; the system is what matters.
+        match crate::applied::restore_into(&top.join(ROOT_SUBVOL)) {
+            Ok(path) => config_restored = path,
+            Err(e) => eprintln!("  Note: couldn't put the config back as it was ({e:#})."),
+        }
         Ok(())
     })();
 
@@ -261,6 +270,7 @@ pub fn rollback(
         replaced,
         carried,
         left_behind,
+        config_restored,
     })
 }
 

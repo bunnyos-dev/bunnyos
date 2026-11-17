@@ -142,6 +142,13 @@ isolated = false       # compile inside a clean container
   them over to the restored system, like `/home`, and `clean` deletes them
   inside-out. The installer creates `/srv` as a plain folder to avoid this.
 - `clean` never removes the generation you're running a copy of.
+- **The config goes back too:** after every successful switch or update (and
+  a switch with nothing to do), bunny copies the config, its lock and the
+  config's path to `/var/lib/bunny/applied/`. That's inside `@`, so each later
+  snapshot carries the config that matches it. Rollback (and the boot-menu
+  hook) copies it back over the config in the restored `@`, only for a config
+  under `/etc` (one in `/home` is on its own subvolume and isn't rolled
+  back).
 - Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
   right after it (a switch with a short summary, or a rollback and its
   target), and `/.snapshots/bunny-state.toml` remembers the last action, so

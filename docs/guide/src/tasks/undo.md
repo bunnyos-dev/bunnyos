@@ -52,12 +52,17 @@ Changed your mind? After rebooting, run: bunny rollback 3
 
 ## Your config file after a rollback
 
-Rollback restores the **system**. If your `bunny.toml` lives somewhere outside
-the system (like your home folder), it isn't rolled back. Run `bunny plan`
-afterwards: it shows any difference between the config and the restored
-system, and you can either edit the config or `bunny switch` again. `bunny
-diff` shows the same differences side by side, with the edits that would
-make the config match.
+Your `bunny.toml` goes back too, to the version that matched the system you
+went back to. If you'd just run `bunny add htop` and then undid it, htop is gone
+from the system **and** from `bunny.toml`, so `bunny status` is all ✓ right away.
+
+This works for a config in `/etc` (the default, `/etc/bunny/bunny.toml`). A
+config kept somewhere else, like your home folder, isn't touched. Run `bunny
+diff` afterwards to see where it and the restored system differ, with the edits
+that would make them match.
+
+It also only works for generations saved after the switch that turned this on
+(bunny keeps a copy of each config it applies, starting from that switch).
 
 ## If the system doesn't start at all
 

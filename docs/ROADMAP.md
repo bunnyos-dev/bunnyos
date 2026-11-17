@@ -110,7 +110,7 @@ feature PRs now update it as they go.)
       "Going further" (full `bunny.toml` reference, pins, generations, how bunny
       drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
       experienced Linux user who has never used NixOS.
-- [ ] **Undo restores the config too:** a generation is saved after `bunny
+- [~] **Undo restores the config too:** a generation is saved after `bunny
       add`/`remove` (or your own edit) has already changed `bunny.toml`, so
       after an undo (`bunny rollback` or the boot menu) the config still lists
       the change. Save the config from *before* the change with each

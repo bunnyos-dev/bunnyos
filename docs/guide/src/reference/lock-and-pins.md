@@ -45,7 +45,7 @@ next switch puts it back.
 
 | Command | Effect on the lock |
 |---|---|
-| `bunny switch` / `add` / `remove` | Locked packages stay put. New packages are added to the lock, removed ones taken out. |
+| `bunny switch` / `add` / `remove` | Locked packages stay put. New packages are added to the lock, removed ones taken out. A switch with nothing else to do still records packages installed outside bunny (like bunny itself from the overlay), as long as nothing locked has moved. |
 | `bunny update` | Removes the pins, updates everything, then writes the new versions and pins. If the update fails, the old pins are put back. |
 | `bunny lock` | Accepts the system as it is right now. |
 | `bunny plan` | Doesn't change it; shows differences. |

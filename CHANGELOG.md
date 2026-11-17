@@ -13,6 +13,9 @@ a minor version can change how things work).
 - bunny installs with emerge from the BunnyOS overlay (`app-admin/bunny-bin`
   for releases, `app-admin/bunny` for the newest code). A switch keeps
   bunny's own package installed even if it's not in `bunny.toml`.
+- A switch with nothing else to do records packages installed outside bunny
+  in `bunny.lock`, and `bunny status` says so instead of suggesting a fix
+  that didn't apply.
 
 ## [0.1.0] - 2026-11-17
 

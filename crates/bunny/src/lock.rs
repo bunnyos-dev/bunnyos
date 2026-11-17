@@ -189,6 +189,15 @@ pub struct Drift {
 }
 
 impl Drift {
+    /// Only packages the lock doesn't know yet: nothing moved or went
+    /// missing, so recording them is all that's needed.
+    pub fn only_new_packages(&self) -> bool {
+        !self.extra.is_empty()
+            && self.changed.is_empty()
+            && self.missing.is_empty()
+            && self.repos.is_empty()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.changed.is_empty()
             && self.missing.is_empty()
@@ -395,12 +404,30 @@ pub fn ensure(root: &Path, lock_path: &Path) -> Result<Vec<String>> {
             "✓ Created {}: the exact versions installed now. Packages now stay at these versions.",
             change.path.display()
         ));
-    } else if !root.join(PIN_FILE).exists() {
-        write_pins(root, &load(lock_path)?)?;
-        messages.push(format!(
-            "✓ Put back the version pins from {}.",
-            lock_path.display()
-        ));
+    } else {
+        let locked = load(lock_path)?;
+        let drift = compare(&locked, &from_system(root)?);
+        if drift.only_new_packages() {
+            // Installed outside bunny (like bunny itself, from the overlay)
+            // and wanted: nothing to put back, so the lock just records them.
+            relock(root, lock_path, Some(locked))?;
+            let added: Vec<String> = drift
+                .extra
+                .iter()
+                .map(|(name, version)| format!("{name} {version}"))
+                .collect();
+            messages.push(format!(
+                "✓ Recorded in {}: {} (installed outside bunny).",
+                lock_path.display(),
+                added.join(", ")
+            ));
+        } else if !root.join(PIN_FILE).exists() {
+            write_pins(root, &locked)?;
+            messages.push(format!(
+                "✓ Put back the version pins from {}.",
+                lock_path.display()
+            ));
+        }
     }
     Ok(messages)
 }
@@ -697,5 +724,37 @@ mod tests {
         std::fs::remove_file(root.path().join(PIN_FILE)).unwrap();
         assert!(ensure(root.path(), &lock_path).unwrap()[0].contains("Put back"));
         assert!(ensure(root.path(), &lock_path).unwrap().is_empty());
+    }
+
+    #[test]
+    fn ensure_records_packages_installed_outside_bunny() {
+        let root = fake_system();
+        let lock_path = root.path().join("bunny.lock");
+        ensure(root.path(), &lock_path).unwrap();
+        // Installed with emerge, like bunny itself from the overlay.
+        write(
+            root.path(),
+            "var/db/pkg/app-admin/bunny-bin-0.1.0/SLOT",
+            "0\n",
+        );
+        let messages = ensure(root.path(), &lock_path).unwrap();
+        assert!(
+            messages[0].contains("app-admin/bunny-bin 0.1.0"),
+            "{messages:?}"
+        );
+        assert!(load(&lock_path)
+            .unwrap()
+            .packages
+            .contains_key("app-admin/bunny-bin"));
+        assert!(ensure(root.path(), &lock_path).unwrap().is_empty());
+
+        // A version that moved isn't "new": the lock stays as it is.
+        std::fs::rename(
+            root.path().join("var/db/pkg/app-misc/tmux-3.6a"),
+            root.path().join("var/db/pkg/app-misc/tmux-3.7"),
+        )
+        .unwrap();
+        assert!(ensure(root.path(), &lock_path).unwrap().is_empty());
+        assert_eq!(load(&lock_path).unwrap().packages["app-misc/tmux"], "3.6a");
     }
 }

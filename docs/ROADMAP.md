@@ -15,7 +15,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
-| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | 🔶 Part 1 done |
+| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | 🔶 Nearly done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |

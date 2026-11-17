@@ -51,7 +51,9 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
 - **Base:** Gentoo, Portage, the `::gentoo` tree, plus a `::bunny` overlay.
 - **Language:** bunny, the installer and future tools are written in **Rust**.
   bunny talks to Portage through a small Python helper that returns JSON,
-  instead of scraping emerge's text output.
+  instead of scraping emerge's text output. (Version 1 reads emerge's text
+  as a shortcut; the helper is the next item after version 1, with text
+  reading kept as a fallback.)
 - **Init:** OpenRC. systemd may be added later (see "Init systems").
 
 ## The `bunny` tool

@@ -118,7 +118,24 @@ feature PRs now update it as they go.)
       rollback, so `bunny status` is ✓ right after an undo. Update the guide's
       "Your config file after a rollback". **(VM)**
 
-## Upkeep (after the config fix, before phase 6)
+## Talk to Portage directly (after the config fix)
+
+Agreed with the maintainer: version 1 reads emerge's screen text, which breaks
+whenever emerge changes its wording. The design always said bunny should ask
+Portage for structured answers instead.
+
+- [ ] **Portage helper:** a small Python script shipped with bunny that uses
+      Portage's own library (the code emerge uses) and prints JSON: what a
+      switch would install or remove (with versions, prebuilt or compile),
+      and, when it can't, the structured reason (needed USE changes, rules
+      a package's flags must meet, masks, keywords, slot conflicts,
+      blockers). bunny calls it instead of `emerge --pretend` and
+      `--depclean --pretend`, and builds its explanations from the data.
+      Reading emerge's text stays as the fallback (and for `bunny explain`,
+      which is pasted text). Start with the install list and depclean, then
+      move error explanations over one kind at a time. **(VM)**
+
+## Upkeep (after the Portage helper, before phase 6)
 
 Agreed with the maintainer: automate what would otherwise be weekly chores,
 so the maintainer's time goes to testing and decisions.

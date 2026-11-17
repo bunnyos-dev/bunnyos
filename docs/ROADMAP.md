@@ -48,6 +48,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       names before changing anything
 - [x] `bunny search` / `add` / `remove`: search names and descriptions,
       short names and typo suggestions, config edits that keep comments
+- [x] Boot-menu undo can't walk further back: the entry is removed after
+      any rollback, and picking it twice does nothing
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -110,7 +112,7 @@ feature PRs now update it as they go.)
       "Going further" (full `bunny.toml` reference, pins, generations, how bunny
       drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
       experienced Linux user who has never used NixOS.
-- [ ] **Undo restores the config too:** a generation is saved after `bunny
+- [x] **Undo restores the config too:** a generation is saved after `bunny
       add`/`remove` (or your own edit) has already changed `bunny.toml`, so
       after an undo (`bunny rollback` or the boot menu) the config still lists
       the change. Save the config from *before* the change with each
@@ -124,7 +126,8 @@ Agreed with the maintainer: version 1 reads emerge's screen text, which breaks
 whenever emerge changes its wording. The design always said bunny should ask
 Portage for structured answers instead.
 
-- [ ] **Portage helper:** a small Python script shipped with bunny that uses
+- [ ] **Portage helper:** (part 1, the install list, done in #18; next: depclean,
+      then error explanations) a small Python script shipped with bunny that uses
       Portage's own library (the code emerge uses) and prints JSON: what a
       switch would install or remove (with versions, prebuilt or compile),
       and, when it can't, the structured reason (needed USE changes, rules
@@ -140,18 +143,18 @@ Portage for structured answers instead.
 Agreed with the maintainer: automate what would otherwise be weekly chores,
 so the maintainer's time goes to testing and decisions.
 
-- [ ] **Releases:** version tags (`v0.1.0`, …), a `CHANGELOG.md`, and a
+- [x] **Releases:** version tags (`v0.1.0`, …), a `CHANGELOG.md`, and a
       GitHub Actions workflow that builds bunny and attaches it to a GitHub
       Release when a tag is pushed. Write down the release steps in
       `docs/RELEASING.md`. Release when a few features have piled up and have
       run on a real machine for a while, not on every merge.
-- [ ] **Weekly canary check:** a scheduled GitHub Actions job runs bunny in a
+- [x] **Weekly canary check:** a scheduled GitHub Actions job runs bunny in a
       fresh Gentoo container (`gentoo/stage3`) against the latest package
       tree: `bunny import`, `check`, `plan`, and a dry-run install
       (`emerge --pretend`) read by bunny. If anything breaks (emerge changed
       its messages, a profile moved), it opens an issue so the daily session
       picks it up.
-- [ ] **Security advisories in `bunny status`:** a line saying whether any
+- [x] **Security advisories in `bunny status`:** a line saying whether any
       Gentoo security advisory (GLSA, via `glsa-check`) affects installed
       packages, and to run `bunny update` if so.
 - [ ] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
@@ -241,5 +244,5 @@ to-do list. Appearance work comes last and a little at a time.
 ## Known issues / small fixes
 
 
-- `bunny rollback --root <fake>` still reads the real machine's mount info.
-- Kept package.use lines lose their original file name on a second switch.
+- The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
+  `GRUB_DISTRIBUTOR`; part of the boot menu work).

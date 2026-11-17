@@ -53,7 +53,13 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
   bunny talks to Portage through a small Python helper that returns JSON,
   instead of scraping emerge's text output. (Version 1 reads emerge's text
   as a shortcut; the helper is the next item after version 1, with text
-  reading kept as a fallback.)
+  reading kept as a fallback.) **Part 1:** `helper/bunny-portage.py`,
+  embedded in bunny and run as `python3 -c`, answers `plan` with the install
+  list as JSON, using `_emerge`'s `parse_opts` (with EMERGE_DEFAULT_OPTS),
+  `backtrack_depgraph` and the vartree, and FEATURES=getbinpkg handled like
+  emerge does. The quiet install uses it first and falls back to emerge's
+  text (which also explains refusals). The weekly canary checks the helper
+  agrees with emerge.
 - **Init:** OpenRC. systemd may be added later (see "Init systems").
 
 ## The `bunny` tool
@@ -142,6 +148,13 @@ isolated = false       # compile inside a clean container
   them over to the restored system, like `/home`, and `clean` deletes them
   inside-out. The installer creates `/srv` as a plain folder to avoid this.
 - `clean` never removes the generation you're running a copy of.
+- **The config goes back too:** after every successful switch or update (and
+  a switch with nothing to do), bunny copies the config, its lock and the
+  config's path to `/var/lib/bunny/applied/`. That's inside `@`, so each later
+  snapshot carries the config that matches it. Rollback (and the boot-menu
+  hook) copies it back over the config in the restored `@`, only for a config
+  under `/etc` (one in `/home` is on its own subvolume and isn't rolled
+  back).
 - Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
   right after it (a switch with a short summary, or a rollback and its
   target), and `/.snapshots/bunny-state.toml` remembers the last action, so
@@ -305,6 +318,11 @@ commands are only printed.
   - **Last change:** from `bunny-state.toml`, and whether a rollback is
     waiting for a restart.
   - **Undo:** whether `/.snapshots` exists, and how many generations.
+  - **Security:** Gentoo security advisories affecting the system, from
+    `glsa-check --nocolor --list affected` (gentoolkit), lines like
+    `202501-03 [N] Title ( cat/pkg )`; `[A]`/`[U]` are skipped. Not
+    installed: a neutral suggestion to add gentoolkit. Only on the real
+    system.
   - **Updates:** when the Gentoo tree was last synced (newest of
     `metadata/timestamp.chk` and `.git/FETCH_HEAD`); older than 7 days is a ⚠.
     It doesn't run emerge to count pending updates, to stay instant.

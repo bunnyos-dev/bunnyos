@@ -14,6 +14,12 @@ bunny keeps an eye on:
 | **Last change** | (just information) | If it says to restart after a rollback, run `sudo reboot`. |
 | **Undo** | Generations are being saved. | Your disk isn't set up for undo; see [The disk layout](../reference/disk-layout.md). |
 | **Updates** | The package list was synced in the last week. | Run [`bunny update`](update.md). |
+| **Security** | No Gentoo security advisory affects your packages. | Run [`bunny update`](update.md) to get the fixes. `glsa-check --dump <number>` shows an advisory in full. |
+
+The **Security** line needs `glsa-check`, from Gentoo's gentoolkit. If it isn't
+installed, status says so; `bunny add app-portage/gentoolkit` turns it on.
+Advisories arrive with the package list, so it's only as current as your last
+`bunny update`.
 
 If you see **"Also starting at boot, not in your config"**, a service was
 turned on outside bunny. Add it to `services` in `bunny.toml` to keep it, or

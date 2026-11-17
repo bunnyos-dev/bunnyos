@@ -1,0 +1,75 @@
+name: Release
+
+# Pushing a tag like v0.1.0 builds bunny and publishes a GitHub Release with
+# the binary and the notes from CHANGELOG.md. On pull requests that change
+# this file, and when run by hand, it builds everything without publishing.
+# Steps for the maintainer: docs/RELEASING.md.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "tools/release-notes.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install the musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Work out the version
+        id: version
+        run: |
+          crate="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="bunny") | .version')"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$crate" ]; then
+              echo "::error::The tag says $tag but Cargo.toml says $crate. Update Cargo.toml (docs/RELEASING.md), then tag again."
+              exit 1
+            fi
+            echo "version=$tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=Unreleased" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Release notes from CHANGELOG.md
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            sh tools/release-notes.sh "${{ steps.version.outputs.version }}" > notes.md
+          else
+            sh tools/release-notes.sh Unreleased > notes.md || echo "(Nothing listed under Unreleased yet.)" > notes.md
+          fi
+      - name: Build (static, runs on any x86-64 Linux)
+        run: |
+          cargo build --release --locked --target x86_64-unknown-linux-musl
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/bunny dist/bunny-x86_64-linux
+          (cd dist && sha256sum bunny-x86_64-linux > bunny-x86_64-linux.sha256)
+          ./dist/bunny-x86_64-linux --version
+      - name: Keep the build (when not releasing)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunny-release-preview
+          path: |
+            dist/
+            notes.md
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "bunny ${{ steps.version.outputs.version }}" \
+            --notes-file notes.md \
+            dist/bunny-x86_64-linux dist/bunny-x86_64-linux.sha256

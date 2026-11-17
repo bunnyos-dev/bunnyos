@@ -358,12 +358,9 @@ pub fn switch(
         if !ok {
             bail!("{}", emerge_failed(&explained, &outcome));
         }
-        outcome.tips.extend(
-            explained
-                .iter()
-                .filter(|e| e.severity != explain::Severity::Problem)
-                .map(|e| e.render()),
-        );
+        outcome
+            .tips
+            .extend(explained.iter().filter(|e| is_tip(e)).map(|e| e.render()));
     }
 
     // 5. Admin rights. After the install (so the tool and its checker exist)
@@ -696,49 +693,62 @@ fn install_quietly(
 ) -> Result<()> {
     let update = ["emerge", "--update", "--deep", "--newuse", "--color=n"];
 
-    println!("\nAsking emerge what it needs to do…");
+    println!("\nAsking Portage what it needs to do…");
     let mut pretend = cmd(&update);
     pretend.insert(1, "--pretend".into());
     pretend.push("@world".into());
-    let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
-    // --color=n should mean no color codes, but strip any that slip through:
-    // an invisible code breaks reading the message.
-    let raw = output;
-    let output = explain::strip_ansi(&raw);
-    if !ok {
-        discard(root, runner, outcome)?;
-        let log = save_log(
-            root,
-            &opts.stamp,
-            "emerge",
-            &format!("$ {}\n{raw}", pretend.join(" ")),
-        );
-        let explained = explain::explain(&output);
-        let mut text = String::from(
-            "emerge found a problem before installing anything, so nothing was changed.\n",
-        );
-        if explained.is_empty() {
-            text.push_str("\nbunny doesn't recognise emerge's message yet. The end of it:\n\n");
-            text.push_str(&crate::emerge::tail(&output, 20));
-            text.push_str(
-                "\n\nPaste the full message into `bunny explain`, or run with --verbose to see it all.\n\
-                 If you share it, bunny can learn to explain it.",
-            );
-        } else {
-            text.push_str("\nHere's what happened:\n\n");
-            for e in &explained {
-                text.push_str(&e.render());
-                text.push('\n');
+    // Portage's own answer, as data. emerge's screen text only when that
+    // isn't available (and to explain a refusal).
+    let (list, dry_run_log) = match crate::helper::plan(runner) {
+        Some(list) => (
+            list,
+            "(the install list came from bunny's Portage helper)\n".to_string(),
+        ),
+        None => {
+            let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
+            // --color=n should mean no color codes, but strip any that slip through:
+            // an invisible code breaks reading the message.
+            let raw = output;
+            let output = explain::strip_ansi(&raw);
+            if !ok {
+                discard(root, runner, outcome)?;
+                let log = save_log(
+                    root,
+                    &opts.stamp,
+                    "emerge",
+                    &format!("$ {}\n{raw}", pretend.join(" ")),
+                );
+                let explained = explain::explain(&output);
+                let mut text = String::from(
+                    "emerge found a problem before installing anything, so nothing was changed.\n",
+                );
+                if explained.is_empty() {
+                    text.push_str(
+                        "\nbunny doesn't recognise emerge's message yet. The end of it:\n\n",
+                    );
+                    text.push_str(&crate::emerge::tail(&output, 20));
+                    text.push_str(
+                        "\n\nPaste the full message into `bunny explain`, or run with --verbose to see it all.\n\
+                         If you share it, bunny can learn to explain it.",
+                    );
+                } else {
+                    text.push_str("\nHere's what happened:\n\n");
+                    for e in &explained {
+                        text.push_str(&e.render());
+                        text.push('\n');
+                    }
+                    text.push_str("Fix the problem, then run the same bunny command again.");
+                }
+                if let Some(log) = log {
+                    text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
+                }
+                return Err(Refused(text).into());
             }
-            text.push_str("Fix the problem, then run the same bunny command again.");
-        }
-        if let Some(log) = log {
-            text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
-        }
-        return Err(Refused(text).into());
-    }
 
-    let list = crate::emerge::parse_merge_list(&output);
+            let list = crate::emerge::parse_merge_list(&output);
+            (list, format!("$ {}\n{output}", pretend.join(" ")))
+        }
+    };
     if list.is_empty() {
         println!("emerge has nothing to install.");
         return Ok(());
@@ -772,11 +782,7 @@ fn install_quietly(
     let (ok, install_output) = runner.run_quiet(&install, &mut on_line)?;
     let install_output = explain::strip_ansi(&install_output);
     progress.clear();
-    let log_text = format!(
-        "$ {}\n{output}\n$ {}\n{install_output}",
-        pretend.join(" "),
-        install.join(" ")
-    );
+    let log_text = format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" "));
     outcome.log = save_log(root, &opts.stamp, "emerge", &log_text);
 
     let explained = explain::explain(&install_output);
@@ -802,12 +808,9 @@ fn install_quietly(
         if list.len() == 1 { "" } else { "s" }
     );
     outcome.messages = crate::emerge::parse_messages(&install_output);
-    outcome.tips.extend(
-        explained
-            .iter()
-            .filter(|e| e.severity != explain::Severity::Problem)
-            .map(|e| e.render()),
-    );
+    outcome
+        .tips
+        .extend(explained.iter().filter(|e| is_tip(e)).map(|e| e.render()));
     Ok(())
 }
 
@@ -932,12 +935,20 @@ pub fn foreign_package_use_files(root: &Path) -> Vec<String> {
     names
 }
 
+/// emerge's notices worth passing on after a switch. Its reminder to remove
+/// unused packages isn't: bunny just did that.
+fn is_tip(e: &explain::Explanation) -> bool {
+    e.severity != explain::Severity::Problem && !e.title.starts_with(explain::DEPCLEAN_REMINDER)
+}
+
 /// Moves the user's package.use files into the backup folder and replaces
 /// them with bunny's file. Nothing is lost: the flags are in the config, and
 /// lines bunny can't manage yet are kept word for word in their own file.
 fn adopt_package_use(config: &Config, root: &Path, backup: &Path) -> Result<()> {
     let kept = import::read_package_use(root)?.skipped;
     let dir = portage::package_use_dir(root);
+    // Lines already in bunny's kept file remember where they first came from.
+    let origins = kept_origins(&dir.join(portage::KEPT_USE_FILE));
     let backup_dir = backup.join("package.use");
 
     if dir.is_file() {
@@ -967,7 +978,18 @@ fn adopt_package_use(config: &Config, root: &Path, backup: &Path) -> Result<()> 
              # They work as before. Edit them here.\n",
         );
         for (file, line) in &kept {
-            text.push_str(&format!("# from {}\n{line}\n", file.display()));
+            let from = if file
+                .file_name()
+                .is_some_and(|n| n == portage::KEPT_USE_FILE)
+            {
+                origins
+                    .get(line.as_str())
+                    .cloned()
+                    .unwrap_or_else(|| file.display().to_string())
+            } else {
+                file.display().to_string()
+            };
+            text.push_str(&format!("# from {from}\n{line}\n"));
         }
         std::fs::write(&kept_path, text)?;
     }
@@ -978,6 +1000,24 @@ fn adopt_package_use(config: &Config, root: &Path, backup: &Path) -> Result<()> 
     )
     .context("Couldn't write bunny's package.use file")?;
     Ok(())
+}
+
+/// In bunny's kept file, each line follows a "# from <file>" comment: which
+/// file it first came from.
+fn kept_origins(path: &Path) -> std::collections::HashMap<String, String> {
+    let mut origins = std::collections::HashMap::new();
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let mut from: Option<&str> = None;
+    for line in text.lines() {
+        if let Some(f) = line.strip_prefix("# from ") {
+            from = Some(f);
+        } else if !line.starts_with('#') && !line.trim().is_empty() {
+            if let Some(f) = from.take() {
+                origins.insert(line.to_string(), f.to_string());
+            }
+        }
+    }
+    origins
 }
 
 #[cfg(test)]
@@ -1081,8 +1121,31 @@ mod tests {
             ..Default::default()
         };
         let outcome = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap();
-        assert_eq!(outcome.tips.len(), 2, "{:#?}", outcome.tips);
+        // The news is passed on; emerge's "remove unused packages" reminder
+        // isn't, since bunny just did that.
+        assert_eq!(outcome.tips.len(), 1, "{:#?}", outcome.tips);
         assert!(outcome.tips[0].contains("26 announcements"));
+    }
+
+    #[test]
+    fn kept_lines_remember_their_file_on_later_switches() {
+        let root = fake_system();
+        let r = root.path();
+        let use_dir = r.join(portage::PACKAGE_USE_DIR);
+        std::fs::create_dir_all(&use_dir).unwrap();
+        std::fs::write(use_dir.join("ranges"), "<dev-lang/rust-2 nightly\n").unwrap();
+        let config = Config::parse(CONFIG).unwrap();
+        for _ in 0..2 {
+            let plan = plan::make(&config, r).unwrap();
+            let mut runner = Recorder::default();
+            switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+        }
+        let kept = std::fs::read_to_string(use_dir.join(portage::KEPT_USE_FILE)).unwrap();
+        assert!(
+            kept.contains("# from /etc/portage/package.use/ranges\n<dev-lang/rust-2 nightly"),
+            "{kept}"
+        );
+        assert!(!kept.contains(portage::KEPT_USE_FILE), "{kept}");
     }
 
     #[test]

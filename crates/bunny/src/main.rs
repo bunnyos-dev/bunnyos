@@ -1,5 +1,6 @@
 //! bunny: declarative, reproducible system management for BunnyOS.
 
+mod applied;
 mod apply;
 mod boot;
 mod config;
@@ -7,6 +8,8 @@ mod diff;
 mod edit;
 mod emerge;
 mod explain;
+mod glsa;
+mod helper;
 mod import;
 mod init;
 mod lock;
@@ -80,6 +83,12 @@ enum Command {
         /// System root to compare against (for testing against another system)
         #[arg(long, default_value = "/")]
         root: PathBuf,
+    },
+    /// Run bunny's Portage helper directly and print its JSON (for checks and debugging)
+    #[command(hide = true)]
+    Helper {
+        /// What to ask, e.g. `plan app-misc/tmux`
+        args: Vec<String>,
     },
     /// Show your config and your system side by side, and how to fix each difference (changes nothing)
     Diff {
@@ -258,6 +267,19 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Diff { config, root } => diff_cmd(&config, &root),
+        Command::Helper { args } => {
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            let cmd = helper::command(&args);
+            let status = std::process::Command::new(&cmd[0])
+                .args(&cmd[1..])
+                .status()
+                .context("Couldn't start python3, which the Portage helper needs")?;
+            Ok(if status.success() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            })
+        }
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
@@ -371,6 +393,7 @@ fn switch_inner(
         for message in lock::ensure(root, &lock_path)? {
             println!("{message}");
         }
+        keep_applied(root, config);
         return Ok(Switched::NothingToDo);
     }
 
@@ -449,8 +472,20 @@ fn switch_inner(
     }
     report_lock_change(&change);
     print_messages(&outcome);
-    print_tips(&outcome.tips);
+    print_tips(root, &outcome.tips);
+    keep_applied(root, config);
     Ok(Switched::Applied)
+}
+
+/// Keeps a copy of the config that now matches the system, so undoing a
+/// later change can put the config back too.
+fn keep_applied(root: &Path, config: &Path) {
+    if let Err(e) = applied::save(root, config) {
+        eprintln!(
+            "  Note: couldn't keep a copy of the config ({e:#}). Undoing a later change\n  \
+             will restore the system, but not bunny.toml."
+        );
+    }
 }
 
 /// Messages packages left after installing, a few lines each, with the rest
@@ -481,7 +516,8 @@ fn print_messages(outcome: &apply::Outcome) {
     }
 }
 
-fn print_tips(tips: &[String]) {
+fn print_tips(root: &Path, tips: &[String]) {
+    let tips = fresh_tips(root, tips);
     if tips.is_empty() {
         return;
     }
@@ -491,6 +527,28 @@ fn print_tips(tips: &[String]) {
             println!("  {line}");
         }
     }
+}
+
+/// The unread-news tip repeats on every switch until the news is read. Show
+/// it when the number of unread items changes, not every time.
+fn fresh_tips(root: &Path, tips: &[String]) -> Vec<String> {
+    let seen_file = root.join("var/lib/bunny/news-seen");
+    let seen = std::fs::read_to_string(&seen_file).unwrap_or_default();
+    let mut out = Vec::new();
+    for tip in tips {
+        let first = tip.lines().next().unwrap_or("");
+        if first.contains("announcements you haven't read")
+            || first.contains("announcement you haven't read")
+        {
+            if seen.trim() == first.trim() {
+                continue;
+            }
+            let _ = std::fs::create_dir_all(root.join("var/lib/bunny"));
+            let _ = std::fs::write(&seen_file, format!("{}\n", first.trim()));
+        }
+        out.push(tip.clone());
+    }
+    out
 }
 
 fn runner_for(real_system: bool) -> Box<dyn apply::Runner> {
@@ -592,7 +650,8 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
     }
     report_lock_change(&change);
     print_messages(&outcome);
-    print_tips(&outcome.tips);
+    print_tips(root, &outcome.tips);
+    keep_applied(root, config);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -822,9 +881,18 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         .map(|g| g.when())
         .unwrap_or_default();
 
-    // Check this before asking anything.
-    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo")
-        .context("Couldn't read the list of mounted filesystems")?;
+    // Check this before asking anything. A test root brings its own.
+    let mountinfo_path = if root == Path::new("/") {
+        PathBuf::from("/proc/self/mountinfo")
+    } else {
+        root.join("proc/self/mountinfo")
+    };
+    let mountinfo = std::fs::read_to_string(&mountinfo_path).with_context(|| {
+        format!(
+            "Couldn't read the list of mounted filesystems ({})",
+            mountinfo_path.display()
+        )
+    })?;
     rollback::root_mount(&mountinfo)?;
     if !gens.iter().any(|g| g.name == name) {
         anyhow::bail!(
@@ -862,6 +930,18 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         .map(|i| (i + 1).to_string())
         .unwrap_or_else(|| outcome.before.clone());
     println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
+    if let Some(config) = &outcome.config_restored {
+        println!(
+            "  {} is put back as it was then, so it matches the restored system.",
+            config.display()
+        );
+    }
+    if outcome.undo_entry_dropped {
+        println!(
+            "  The boot menu's \"undo the last change\" entry is gone until your next change,\n  \
+             so picking it can't take you further back by accident."
+        );
+    }
     if !outcome.carried.is_empty() {
         println!(
             "  Kept as they are (separate subvolumes, like /home): {}",
@@ -1271,6 +1351,7 @@ fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    use super::fresh_tips;
     use super::{parse_answer, Default};
 
     #[test]
@@ -1288,5 +1369,18 @@ mod tests {
     fn enter_means_the_default() {
         assert_eq!(parse_answer("\n", Default::Yes), Some(true));
         assert_eq!(parse_answer("\n", Default::No), Some(false));
+    }
+
+    #[test]
+    fn unread_news_tip_shows_when_the_count_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let news = |n: u32| format!("ℹ Gentoo has {n} announcements you haven't read.\n  Tip: …");
+        let other = "ℹ Something else".to_string();
+        let tips = vec![news(26), other.clone()];
+        assert_eq!(fresh_tips(root.path(), &tips).len(), 2);
+        // Same count again: only the other tip.
+        assert_eq!(fresh_tips(root.path(), &tips), vec![other.clone()]);
+        // A new item arrived: shown again.
+        assert_eq!(fresh_tips(root.path(), &[news(27)]).len(), 1);
     }
 }

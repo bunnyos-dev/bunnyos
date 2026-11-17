@@ -11,6 +11,7 @@
 
 # Everyday tasks
 
+- [Check that everything is in order](tasks/status.md)
 - [Install a program](tasks/install.md)
 - [Remove a program](tasks/remove.md)
 - [Update your system](tasks/update.md)

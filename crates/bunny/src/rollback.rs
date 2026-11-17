@@ -177,8 +177,15 @@ pub fn rollback(
     let top: PathBuf = root.join("run/bunny/top");
     std::fs::create_dir_all(&top).context("Couldn't create a temporary mount point")?;
     let t = |p: &str| top.join(p).to_string_lossy().into_owned();
+    // btrfs's own "Create snapshot of …" lines aren't shown; on failure its
+    // words are, so the error still makes sense.
     let run = |runner: &mut dyn Runner, parts: &[&str]| -> Result<bool> {
-        runner.run(&parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        let cmd: Vec<String> = parts.iter().map(|s| s.to_string()).collect();
+        let (ok, said) = runner.run_quiet(&cmd, &mut |_| {})?;
+        if !ok && !said.trim().is_empty() {
+            eprintln!("  {} said:\n{}", parts[0], crate::emerge::tail(&said, 6));
+        }
+        Ok(ok)
     };
 
     let top_str = top.to_string_lossy().into_owned();
@@ -330,12 +337,19 @@ pub fn clean(
 ) -> Result<Vec<String>> {
     let mut failed = Vec::new();
     let delete = |runner: &mut dyn Runner, path: PathBuf| -> Result<bool> {
-        runner.run(&[
-            "btrfs".to_string(),
-            "subvolume".to_string(),
-            "delete".to_string(),
-            path.to_string_lossy().into_owned(),
-        ])
+        let (ok, said) = runner.run_quiet(
+            &[
+                "btrfs".to_string(),
+                "subvolume".to_string(),
+                "delete".to_string(),
+                path.to_string_lossy().into_owned(),
+            ],
+            &mut |_| {},
+        )?;
+        if !ok && !said.trim().is_empty() {
+            eprintln!("  btrfs said:\n{}", crate::emerge::tail(&said, 6));
+        }
+        Ok(ok)
     };
     for name in &plan.generations {
         if delete(runner, top.join(SNAPSHOTS_SUBVOL).join(name))? {

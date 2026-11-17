@@ -7,6 +7,7 @@ mod diff;
 mod edit;
 mod emerge;
 mod explain;
+mod glsa;
 mod import;
 mod init;
 mod lock;

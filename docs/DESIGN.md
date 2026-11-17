@@ -305,6 +305,11 @@ commands are only printed.
   - **Last change:** from `bunny-state.toml`, and whether a rollback is
     waiting for a restart.
   - **Undo:** whether `/.snapshots` exists, and how many generations.
+  - **Security:** Gentoo security advisories affecting the system, from
+    `glsa-check --nocolor --list affected` (gentoolkit), lines like
+    `202501-03 [N] Title ( cat/pkg )`; `[A]`/`[U]` are skipped. Not
+    installed: a neutral suggestion to add gentoolkit. Only on the real
+    system.
   - **Updates:** when the Gentoo tree was last synced (newest of
     `metadata/timestamp.chk` and `.git/FETCH_HEAD`); older than 7 days is a ⚠.
     It doesn't run emerge to count pending updates, to stay instant.

@@ -54,6 +54,8 @@ pub struct Status {
     pub generations: Option<Vec<rollback::Generation>>,
     /// When the Gentoo package tree was last synced (seconds since 1970).
     pub tree_synced: Option<i64>,
+    /// Gentoo security advisories; `None` when not checked (a test root).
+    pub security: Option<crate::glsa::Check>,
     /// Now (seconds since 1970), passed in so tests are repeatable.
     pub now: i64,
 }
@@ -148,6 +150,8 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
         reboot_pending,
         generations,
         tree_synced: tree_synced(root),
+        // glsa-check reads the real system only.
+        security: (root == Path::new("/")).then(crate::glsa::check),
         now,
     }
 }
@@ -173,6 +177,7 @@ impl Status {
             && self.generations.is_some()
             && !self.reboot_pending
             && !self.tree_stale()
+            && !matches!(&self.security, Some(crate::glsa::Check::Done(found)) if !found.is_empty())
     }
 
     fn tree_stale(&self) -> bool {
@@ -385,6 +390,65 @@ impl Status {
             }
         }
 
+        // Security
+        match &self.security {
+            None => {}
+            Some(crate::glsa::Check::Done(found)) if found.is_empty() => line(
+                &mut out,
+                "✓",
+                "Security",
+                "no Gentoo security advisories affect this system",
+            ),
+            Some(crate::glsa::Check::Done(found)) => {
+                line(
+                    &mut out,
+                    "⚠",
+                    "Security",
+                    &format!(
+                        "{} Gentoo security {} affect{} this system",
+                        found.len(),
+                        if found.len() == 1 {
+                            "advisory"
+                        } else {
+                            "advisories"
+                        },
+                        if found.len() == 1 { "s" } else { "" }
+                    ),
+                );
+                const SHOWN: usize = 5;
+                for a in found.iter().take(SHOWN) {
+                    more(&mut out, &format!("  {}  {}", a.id, a.title));
+                }
+                if found.len() > SHOWN {
+                    more(&mut out, &format!("  … and {} more", found.len() - SHOWN));
+                }
+                more(
+                    &mut out,
+                    "Run `bunny update` to get the fixes. Details: glsa-check --dump <number>",
+                );
+            }
+            Some(crate::glsa::Check::NotInstalled) => {
+                line(
+                    &mut out,
+                    "·",
+                    "Security",
+                    "not checked: glsa-check isn't installed",
+                );
+                more(
+                    &mut out,
+                    "To turn this on: bunny add app-portage/gentoolkit",
+                );
+            }
+            Some(crate::glsa::Check::Failed(why)) => {
+                line(
+                    &mut out,
+                    "·",
+                    "Security",
+                    &format!("couldn't check ({why})"),
+                );
+            }
+        }
+
         out.push('\n');
         out.push_str(if self.all_good() {
             "Everything is in order.\n"
@@ -482,6 +546,7 @@ mod tests {
                 name: "bunny-20261117-091500".into(),
             }]),
             tree_synced: Some(NOW - 2 * 86_400),
+            security: Some(crate::glsa::Check::Done(vec![])),
             now: NOW,
         }
     }
@@ -604,5 +669,37 @@ mod tests {
         assert_eq!(s.generations.as_ref().map(Vec::len), Some(1));
         assert!(s.tree_synced.is_some());
         assert!(!s.reboot_pending);
+    }
+
+    #[test]
+    fn security_advisories_need_an_update() {
+        let s = good();
+        assert!(s
+            .render()
+            .contains("✓ Security      no Gentoo security advisories affect this system"));
+        let mut s = good();
+        s.security = Some(crate::glsa::Check::Done(vec![crate::glsa::Advisory {
+            id: "202501-03".into(),
+            title: "OpenSSL: Multiple vulnerabilities".into(),
+            packages: vec!["dev-libs/openssl".into()],
+        }]));
+        assert!(!s.all_good());
+        let text = s.render();
+        assert!(
+            text.contains("⚠ Security      1 Gentoo security advisory affects this system"),
+            "{text}"
+        );
+        assert!(text.contains("202501-03  OpenSSL: Multiple vulnerabilities"));
+        assert!(text.contains("Run `bunny update` to get the fixes."));
+    }
+
+    #[test]
+    fn missing_glsa_check_is_a_suggestion_not_a_problem() {
+        let mut s = good();
+        s.security = Some(crate::glsa::Check::NotInstalled);
+        assert!(s.all_good());
+        assert!(s.render().contains("bunny add app-portage/gentoolkit"));
+        s.security = None;
+        assert!(!s.render().contains("Security"));
     }
 }

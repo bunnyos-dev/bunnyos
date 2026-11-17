@@ -27,12 +27,23 @@ pub enum Action {
 }
 
 /// Splits `cat/pkg-1.2.3-r1::gentoo` into (`cat/pkg`, `1.2.3-r1`).
+/// Prebuilt packages from a binary host can carry a build number at the end
+/// (`app-editors/vim-9.2.1202-6`); it's dropped, since it isn't the version.
 fn split_cpv(cpv: &str) -> (String, String) {
+    use crate::import::strip_version;
     let cpv = cpv.split("::").next().unwrap_or(cpv);
-    match crate::import::strip_version(cpv) {
-        Some(name) => (name.to_string(), cpv[name.len() + 1..].to_string()),
-        None => (cpv.to_string(), String::new()),
+    let Some(mut name) = strip_version(cpv) else {
+        return (cpv.to_string(), String::new());
+    };
+    // If what's left still ends in a version, the last part was a build number.
+    if let Some(shorter) = strip_version(name) {
+        if cpv[name.len() + 1..].bytes().all(|b| b.is_ascii_digit()) {
+            let version = name[shorter.len() + 1..].to_string();
+            name = shorter;
+            return (name.to_string(), version);
+        }
     }
+    (name.to_string(), cpv[name.len() + 1..].to_string())
 }
 
 /// The packages from `emerge --pretend` output (lines like
@@ -411,5 +422,34 @@ Number to remove:     2
     fn tail_skips_blank_lines() {
         assert_eq!(tail("a\n\nb\nc\n\n", 2), "b\nc");
         assert_eq!(tail("a\n", 5), "a");
+    }
+
+    #[test]
+    fn build_numbers_from_the_binary_host_are_not_versions() {
+        let list = parse_merge_list(
+            "[binary   N     ] app-editors/vim-9.2.1202-6::gentoo\n\
+             [binary   N     ] app-eselect/eselect-vi-20221122-1::gentoo\n\
+             [binary   N     ] media-fonts/font-adobe-100dpi-1.0.4-r2-3::gentoo\n\
+             [ebuild   N     ] dev-util/xxd-2025.08.24-r1::gentoo\n",
+        );
+        let pairs: Vec<(&str, &str)> = list
+            .iter()
+            .map(|m| (m.name.as_str(), m.version.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                ("app-editors/vim", "9.2.1202"),
+                ("app-eselect/eselect-vi", "20221122"),
+                ("media-fonts/font-adobe-100dpi", "1.0.4-r2"),
+                ("dev-util/xxd", "2025.08.24-r1"),
+            ]
+        );
+        let text = render_merge_list(&list[..1], &["app-editors/vim".into()]);
+        assert!(!text.contains("needed by another"), "{text}");
+        assert_eq!(
+            parse_progress(">>> Emerging binary (6 of 6) app-editors/vim-9.2.1202-6::gentoo"),
+            Some((6, 6, "app-editors/vim".into(), "9.2.1202".into(), true))
+        );
     }
 }

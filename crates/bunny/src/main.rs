@@ -449,7 +449,7 @@ fn switch_inner(
     }
     report_lock_change(&change);
     print_messages(&outcome);
-    print_tips(&outcome.tips);
+    print_tips(root, &outcome.tips);
     Ok(Switched::Applied)
 }
 
@@ -481,7 +481,8 @@ fn print_messages(outcome: &apply::Outcome) {
     }
 }
 
-fn print_tips(tips: &[String]) {
+fn print_tips(root: &Path, tips: &[String]) {
+    let tips = fresh_tips(root, tips);
     if tips.is_empty() {
         return;
     }
@@ -491,6 +492,28 @@ fn print_tips(tips: &[String]) {
             println!("  {line}");
         }
     }
+}
+
+/// The unread-news tip repeats on every switch until the news is read. Show
+/// it when the number of unread items changes, not every time.
+fn fresh_tips(root: &Path, tips: &[String]) -> Vec<String> {
+    let seen_file = root.join("var/lib/bunny/news-seen");
+    let seen = std::fs::read_to_string(&seen_file).unwrap_or_default();
+    let mut out = Vec::new();
+    for tip in tips {
+        let first = tip.lines().next().unwrap_or("");
+        if first.contains("announcements you haven't read")
+            || first.contains("announcement you haven't read")
+        {
+            if seen.trim() == first.trim() {
+                continue;
+            }
+            let _ = std::fs::create_dir_all(root.join("var/lib/bunny"));
+            let _ = std::fs::write(&seen_file, format!("{}\n", first.trim()));
+        }
+        out.push(tip.clone());
+    }
+    out
 }
 
 fn runner_for(real_system: bool) -> Box<dyn apply::Runner> {
@@ -592,7 +615,7 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
     }
     report_lock_change(&change);
     print_messages(&outcome);
-    print_tips(&outcome.tips);
+    print_tips(root, &outcome.tips);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -822,9 +845,18 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         .map(|g| g.when())
         .unwrap_or_default();
 
-    // Check this before asking anything.
-    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo")
-        .context("Couldn't read the list of mounted filesystems")?;
+    // Check this before asking anything. A test root brings its own.
+    let mountinfo_path = if root == Path::new("/") {
+        PathBuf::from("/proc/self/mountinfo")
+    } else {
+        root.join("proc/self/mountinfo")
+    };
+    let mountinfo = std::fs::read_to_string(&mountinfo_path).with_context(|| {
+        format!(
+            "Couldn't read the list of mounted filesystems ({})",
+            mountinfo_path.display()
+        )
+    })?;
     rollback::root_mount(&mountinfo)?;
     if !gens.iter().any(|g| g.name == name) {
         anyhow::bail!(
@@ -1271,6 +1303,7 @@ fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    use super::fresh_tips;
     use super::{parse_answer, Default};
 
     #[test]
@@ -1288,5 +1321,18 @@ mod tests {
     fn enter_means_the_default() {
         assert_eq!(parse_answer("\n", Default::Yes), Some(true));
         assert_eq!(parse_answer("\n", Default::No), Some(false));
+    }
+
+    #[test]
+    fn unread_news_tip_shows_when_the_count_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let news = |n: u32| format!("ℹ Gentoo has {n} announcements you haven't read.\n  Tip: …");
+        let other = "ℹ Something else".to_string();
+        let tips = vec![news(26), other.clone()];
+        assert_eq!(fresh_tips(root.path(), &tips).len(), 2);
+        // Same count again: only the other tip.
+        assert_eq!(fresh_tips(root.path(), &tips), vec![other.clone()]);
+        // A new item arrived: shown again.
+        assert_eq!(fresh_tips(root.path(), &[news(27)]).len(), 1);
     }
 }

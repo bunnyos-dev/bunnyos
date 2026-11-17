@@ -31,6 +31,18 @@ so the kernel goes back too.
 
 If step 4 fails, the old `@` is moved back and nothing changes.
 
+## The config goes back too
+
+A generation is saved right before a change, but by then `bunny.toml` has
+usually changed already (`bunny add` edits it first; so do you). So after each
+successful switch, bunny keeps a copy of the config and lock it just applied in
+`/var/lib/bunny/applied/`. That folder is part of the system, so every later
+generation carries the config that matches it.
+
+When you roll back (with `bunny rollback` or from the boot menu), that copy is
+put back where your config lives, as long as that's under `/etc`. A config in
+`/home` is on its own subvolume and is left alone.
+
 ## What's never rolled back
 
 Anything on its own subvolume (see [The disk layout](disk-layout.md)):
@@ -65,6 +77,15 @@ With `[boot] undo_entry = true`:
   `@replaced-<time>`, and makes a copy of the generation the new `@`. If any
   step fails, the current system is left (or put back) as it was, and it
   starts normally.
+- `/boot/grub` is part of the system, so the restored system brings back its
+  own, older `custom.cfg`, whose entry would undo one change further back.
+  Both `bunny rollback` and the boot-menu undo remove bunny's entry from the
+  restored system (other entries in the file stay). The next switch adds a
+  fresh one.
+- If `/.snapshots/bunny-state.toml` says the last thing was a rollback to the
+  same generation the entry points at, the step does nothing and the system
+  starts normally. That covers picking the entry twice, or GRUB remembering
+  the last choice.
 
 Limits:
 

@@ -32,6 +32,7 @@ and the full to-do list are in the [roadmap](docs/ROADMAP.md).
 
 ## Documentation
 
+- **[Changelog](CHANGELOG.md)** and **[how releases work](docs/RELEASING.md)**.
 - **[The BunnyOS Guide](https://bunnyos-dev.github.io/bunnyos/)**: how to use
   bunny, from first steps to every setting. Source in `docs/guide/`.
 

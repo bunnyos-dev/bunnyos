@@ -52,12 +52,17 @@ Changed your mind? After rebooting, run: bunny rollback 3
 
 ## Your config file after a rollback
 
-Rollback restores the **system**. If your `bunny.toml` lives somewhere outside
-the system (like your home folder), it isn't rolled back. Run `bunny plan`
-afterwards: it shows any difference between the config and the restored
-system, and you can either edit the config or `bunny switch` again. `bunny
-diff` shows the same differences side by side, with the edits that would
-make the config match.
+Your `bunny.toml` goes back too, to the version that matched the system you
+went back to. If you'd just run `bunny add htop` and then undid it, htop is gone
+from the system **and** from `bunny.toml`, so `bunny status` is all ✓ right away.
+
+This works for a config in `/etc` (the default, `/etc/bunny/bunny.toml`). A
+config kept somewhere else, like your home folder, isn't touched. Run `bunny
+diff` afterwards to see where it and the restored system differ, with the edits
+that would make them match.
+
+It also only works for generations saved after the switch that turned this on
+(bunny keeps a copy of each config it applies, starting from that switch).
 
 ## If the system doesn't start at all
 
@@ -79,6 +84,12 @@ If a change leaves the system unable to start, restart, pick that entry, and
 the system starts as it was before the change. It's the same as `bunny
 rollback`, done while starting up: the broken system is saved too, so you can
 go back to it with `bunny rollback list`.
+
+After you've used it, the entry is gone until your next change, so you
+can't go further back by picking it again. (The same happens after `bunny
+rollback`.) To move between saved versions after that, use `bunny rollback
+list`. If the entry is somehow picked twice for the same change, the second
+time does nothing and the computer starts normally.
 
 If the boot menu doesn't show up when you start the computer, hold **Shift**
 (or press **Esc**) while it starts.

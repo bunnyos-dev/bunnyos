@@ -884,6 +884,12 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
             config.display()
         );
     }
+    if outcome.undo_entry_dropped {
+        println!(
+            "  The boot menu's \"undo the last change\" entry is gone until your next change,\n  \
+             so picking it can't take you further back by accident."
+        );
+    }
     if !outcome.carried.is_empty() {
         println!(
             "  Kept as they are (separate subvolumes, like /home): {}",

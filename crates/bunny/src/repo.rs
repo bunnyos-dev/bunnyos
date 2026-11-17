@@ -42,7 +42,8 @@ pub fn all(root: &Path) -> Vec<Package> {
         .collect()
 }
 
-/// `metadata/md5-cache/<category>/<name>-<version>` files have a `DESC=` line.
+/// `metadata/md5-cache/<category>/<name>-<version>` files have a
+/// `DESCRIPTION=` line.
 fn from_cache(cache: &Path, found: &mut BTreeMap<String, Option<String>>) {
     for category in std::fs::read_dir(cache).into_iter().flatten().flatten() {
         let cat = category.file_name().to_string_lossy().into_owned();
@@ -60,7 +61,7 @@ fn from_cache(cache: &Path, found: &mut BTreeMap<String, Option<String>>) {
             if slot.is_none() {
                 *slot = std::fs::read_to_string(entry.path()).ok().and_then(|text| {
                     text.lines()
-                        .find_map(|l| l.strip_prefix("DESC="))
+                        .find_map(|l| l.strip_prefix("DESCRIPTION="))
                         .map(|d| d.trim().to_string())
                 });
             }
@@ -151,14 +152,14 @@ pub fn resolve(packages: &[Package], input: &str) -> Resolved {
     }
 }
 
-/// Names that start with, or contain, what was typed (up to 5).
+/// Names that start with, or contain, what was typed (the 3 closest).
 fn similar(packages: &[Package], name: &str) -> Vec<String> {
     let name = name.to_lowercase();
     let stem: String = name.chars().take(name.chars().count().max(4) - 1).collect();
     search(packages, &stem)
         .into_iter()
         .filter(|p| p.short().contains(&stem))
-        .take(5)
+        .take(3)
         .map(|p| p.name)
         .collect()
 }
@@ -192,7 +193,7 @@ pub mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(
                 path,
-                format!("DEFINED_PHASES=install\nDESC={desc}\nEAPI=8\n"),
+                format!("DEFINED_PHASES=install\nDEPEND=dev-libs/libevent\nDESCRIPTION={desc}\nEAPI=8\nHOMEPAGE=https://example.org\n"),
             )
             .unwrap();
         }

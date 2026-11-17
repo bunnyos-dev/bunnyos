@@ -280,7 +280,39 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             found.push(fold_attempt(c, others));
         }
     }
+    // emerge often prints the same suggestion in both forms. If any of them
+    // broke a package's rules, every other suggestion is part of an attempt
+    // that doesn't work: fold them all into the first conflict, once each.
+    if let Some(first) = found.iter().position(is_rules_conflict) {
+        let mut conflict = found.remove(first);
+        let mut others = Vec::new();
+        found.retain(|e| {
+            if is_rules_conflict(e) {
+                return true;
+            }
+            others.push(e.title.clone());
+            false
+        });
+        let mentioned = conflict.details.join("\n");
+        others.retain(|t| !mentioned.contains(t.trim_end_matches('.')));
+        others.dedup();
+        if !others.is_empty() {
+            conflict = fold_attempt(
+                conflict,
+                others
+                    .into_iter()
+                    .map(|t| Explanation::new(Severity::Problem, t))
+                    .collect(),
+            );
+        }
+        found.insert(0, conflict);
+    }
     found
+}
+
+fn is_rules_conflict(e: &Explanation) -> bool {
+    e.title
+        .starts_with("emerge couldn't find a set of features")
 }
 
 /// The other changes emerge suggested alongside a broken one belong to the
@@ -1083,5 +1115,22 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("\"violates\""), "{text}");
+    }
+
+    #[test]
+    fn the_same_broken_attempt_in_both_forms_is_one_problem() {
+        let both = format!(
+            "{}\n{}",
+            fixture("required-use-mpv.txt"),
+            fixture("required-use-mpv-change-use.txt")
+        );
+        let found = explain(&both);
+        let problems: Vec<_> = found
+            .iter()
+            .filter(|e| e.severity == Severity::Problem)
+            .collect();
+        assert_eq!(problems.len(), 1, "{found:?}");
+        let text = problems[0].render();
+        assert_eq!(text.matches("vulkan-loader").count(), 1, "{text}");
     }
 }

@@ -9,7 +9,7 @@ bunny keeps an eye on:
 
 | Line | ✓ means | If it's ⚠ or ✗ |
 |---|---|---|
-| **Config** | The system matches `bunny.toml`. | Something isn't applied yet, or was installed outside bunny (say, with `emerge` directly). Run `bunny plan` to see it, `bunny switch` to apply your config. |
+| **Config** | The system matches `bunny.toml`. | Something isn't applied yet, or was installed outside bunny (say, with `emerge` directly). Run `bunny diff` to see what. |
 | **Versions** | Installed versions match `bunny.lock`. | `bunny switch` puts them back; `bunny lock` accepts them as they are. |
 | **Last change** | (just information) | If it says to restart after a rollback, run `doas reboot`. |
 | **Undo** | Generations are being saved. | Your disk isn't set up for undo; see [The disk layout](../reference/disk-layout.md). |
@@ -18,3 +18,45 @@ bunny keeps an eye on:
 If you see **"Also starting at boot, not in your config"**, a service was
 turned on outside bunny. Add it to `services` in `bunny.toml` to keep it, or
 turn it off with `doas rc-update del <name>`.
+
+## See exactly what's different
+
+```sh
+bunny diff
+```
+
+```
+Comparing /etc/bunny/bunny.toml with this system.
+
+Packages
+  config only   media-video/mpv   (in your config, not installed yet)
+  system only   app-text/tree   (installed outside bunny; a switch would remove it)
+
+Services at boot (OpenRC)
+  system only   rsyncd   (turned on outside bunny; a switch leaves it alone)
+
+To make the system match your config:
+    bunny switch
+
+(`bunny plan` shows exactly what that switch would do.)
+
+To keep the system as it is instead:
+  Edit /etc/bunny/bunny.toml:
+    • add to `packages`: "app-text/tree"
+    • take out of `packages`: "media-video/mpv"
+    • add to `services`: "rsyncd"
+  Then accept the installed versions:
+    bunny lock
+```
+
+**config only** means it's in `bunny.toml` but not on the system;
+**system only** means the opposite. For each difference you get both ways to
+fix it, and you choose:
+
+- **Your config is right:** run `bunny switch`.
+- **The system is right** (you installed something on purpose and want to
+  keep it): make the edits it lists, then `bunny lock`. Nothing gets
+  installed or removed.
+
+For USE flags, only the flags that differ are shown, as "wayland on" or
+"telemetry off".

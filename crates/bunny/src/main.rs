@@ -2,6 +2,7 @@
 
 mod apply;
 mod config;
+mod diff;
 mod edit;
 mod explain;
 mod import;
@@ -52,6 +53,15 @@ enum Command {
     },
     /// Show what would change to make this system match the config (changes nothing)
     Plan {
+        /// Path to the config
+        #[arg(default_value = "/etc/bunny/bunny.toml")]
+        config: PathBuf,
+        /// System root to compare against (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Show your config and your system side by side, and how to fix each difference (changes nothing)
+    Diff {
         /// Path to the config
         #[arg(default_value = "/etc/bunny/bunny.toml")]
         config: PathBuf,
@@ -225,6 +235,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             print!("{}", status::gather(&config, &root, now).render());
             Ok(ExitCode::SUCCESS)
         }
+        Command::Diff { config, root } => diff_cmd(&config, &root),
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
@@ -775,6 +786,38 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         outcome.replaced
     );
     Ok(ExitCode::SUCCESS)
+}
+
+/// Exits 0 when there are no differences and 1 when there are, like diff(1).
+fn diff_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
+    let cfg = Config::load(config)?;
+    if !cfg.problems().is_empty() {
+        let _ = report_problems(&cfg, config);
+        eprintln!("Fix these first, then run `bunny diff` again.");
+        return Ok(ExitCode::FAILURE);
+    }
+    let plan = plan::make(&cfg, root)?;
+    let lock_path = lock::path_for(config);
+    let drift = if lock_path.exists() {
+        Some(lock::compare(
+            &lock::load(&lock_path)?,
+            &lock::from_system(root)?,
+        ))
+    } else {
+        None
+    };
+    let shown = config.display().to_string();
+    let d = diff::Diff {
+        config: &shown,
+        plan: &plan,
+        drift: drift.as_ref(),
+    };
+    print!("{}", d.render());
+    Ok(if d.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    })
 }
 
 fn lock_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {

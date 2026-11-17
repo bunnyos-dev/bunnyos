@@ -11,6 +11,7 @@ That's useful for testing.
 | Command | What it does |
 |---|---|
 | `bunny status [config]` | One screen saying whether everything is in order, and what to do if not. |
+| `bunny diff [config]` | Your config and your system side by side, and how to fix each difference either way. Exits 1 if they differ. |
 | `bunny check [config]` | Finds mistakes in the config and says how to fix each. |
 | `bunny plan [config]` | Shows what a switch would change: packages, USE flags, services, packages that don't exist, and differences from `bunny.lock`. |
 | `bunny search <words>` | Searches package names and descriptions. Marks installed ones. |

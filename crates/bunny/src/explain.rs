@@ -84,6 +84,7 @@ pub fn explain(output: &str) -> Vec<Explanation> {
     found.extend(keyword_changes(&lines));
     found.extend(masked(&lines));
     found.extend(no_such_package(&lines));
+    found.extend(skipped_world_entries(&lines));
     found.extend(slot_conflicts(&lines));
     found.extend(blockers(&lines));
     found.extend(fetch_failures(&lines));
@@ -403,6 +404,39 @@ fn no_such_package(lines: &[&str]) -> Vec<Explanation> {
         .collect()
 }
 
+/// "Ebuilds for the following packages are either all masked or don't
+/// exist": emerge skips them and carries on, so this is easy to miss.
+fn skipped_world_entries(lines: &[&str]) -> Vec<Explanation> {
+    let Some(i) = lines
+        .iter()
+        .position(|l| l.contains("masked or don't exist:"))
+    else {
+        return Vec::new();
+    };
+    let packages: Vec<String> = lines[i + 1..]
+        .iter()
+        .map(|l| l.trim())
+        .take_while(|l| !l.is_empty() && !l.starts_with("!!!"))
+        .flat_map(|l| l.split_whitespace())
+        .filter(|w| w.contains('/'))
+        .map(String::from)
+        .collect();
+    if packages.is_empty() {
+        return Vec::new();
+    }
+    vec![Explanation::new(
+        Severity::Warning,
+        format!(
+            "emerge skipped {} because it couldn't find {}.",
+            packages.join(", "),
+            if packages.len() == 1 { "it" } else { "them" }
+        ),
+    )
+    .detail("Everything else was handled normally.")
+    .detail("Usually it's a typo, or the package was renamed, removed or blocked by Gentoo.")
+    .fix("check the name at https://packages.gentoo.org and fix it in your bunny.toml.")]
+}
+
 fn slot_conflicts(lines: &[&str]) -> Vec<Explanation> {
     let mut found = Vec::new();
     for (i, line) in lines.iter().enumerate() {
@@ -680,6 +714,17 @@ mod tests {
         assert!(explain(&fixture("use-change-swtpm.txt"))
             .iter()
             .all(|e| !e.title.starts_with("There's no package")));
+    }
+
+    #[test]
+    fn skipped_world_entry_from_the_vm() {
+        let found = explain(&fixture("world-missing-package.txt"));
+        assert_eq!(found.len(), 1, "{found:#?}");
+        assert_eq!(found[0].severity, Severity::Warning);
+        assert_eq!(
+            found[0].title,
+            "emerge skipped app-misc/tmuxx because it couldn't find it."
+        );
     }
 
     #[test]

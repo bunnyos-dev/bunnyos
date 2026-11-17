@@ -221,6 +221,13 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     }
     let plan = plan::make(&cfg, root)?;
     print!("{}", plan.render());
+    if !plan.unknown_packages.is_empty() {
+        eprintln!(
+            "Nothing was changed. Fix the package names in {}, then run `bunny switch` again.",
+            config.display()
+        );
+        return Ok(ExitCode::FAILURE);
+    }
     let lock_path = lock::path_for(config);
     if plan.is_empty() {
         for message in lock::ensure(root, &lock_path)? {

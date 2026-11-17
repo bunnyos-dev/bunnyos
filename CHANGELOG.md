@@ -38,6 +38,10 @@ The first release, `0.1.0`, will be version 1 of bunny:
 - `[security]`: sudo (the default) or doas, checked before it's put in place,
   and built so it can't lock you out.
 
+- Install plans come straight from Portage (a small helper script that
+  returns JSON) instead of reading emerge's printed text, so they don't break
+  when emerge changes its wording. emerge's text is still the fallback.
+
 ### The same system everywhere
 - `bunny.lock` records every installed version; switches keep to it with
   version pins, and only `bunny update` moves it.

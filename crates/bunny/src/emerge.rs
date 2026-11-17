@@ -243,6 +243,14 @@ pub fn parse_messages(output: &str) -> Vec<(String, Vec<String>)> {
             continue;
         };
         if trimmed.is_empty() {
+            // A blank line after the messages ends the block; whatever
+            // follows (" * GNU info directory index is up-to-date.") is
+            // emerge's own housekeeping, not the package talking.
+            if !lines.is_empty() {
+                if let Some(done) = current.take() {
+                    found.push(done);
+                }
+            }
             continue;
         }
         match trimmed.strip_prefix('*') {
@@ -476,5 +484,21 @@ Number to remove:     2
             parse_progress(">>> Emerging binary (6 of 6) app-editors/vim-9.2.1202-6::gentoo"),
             Some((6, 6, "app-editors/vim".into(), "9.2.1202".into(), true))
         );
+    }
+
+    #[test]
+    fn housekeeping_after_the_messages_is_left_out() {
+        let out = "
+ * Messages for package sys-process/htop-3.5.3:
+
+ * Install additional packages for optional runtime features:
+ *   sys-process/lsof for Viewing processes accessing certain files
+
+ * GNU info directory index is up-to-date.
+";
+        let msgs = parse_messages(out);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].1.len(), 2, "{:?}", msgs[0].1);
+        assert!(!msgs[0].1.iter().any(|l| l.contains("GNU info")));
     }
 }

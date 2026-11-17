@@ -84,6 +84,7 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
                                 + p.use_changes.len()
                                 + p.enable_services.len()
                                 + usize::from(p.security.file.is_some())
+                                + usize::from(!p.boot.is_empty())
                                 + p.security.add_to_wheel.len(),
                             summary: p.summary(),
                         },

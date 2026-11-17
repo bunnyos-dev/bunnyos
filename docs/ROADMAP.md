@@ -99,9 +99,10 @@ feature PRs now update it as they go.)
       `persist`, `admins`. Installs the tool, writes and checks
       `/etc/sudoers.d/bunny` or `/etc/doas.conf`, adds admins to `wheel`, never
       locks you out. bunny's own messages use whichever tool you have. **(VM)**
-- [ ] **GRUB "Undo last switch" entry:** boot-menu rollback for systems that
-      won't boot (initramfs step that does the same swap as `bunny rollback`).
-      **(VM)**
+- [~] **GRUB "Undo last switch" entry:** `[boot] undo_entry = true` adds a
+      dracut step (the same swap as `bunny rollback`, before mounting) and,
+      after each switch, a GRUB entry that boots the generation's own kernel
+      with `bunny.rollback=<generation>`. **(VM)**
 - [x] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
       published to GitHub Pages by a GitHub Actions workflow. Two tracks:
       "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
@@ -163,6 +164,11 @@ Rough order. These get split into PR-sized items when we reach them.
 - A Microsoft-signed shim (Secure Boot on the install USB)
 
 ## Known issues / small fixes
+
+- A generation is saved *after* `bunny add`/`remove` (or your own edit) has
+  changed `bunny.toml`, so undoing a change restores the system but keeps the
+  new config. `bunny status`/`diff` then show the difference. Save the config
+  from before the change with the generation, and put it back on rollback.
 
 - `bunny rollback --root <fake>` still reads the real machine's mount info.
 - Kept package.use lines lose their original file name on a second switch.

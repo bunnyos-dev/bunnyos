@@ -37,6 +37,8 @@ pub struct Plan {
     pub removal_requested: bool,
     /// Admin rights (`[security]`).
     pub security: crate::security::Changes,
+    /// The boot menu's undo entry (`[boot]`).
+    pub boot: crate::boot::Changes,
 }
 
 #[derive(Debug, PartialEq)]
@@ -55,6 +57,7 @@ impl Plan {
             && self.use_changes.is_empty()
             && self.enable_services.is_empty()
             && self.security.is_empty()
+            && self.boot.is_empty()
     }
 
     /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
@@ -79,6 +82,9 @@ impl Plan {
             if let Some(p) = self.security.privilege {
                 parts.push(format!("admin rights: {}", p.command()));
             }
+        }
+        if self.boot.install_module.is_some() {
+            parts.push("boot menu undo".into());
         }
 
         const MAX: usize = 6;
@@ -201,6 +207,29 @@ impl Plan {
             out.push('\n');
         }
 
+        if let Some(versions) = &self.boot.install_module {
+            out.push_str("Boot menu:\n");
+            let _ = writeln!(
+                out,
+                "  + add an \"undo the last change\" step to the startup image (kernel {})",
+                versions.join(", ")
+            );
+            out.push_str(
+                "    The startup image is rebuilt; the old one is backed up first.\n\
+                 \x20   After each change, the boot menu gets an entry that undoes it.\n\n",
+            );
+        }
+        if self.boot.remove_entry {
+            out.push_str("Boot menu:\n  - remove the \"undo the last change\" entry\n\n");
+        }
+        if !self.boot.problems.is_empty() {
+            out.push_str("Note: the boot menu's undo entry can't be set up on this system:\n");
+            for problem in &self.boot.problems {
+                let _ = writeln!(out, "  • {problem}");
+            }
+            out.push_str("  Everything else still works.\n\n");
+        }
+
         if !self.extra_services.is_empty() {
             out.push_str("Also starting at boot, but not in your config (left alone):\n");
             for name in &self.extra_services {
@@ -315,6 +344,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             .cloned()
             .collect(),
         removal_requested: false,
+        boot: crate::boot::changes(&config.boot, root),
         security: config
             .security
             .as_ref()

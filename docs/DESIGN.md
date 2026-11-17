@@ -148,9 +148,21 @@ isolated = false       # compile inside a clean container
 - `bunny clean [--keep N]` removes old generations (keeps the newest 5 by
   default) and `@replaced-*` leftovers, never the subvolume `/` is running
   from. It shows the list first and defaults to No, because it can't be undone.
-- **Next:** a GRUB "Undo last switch" entry for systems that won't boot. It
-  will use the same swap, triggered early in boot (needs an initramfs step),
-  because Gentoo doesn't boot cleanly from a read-only snapshot directly.
+- **Undo from the boot menu (current behaviour, opt-in with `[boot]
+  undo_entry = true`):** a dracut module (`90bunny-rollback`, pre-mount hook)
+  does the same swap in the initramfs when the kernel command line has
+  `bunny.rollback=<generation>`, and nothing otherwise. bunny installs it and
+  rebuilds `/boot/initramfs-<ver>.img` once (staged as `.bunny-new`, old image
+  backed up), *before* the switch's snapshot so that generation already has
+  it. After each switch it writes a block in `/boot/grub/custom.cfg` (read at
+  boot via `41_custom`, so no `grub-mkconfig`) that boots the kernel and
+  initramfs **from the generation's snapshot** (`/@snapshots/<gen>/boot/…`)
+  with the running system's command line plus `bunny.rollback=<gen>`, so
+  kernel modules match after the swap. Only added when the generation's
+  initramfs is newer than its copy of the module. Limits: nested subvolumes
+  aren't carried over by the boot-time swap; needs GRUB, dracut and
+  `root=UUID=`. Off by default until it's had more testing; the installer
+  will turn it on.
 
 ### Explaining and fixing errors
 

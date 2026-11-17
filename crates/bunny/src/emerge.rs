@@ -114,37 +114,46 @@ pub fn render_merge_list(list: &[Merge], asked: &[String]) -> String {
         }
     }
     let width = list.iter().map(|m| m.name.len()).max().unwrap_or(0);
-    for m in list {
-        let what = match (m.action, &m.from) {
-            (Action::New, _) => m.version.clone(),
-            (Action::Update, Some(from)) | (Action::Downgrade, Some(from)) => {
-                format!("{from} → {}", m.version)
-            }
-            (Action::Rebuild, _) => format!("{} (rebuild)", m.version),
-            (_, None) => m.version.clone(),
-        };
-        let mark = match m.action {
-            Action::New => "+",
-            Action::Rebuild => "~",
-            Action::Update | Action::Downgrade => "↑",
-        };
-        let mark = if m.action == Action::Downgrade {
-            "↓"
-        } else {
-            mark
-        };
-        let how = if m.binary { "" } else { "   compile" };
-        let needed = if m.action == Action::New && !asked.iter().any(|a| a == &m.name) {
-            "   (needed by another package)"
-        } else {
-            ""
-        };
-        let _ = writeln!(
-            out,
-            "  {mark} {:<width$}  {what}{how}{needed}",
-            m.name,
-            width = width
+    let rows: Vec<(&str, &str, String, &str, &str)> = list
+        .iter()
+        .map(|m| {
+            let what = match (m.action, &m.from) {
+                (Action::New, _) => m.version.clone(),
+                (Action::Update, Some(from)) | (Action::Downgrade, Some(from)) => {
+                    format!("{from} → {}", m.version)
+                }
+                (Action::Rebuild, _) => format!("{} (rebuild)", m.version),
+                (_, None) => m.version.clone(),
+            };
+            let mark = match m.action {
+                Action::New => "+",
+                Action::Rebuild => "~",
+                Action::Update => "↑",
+                Action::Downgrade => "↓",
+            };
+            let how = if m.binary { "" } else { "compile" };
+            let needed = if m.action == Action::New && !asked.iter().any(|a| a == &m.name) {
+                "(needed by another package)"
+            } else {
+                ""
+            };
+            (mark, m.name.as_str(), what, how, needed)
+        })
+        .collect();
+    let what_width = rows.iter().map(|r| r.2.chars().count()).max().unwrap_or(0);
+    // Columns: name, version, "compile" (only if anything compiles), note.
+    let how_width = if rows.iter().any(|r| !r.3.is_empty()) {
+        "compile".len() + 3
+    } else {
+        0
+    };
+    for (mark, name, what, how, needed) in rows {
+        let pad = what_width - what.chars().count();
+        let line = format!(
+            "  {mark} {name:<width$}  {what}{}{how:<how_width$}{needed}",
+            " ".repeat(pad + 3)
         );
+        let _ = writeln!(out, "{}", line.trim_end());
     }
     if build > 0 {
         out.push_str("  Compiling can take a while for big packages.\n");
@@ -322,12 +331,28 @@ Dependency resolution took 2.31 s (backtrack: 0/20).
         let list = parse_merge_list(PRETEND);
         let text = render_merge_list(&list[..5], &["app-admin/sudo".into()]);
         assert!(text.starts_with("emerge will install 5 packages (2 prebuilt, 3 to compile):\n"));
-        assert!(text.contains("+ acct-group/nullmail  0-r2   (needed by another package)"));
+        // Notes line up in one column, whatever the version's length.
+        let column = |needle: &str, what: &str| {
+            text.lines()
+                .find(|l| l.contains(needle))
+                .and_then(|l| l.find(what))
+        };
+        assert_eq!(
+            column("nullmail ", "(needed"),
+            column("nullmailer", "(needed"),
+            "{text}"
+        );
+        assert_eq!(
+            column("nullmailer", "compile"),
+            column("sudo", "compile"),
+            "{text}"
+        );
+        assert!(text.contains("+ acct-group/nullmail  0-r2"), "{text}");
         assert!(text.contains("↑ sys-libs/glibc"));
         assert!(text.contains("2.41-r6 → 2.42-r1"));
         assert!(text.contains("↓ dev-lang/python"));
         assert!(text.contains("~ app-admin/sudo"));
-        assert!(text.contains("1.9.17_p2 (rebuild)   compile"));
+        assert!(text.contains("1.9.17_p2 (rebuild)"), "{text}");
         assert!(text.contains("Compiling can take a while"));
     }
 

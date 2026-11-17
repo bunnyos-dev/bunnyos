@@ -521,6 +521,27 @@ boot handling, boot theme, musl/BusyBox, systemd, sandboxes and dev shells.
 9. Installer + ISO.
 10. Polish.
 
+## Upkeep
+
+Decided November 2026. A solo-maintained distro mostly fails from maintainer
+burnout, so anything weekly is automated, and the maintainer's time goes to
+testing and decisions.
+
+- **bunny:** daily sessions build, CI checks, the maintainer tests in the VM
+  and merges. Releases are version tags with a changelog, built by CI and
+  attached to a GitHub Release, and installed through an ebuild in
+  `bunny-overlay`.
+- **Keeping up with Gentoo:** a weekly scheduled CI job runs bunny in a fresh
+  Gentoo container against the latest tree and opens an issue if anything
+  breaks. Every new emerge message bunny gets wrong becomes a test fixture.
+- **What users run (phase 6):** a tested weekly baseline, like NixOS
+  channels. `bunny update` follows the published baseline, not the raw tree,
+  so only tested combinations are supported.
+- **Security:** `bunny status` reports Gentoo security advisories (GLSAs)
+  that affect the system.
+- **Dogfooding:** the maintainer runs BunnyOS on a real machine as early as
+  it's safe, with their `bunny.toml` in git.
+
 ## Testing
 
 - All changes are tested in a QEMU VM with UEFI, Secure Boot (Setup Mode),

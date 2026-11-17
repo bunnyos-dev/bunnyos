@@ -118,6 +118,29 @@ feature PRs now update it as they go.)
       rollback, so `bunny status` is ✓ right after an undo. Update the guide's
       "Your config file after a rollback". **(VM)**
 
+## Upkeep (after the config fix, before phase 6)
+
+Agreed with the maintainer: automate what would otherwise be weekly chores,
+so the maintainer's time goes to testing and decisions.
+
+- [ ] **Releases:** version tags (`v0.1.0`, …), a `CHANGELOG.md`, and a
+      GitHub Actions workflow that builds bunny and attaches it to a GitHub
+      Release when a tag is pushed. Write down the release steps in
+      `docs/RELEASING.md`. Release when a few features have piled up and have
+      run on a real machine for a while, not on every merge.
+- [ ] **Weekly canary check:** a scheduled GitHub Actions job runs bunny in a
+      fresh Gentoo container (`gentoo/stage3`) against the latest package
+      tree: `bunny import`, `check`, `plan`, and a dry-run install
+      (`emerge --pretend`) read by bunny. If anything breaks (emerge changed
+      its messages, a profile moved), it opens an issue so the daily session
+      picks it up.
+- [ ] **Security advisories in `bunny status`:** a line saying whether any
+      Gentoo security advisory (GLSA, via `glsa-check`) affects installed
+      packages, and to run `bunny update` if so.
+- [ ] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
+      a release ebuild and a `-9999` one, so bunny installs with `emerge`.
+      Moved up from phase 9.
+
 ## Repository housekeeping
 
 - [x] `main` protected from force pushes and deletion
@@ -136,6 +159,12 @@ Rough order. These get split into PR-sized items when we reach them.
 - [ ] `[build] sources` / `mode`: download from a cache, compile as fallback
 - [ ] `bunny serve`: share one machine's builds (e.g. over Tailscale)
 - [ ] Per-host CPU targets so one builder can build for another machine
+- [ ] **Tested baseline ("channel"), like NixOS channels:** once a week a
+      build machine syncs the tree, builds the Baseline package set, boots it
+      in a VM automatically, and only then publishes it (tree snapshot +
+      binary packages). `bunny update` moves to the latest published
+      baseline instead of whatever the tree had that morning. Off-baseline
+      setups still work; they just aren't tested by us.
 
 ### Phase 7: the look (design work, done together)
 - [ ] BunnyOS logo and color palette (pick from options)
@@ -157,7 +186,9 @@ Rough order. These get split into PR-sized items when we reach them.
 - [ ] Slint installer (straight to the installer, no desktop)
 - [ ] ISO build (Net and Offline editions), checksums and signatures
 - [ ] Hosting: GitHub Releases + Cloudflare R2
-- [ ] `bunny-overlay` repo (Quickshell, MangoWM, themes, bunny itself)
+- [ ] Quickshell, MangoWM and theme ebuilds in `bunny-overlay` (the repo
+      itself is set up during Upkeep), with a job that opens a PR when upstream
+      releases a new version
 
 ### Long-term: Portage-free systems
 - [ ] Portage (Python, its tools) lives only inside the build container;

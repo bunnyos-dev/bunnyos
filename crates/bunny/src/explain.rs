@@ -191,6 +191,8 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
     let mut found = Vec::new();
 
     // Form 1: "- net-libs/gnutls-3.8.13::gentoo (Change USE: +pkcs11 +tools)"
+    let form1_start = found.len();
+    let mut form1_conflict = None;
     for (i, line) in lines.iter().enumerate() {
         let Some(start) = line.find("(Change USE:") else {
             continue;
@@ -200,7 +202,24 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             .split_whitespace()
             .next();
         let Some(atom) = atom else { continue };
-        let inside = line[start + "(Change USE:".len()..].trim_end_matches(')');
+        let inside = &line[start + "(Change USE:".len()..];
+        // "(Change USE: -X, this change violates use flag constraints defined
+        // by …: '<rules>')": emerge's own suggestion breaks the rules.
+        if let Some(at) = inside.find("this change violates") {
+            let (suggested, rest) = inside.split_at(at);
+            let flags = suggested
+                .split_whitespace()
+                .map(|f| f.trim_end_matches(',').trim_start_matches('+').to_string())
+                .filter(|f| !f.is_empty())
+                .collect();
+            let rule = match (rest.find('\''), rest.rfind('\'')) {
+                (Some(a), Some(b)) if b > a => &rest[a + 1..b],
+                _ => "",
+            };
+            form1_conflict = Some(flag_rules_conflict(&base_name(atom), flags, rule));
+            continue;
+        }
+        let inside = inside.trim_end().trim_end_matches(')');
         let flags = inside
             .split_whitespace()
             .map(|f| f.trim_start_matches('+').to_string())
@@ -210,6 +229,10 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             .find_map(|l| l.split("(dependency required by \"").nth(1))
             .map(|rest| base_name(rest.split('"').next().unwrap_or(rest)));
         found.push(use_change(&base_name(atom), flags, needed_by));
+    }
+    if let Some(c) = form1_conflict {
+        let others = found.drain(form1_start..).collect();
+        found.push(fold_attempt(c, others));
     }
 
     // Form 2: the list after "The following USE changes are necessary".
@@ -252,21 +275,29 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             let flags = words.map(String::from).collect();
             found.push(use_change(&base_name(atom), flags, needed_by.take()));
         }
-        if let Some(mut c) = conflict {
-            let others: Vec<String> = found
-                .drain(start..)
-                .map(|e| e.title.trim_end_matches('.').to_string())
-                .collect();
-            if !others.is_empty() {
-                c = c.detail(format!(
-                    "emerge also suggested this as part of the same attempt; skip it too: {}.",
-                    others.join("; ")
-                ));
-            }
-            found.push(c);
+        if let Some(c) = conflict {
+            let others = found.drain(start..).collect();
+            found.push(fold_attempt(c, others));
         }
     }
     found
+}
+
+/// The other changes emerge suggested alongside a broken one belong to the
+/// same attempt that doesn't work: mention them inside the conflict rather
+/// than offering each as a fix.
+fn fold_attempt(mut conflict: Explanation, others: Vec<Explanation>) -> Explanation {
+    let titles: Vec<String> = others
+        .iter()
+        .map(|e| e.title.trim_end_matches('.').to_string())
+        .collect();
+    if !titles.is_empty() {
+        conflict = conflict.detail(format!(
+            "emerge also suggested this as part of the same attempt; skip it too: {}.",
+            titles.join("; ")
+        ));
+    }
+    conflict
 }
 
 /// emerge couldn't find USE flags that satisfy a package's rules
@@ -1027,5 +1058,30 @@ mod tests {
             assert!(text.contains("(turning X off)"), "{text}");
             assert!(!text.contains("\"violates\""), "{text}");
         }
+    }
+
+    #[test]
+    fn broken_flag_rules_in_the_change_use_form() {
+        let found = explain(&fixture("required-use-mpv-change-use.txt"));
+        assert_eq!(
+            found
+                .iter()
+                .filter(|e| e.severity == Severity::Problem)
+                .count(),
+            1,
+            "{found:?}"
+        );
+        let text = found[0].render();
+        assert!(
+            text.contains("couldn't find a set of features that works for mpv"),
+            "{text}"
+        );
+        assert!(text.contains("(turning X off)"), "{text}");
+        assert!(text.contains("• if xv is on: X"), "{text}");
+        assert!(
+            text.contains("skip it too: mpv needs vulkan-loader"),
+            "{text}"
+        );
+        assert!(!text.contains("\"violates\""), "{text}");
     }
 }

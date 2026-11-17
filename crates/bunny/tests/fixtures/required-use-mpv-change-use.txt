@@ -1,0 +1,7 @@
+
+
+emerge: there are no ebuilds built with USE flags to satisfy "media-video/mpv".
+!!! One of the following packages is required to complete your request:
+- media-libs/vulkan-loader-1.4.321.0::gentoo (Change USE: +X)
+- media-video/mpv-0.41.0-r2::gentoo (Change USE: -X, this change violates use flag constraints defined by media-video/mpv-0.41.0-r2: 'exactly-one-of ( python_single_target_python3_12 python_single_target_python3_13 python_single_target_python3_14 python_single_target_python3_15 ) any-of ( cli libmpv ) egl? ( any-of ( X drm wayland ) ) lua? ( exactly-one-of ( lua_single_target_luajit lua_single_target_lua5-1 ) ) nvenc? ( any-of ( egl vulkan ) ) test? ( cli ) tools? ( cli ) uchardet? ( iconv ) vaapi? ( any-of ( X drm wayland ) ) vdpau? ( X ) vulkan? ( any-of ( X wayland ) ) xv? ( X )')
+(dependency required by "mpv" [argument])

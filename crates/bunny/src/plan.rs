@@ -98,7 +98,13 @@ impl Plan {
             );
         }
 
-        section(&mut out, "Packages to install", "+", &self.add_packages);
+        let installable: Vec<String> = self
+            .add_packages
+            .iter()
+            .filter(|p| !self.unknown_packages.contains(p))
+            .cloned()
+            .collect();
+        section(&mut out, "Packages to install", "+", &installable);
         if !self.remove_packages.is_empty() {
             section(
                 &mut out,
@@ -397,6 +403,7 @@ mod tests {
         assert!(plan
             .render()
             .contains("don't exist in your package repositories"));
+        assert!(!plan.render().contains("+ app-misc/tmuxx"));
     }
 
     #[test]

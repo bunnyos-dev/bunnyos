@@ -234,7 +234,5 @@ Rough order. These get split into PR-sized items when we reach them.
 ## Known issues / small fixes
 
 
-- `bunny rollback --root <fake>` still reads the real machine's mount info.
-- Kept package.use lines lose their original file name on a second switch.
 - The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
   `GRUB_DISTRIBUTOR`; part of the boot menu work).

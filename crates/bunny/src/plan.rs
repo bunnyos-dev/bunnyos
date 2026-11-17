@@ -33,6 +33,8 @@ pub struct Plan {
     /// Services set to start at boot whose start script no longer exists,
     /// usually left behind when a package was removed.
     pub leftover_services: Vec<String>,
+    /// The removals were asked for (`bunny remove`), so don't suggest keeping them.
+    pub removal_requested: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -112,7 +114,10 @@ impl Plan {
                 "-",
                 &self.remove_packages,
             );
-            out.push_str("  Add them to `packages` if you want to keep them.\n\n");
+            if !self.removal_requested {
+                out.push_str("  Add them to `packages` if you want to keep them.\n");
+            }
+            out.push('\n');
         }
 
         if !self.use_changes.is_empty() {
@@ -278,6 +283,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             .filter(|s| init.service_exists(s))
             .cloned()
             .collect(),
+        removal_requested: false,
         leftover_services: enabled
             .iter()
             .filter(|s| !init.service_exists(s))

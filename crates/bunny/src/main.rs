@@ -278,14 +278,19 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
-    Ok(match switch_inner(config, yes, root)? {
+    Ok(match switch_inner(config, yes, root, false)? {
         Switched::Applied | Switched::NothingToDo => ExitCode::SUCCESS,
         Switched::NotApplied(code) => code,
     })
 }
 
 /// The switch itself, for a caller that's already root.
-fn switch_inner(config: &Path, yes: bool, root: &Path) -> anyhow::Result<Switched> {
+fn switch_inner(
+    config: &Path,
+    yes: bool,
+    root: &Path,
+    removal_requested: bool,
+) -> anyhow::Result<Switched> {
     let real_system = root == Path::new("/");
 
     let cfg = Config::load(config)?;
@@ -293,7 +298,8 @@ fn switch_inner(config: &Path, yes: bool, root: &Path) -> anyhow::Result<Switche
         eprintln!("Fix these first, then run `bunny switch` again.");
         return Ok(Switched::NotApplied(ExitCode::FAILURE));
     }
-    let plan = plan::make(&cfg, root)?;
+    let mut plan = plan::make(&cfg, root)?;
+    plan.removal_requested = removal_requested;
     print!("{}", plan.render());
     if !plan.unknown_packages.is_empty() {
         eprintln!(
@@ -940,7 +946,7 @@ fn add_cmd(names: &[String], config: &Path, yes: bool, root: &Path) -> anyhow::R
         edited.changed.join(", "),
         config.display()
     );
-    edit_then_switch(config, &old, &edited.text, yes, root)
+    edit_then_switch(config, &old, &edited.text, yes, root, false)
 }
 
 fn remove_cmd(names: &[String], config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
@@ -964,7 +970,7 @@ fn remove_cmd(names: &[String], config: &Path, yes: bool, root: &Path) -> anyhow
         edited.changed.join(", "),
         config.display()
     );
-    edit_then_switch(config, &old, &edited.text, yes, root)
+    edit_then_switch(config, &old, &edited.text, yes, root, true)
 }
 
 fn read_config_text(config: &Path) -> anyhow::Result<String> {
@@ -985,9 +991,10 @@ fn edit_then_switch(
     new: &str,
     yes: bool,
     root: &Path,
+    removing: bool,
 ) -> anyhow::Result<ExitCode> {
     std::fs::write(config, new).with_context(|| format!("Couldn't write {}", config.display()))?;
-    let result = switch_inner(config, yes, root);
+    let result = switch_inner(config, yes, root, removing);
     let put_back = || {
         std::fs::write(config, old)
             .with_context(|| format!("Couldn't put {} back", config.display()))

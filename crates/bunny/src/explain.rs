@@ -77,6 +77,10 @@ impl Explanation {
 }
 
 /// Explains everything bunny recognises in `output`, most important first.
+/// The start of the explanation for emerge's "remove obsolete packages"
+/// reminder (left out of switch tips, since bunny just did that).
+pub const DEPCLEAN_REMINDER: &str = "emerge reminds you to remove unused packages";
+
 pub fn explain(output: &str) -> Vec<Explanation> {
     // Color codes are invisible on screen but break reading the text.
     let output = strip_ansi(output);
@@ -795,7 +799,7 @@ fn notices(lines: &[&str]) -> Vec<Explanation> {
         if line.contains("it is important to remove obsolete packages with") {
             found.push(Explanation::new(
                 Severity::Info,
-                "emerge reminds you to remove unused packages. bunny does that for you during `bunny switch`.",
+                format!("{DEPCLEAN_REMINDER}. bunny does that for you during `bunny switch`."),
             ));
         }
     }

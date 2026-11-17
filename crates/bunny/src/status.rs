@@ -82,7 +82,9 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
                             count: p.add_packages.len()
                                 + p.remove_packages.len()
                                 + p.use_changes.len()
-                                + p.enable_services.len(),
+                                + p.enable_services.len()
+                                + usize::from(p.security.file.is_some())
+                                + p.security.add_to_wheel.len(),
                             summary: p.summary(),
                         },
                     }

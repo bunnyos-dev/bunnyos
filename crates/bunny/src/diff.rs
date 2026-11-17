@@ -23,6 +23,7 @@ impl Diff<'_> {
         self.plan.is_empty()
             && self.plan.extra_services.is_empty()
             && self.plan.missing_services.is_empty()
+            && self.plan.security.is_empty()
             && self.drift.is_none_or(Drift::is_empty)
     }
 
@@ -99,6 +100,25 @@ impl Diff<'_> {
                 let _ = writeln!(
                     out,
                     "  system only   {s}   (turned on outside bunny; a switch leaves it alone)"
+                );
+            }
+            out.push('\n');
+        }
+
+        // Admin rights
+        if let (false, Some(privilege)) = (p.security.is_empty(), p.security.privilege) {
+            let _ = writeln!(out, "Admin rights ({})", privilege.command());
+            if let Some((path, _)) = &p.security.file {
+                let _ = writeln!(
+                    out,
+                    "  config only   {}   (not written yet, or changed by hand)",
+                    path.display()
+                );
+            }
+            for user in &p.security.add_to_wheel {
+                let _ = writeln!(
+                    out,
+                    "  config only   {user} in the wheel group   (not added yet)"
                 );
             }
             out.push('\n');
@@ -182,6 +202,12 @@ impl Diff<'_> {
                     quoted(&flags)
                 );
             }
+        }
+
+        if !p.security.is_empty() {
+            edits.push_str(
+                "    • remove the [security] section (bunny then leaves admin rights as they are)\n",
+            );
         }
 
         let drift = self.drift.is_some_and(|d| !d.is_empty());
@@ -354,5 +380,27 @@ mod tests {
         assert!(text.contains("app-misc/tmux   3.6b installed, 3.6a locked"));
         assert!(text.contains("app-text/tree   2.2.1 installed, not in the lock"));
         assert!(text.contains("  Accept the installed versions:\n    bunny lock\n"));
+    }
+
+    #[test]
+    fn admin_rights_differences_are_shown() {
+        let mut p = plan();
+        p.security = crate::security::Changes {
+            privilege: Some(crate::security::Privilege::Sudo),
+            file: Some(("/etc/sudoers.d/bunny".into(), String::new())),
+            add_to_wheel: vec!["you".into()],
+            problems: vec![],
+        };
+        let d = Diff {
+            config: "bunny.toml",
+            plan: &p,
+            drift: None,
+        };
+        assert!(!d.is_empty());
+        let text = d.render();
+        assert!(text.contains("Admin rights (sudo)"));
+        assert!(text.contains("config only   /etc/sudoers.d/bunny"));
+        assert!(text.contains("config only   you in the wheel group"));
+        assert!(text.contains("remove the [security] section"));
     }
 }

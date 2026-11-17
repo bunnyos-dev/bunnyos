@@ -134,8 +134,13 @@ pub fn changes(sec: &Security, root: &Path) -> Changes {
     };
     let path = root.join(sec.privilege.file());
     let wanted = render(sec);
-    if std::fs::read_to_string(&path).ok().as_deref() != Some(wanted.as_str()) {
-        out.file = Some((path, wanted));
+    match std::fs::read_to_string(&path) {
+        Ok(current) if current == wanted => {}
+        // sudo's file is readable by root only, so read-only commands run
+        // as a normal user can't tell. Don't report a change that may not
+        // exist; `bunny switch` runs as root and sees the real file.
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {}
+        _ => out.file = Some((path, wanted)),
     }
 
     let users = users(root);
@@ -314,5 +319,19 @@ mod tests {
             Privilege::Doas.check_command(Path::new("/x")),
             ["doas", "-C", "/x"]
         );
+    }
+
+    #[test]
+    fn a_file_only_root_can_read_isnt_reported_as_changed() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = fake_root("you");
+        let s = sec(Privilege::Sudo, true, &["you"]);
+        let path = root.path().join("etc/sudoers.d/bunny");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "old contents").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let readable = std::fs::read_to_string(&path).is_ok(); // true when tests run as root
+        let c = changes(&s, root.path());
+        assert_eq!(c.file.is_some(), readable);
     }
 }

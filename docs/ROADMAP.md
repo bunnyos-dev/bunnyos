@@ -110,6 +110,13 @@ feature PRs now update it as they go.)
       "Going further" (full `bunny.toml` reference, pins, generations, how bunny
       drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
       experienced Linux user who has never used NixOS.
+- [ ] **Undo restores the config too:** a generation is saved after `bunny
+      add`/`remove` (or your own edit) has already changed `bunny.toml`, so
+      after an undo (`bunny rollback` or the boot menu) the config still lists
+      the change. Save the config from *before* the change with each
+      generation (next to its note in `/.snapshots`), and put it back on
+      rollback, so `bunny status` is ✓ right after an undo. Update the guide's
+      "Your config file after a rollback". **(VM)**
 
 ## Repository housekeeping
 
@@ -165,10 +172,6 @@ Rough order. These get split into PR-sized items when we reach them.
 
 ## Known issues / small fixes
 
-- A generation is saved *after* `bunny add`/`remove` (or your own edit) has
-  changed `bunny.toml`, so undoing a change restores the system but keeps the
-  new config. `bunny status`/`diff` then show the difference. Save the config
-  from before the change with the generation, and put it back on rollback.
 
 - `bunny rollback --root <fake>` still reads the real machine's mount info.
 - Kept package.use lines lose their original file name on a second switch.

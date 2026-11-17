@@ -1,5 +1,6 @@
 //! bunny: declarative, reproducible system management for BunnyOS.
 
+mod applied;
 mod apply;
 mod boot;
 mod config;
@@ -371,6 +372,7 @@ fn switch_inner(
         for message in lock::ensure(root, &lock_path)? {
             println!("{message}");
         }
+        keep_applied(root, config);
         return Ok(Switched::NothingToDo);
     }
 
@@ -450,7 +452,19 @@ fn switch_inner(
     report_lock_change(&change);
     print_messages(&outcome);
     print_tips(&outcome.tips);
+    keep_applied(root, config);
     Ok(Switched::Applied)
+}
+
+/// Keeps a copy of the config that now matches the system, so undoing a
+/// later change can put the config back too.
+fn keep_applied(root: &Path, config: &Path) {
+    if let Err(e) = applied::save(root, config) {
+        eprintln!(
+            "  Note: couldn't keep a copy of the config ({e:#}). Undoing a later change\n  \
+             will restore the system, but not bunny.toml."
+        );
+    }
 }
 
 /// Messages packages left after installing, a few lines each, with the rest
@@ -593,6 +607,7 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
     report_lock_change(&change);
     print_messages(&outcome);
     print_tips(&outcome.tips);
+    keep_applied(root, config);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -862,6 +877,12 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
         .map(|i| (i + 1).to_string())
         .unwrap_or_else(|| outcome.before.clone());
     println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
+    if let Some(config) = &outcome.config_restored {
+        println!(
+            "  {} is put back as it was then, so it matches the restored system.",
+            config.display()
+        );
+    }
     if !outcome.carried.is_empty() {
         println!(
             "  Kept as they are (separate subvolumes, like /home): {}",

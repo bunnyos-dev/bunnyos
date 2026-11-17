@@ -31,6 +31,18 @@ so the kernel goes back too.
 
 If step 4 fails, the old `@` is moved back and nothing changes.
 
+## The config goes back too
+
+A generation is saved right before a change, but by then `bunny.toml` has
+usually changed already (`bunny add` edits it first; so do you). So after each
+successful switch, bunny keeps a copy of the config and lock it just applied in
+`/var/lib/bunny/applied/`. That folder is part of the system, so every later
+generation carries the config that matches it.
+
+When you roll back (with `bunny rollback` or from the boot menu), that copy is
+put back where your config lives, as long as that's under `/etc`. A config in
+`/home` is on its own subvolume and is left alone.
+
 ## What's never rolled back
 
 Anything on its own subvolume (see [The disk layout](disk-layout.md)):

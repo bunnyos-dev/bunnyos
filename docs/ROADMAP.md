@@ -157,7 +157,7 @@ so the maintainer's time goes to testing and decisions.
 - [x] **Security advisories in `bunny status`:** a line saying whether any
       Gentoo security advisory (GLSA, via `glsa-check`) affects installed
       packages, and to run `bunny update` if so.
-- [~] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
+- [x] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
       a release ebuild and a `-9999` one, so bunny installs with `emerge`.
       Moved up from the installing phase.
 
@@ -246,3 +246,5 @@ to-do list. Appearance work comes last and a little at a time.
 
 - The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
   `GRUB_DISTRIBUTOR`; part of the boot menu work).
+- The install progress line (`[2/2] Compiling …`) isn't cleared before
+  "✓ Installed 2 packages", so they run together on one line.

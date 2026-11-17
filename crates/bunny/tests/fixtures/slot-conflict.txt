@@ -1,0 +1,11 @@
+!!! Multiple package instances within a single package slot have been pulled
+!!! into the dependency graph, resulting in a slot conflict:
+
+dev-libs/openssl:0
+
+  (dev-libs/openssl-3.3.2:0/3::gentoo, ebuild scheduled for merge) pulled in by
+    >=dev-libs/openssl-3.0:0/3= required by (net-misc/curl-8.10.1:0/0::gentoo, installed) USE="ssl"
+                       ^^^^^^^^
+
+  (dev-libs/openssl-1.1.1w:0/1.1::gentoo, installed) pulled in by
+    =dev-libs/openssl-1.1*:0/1.1= required by (app-misc/old-app-2.0:0/0::gentoo, installed)

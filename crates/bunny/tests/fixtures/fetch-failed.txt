@@ -1,0 +1,6 @@
+>>> Downloading 'https://example.invalid/distfiles/foo-1.2.tar.gz'
+--2026-11-16 21:00:00--  https://example.invalid/distfiles/foo-1.2.tar.gz
+Resolving example.invalid... failed: Name or service not known.
+!!! Couldn't download 'foo-1.2.tar.gz'. Aborting.
+ * Fetch failed for 'app-misc/foo-1.2', Log file:
+ *  '/var/tmp/portage/app-misc/foo-1.2/temp/build.log'

@@ -1,0 +1,13 @@
+[gentoo] Local copy of remote index is within TTL and will be used.
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies ... done!
+Dependency resolution took 0.94 s (backtrack: 0/20).
+
+
+emerge: there are no ebuilds built with USE flags to satisfy "net-libs/gnutls:=[pkcs11,tools]".
+!!! One of the following packages is required to complete your request:
+- net-libs/gnutls-3.8.13::gentoo (Change USE: +pkcs11 +tools)
+(dependency required by "app-crypt/swtpm-0.10.2::gentoo" [ebuild])
+(dependency required by "app-crypt/swtpm" [argument])

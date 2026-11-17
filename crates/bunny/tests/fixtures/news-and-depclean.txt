@@ -1,0 +1,5 @@
+ * IMPORTANT: 26 news items need reading for repository 'gentoo'.
+ * Use eselect news read to view new items.
+
+ * After world updates, it is important to remove obsolete packages with
+ * emerge --depclean. Refer to `man emerge` for more information.

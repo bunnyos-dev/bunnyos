@@ -1,0 +1,8 @@
+[ebuild  N     ] app-shells/fish-4.1.2::gentoo
+[blocks B      ] app-misc/fishfetch ("app-misc/fishfetch" is soft blocking app-shells/fish-4.1.2)
+
+ * Error: The above package list contains packages which cannot be
+ * installed at the same time on the same system.
+
+  (app-misc/fishfetch-1.0:0/0::gentoo, installed) pulled in by
+    app-misc/fishfetch required by @selected

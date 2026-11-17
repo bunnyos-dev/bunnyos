@@ -1,0 +1,10 @@
+!!! All ebuilds that could satisfy "www-client/oldbrowser" have been masked.
+!!! One of the following masked packages is required to complete your request:
+- www-client/oldbrowser-52.0::gentoo (masked by: package.mask)
+/var/db/repos/gentoo/profiles/package.mask:
+# Jane Dev <jane@gentoo.org> (2026-10-01)
+# Unmaintained, many open security bugs.
+# Removal on 2026-11-30.
+
+For more information, see the MASKED PACKAGES section in the emerge
+man page or refer to the Gentoo Handbook.

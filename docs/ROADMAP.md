@@ -14,7 +14,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 1. Read a system | `import`, `check`, `plan` | ✅ Done, tested on a real desktop |
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
-| 4. Same system everywhere | lockfile, `update` | 🔶 Part 1 done, part 2 next |
+| 4. Same system everywhere | lockfile, `update` | 🔶 Part 2 in review |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ⬜ |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
@@ -49,7 +49,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       installed version of every package (from `/var/db/pkg`). `bunny plan`
       shows packages whose installed version differs from the lock. Tests on
       fake roots. **(VM)**
-- [ ] **Lockfile, part 2:** `bunny update` syncs the tree, runs the switch, and
+- [~] **Lockfile, part 2:** `bunny update` syncs the tree, runs the switch, and
       rewrites the lock. `bunny switch` refuses to silently drift from the lock
       (explains what changed). **(VM)**
 - [ ] **Error translation, part 1:** recognise emerge's "USE changes are

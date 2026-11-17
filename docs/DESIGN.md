@@ -84,8 +84,18 @@ the config (`bunny.toml` → `bunny.lock`) with each repository's snapshot (git
 commit, or the sync timestamp from `metadata/timestamp.chk`) and the exact
 installed version of every package from `/var/db/pkg` (keyed `cat/name`, or
 `cat/name:slot` when several slots are installed). `bunny plan` shows any
-difference between the system and the lock. Installing the locked versions
-(part 2) isn't built yet.
+difference between the system and the lock.
+
+**Part 2:** `bunny switch` pins every locked package with a Portage mask
+(`/etc/portage/package.mask/zz-bunny-lock`, one `>cat/pkg-<locked version>`
+line each), so a switch never moves past the locked versions, and a package
+that drifted newer is put back. After the switch it rewrites the lock from the
+system (creating it if there was none) and shows what changed.
+`bunny update` is the only way forward: it runs `emerge --sync`, removes the
+pins, takes a snapshot, runs the full world update, then writes the new lock
+and pins. If the update fails, the old pins are put back. Limit: a locked
+version that Gentoo has since removed from its tree can't be reinstalled on a
+new machine; `bunny update` moves past it.
 
 **Reproducibility is "same recipe", not bit-for-bit.** Same lock means same
 versions, flags and settings. Locally compiled binaries can still differ

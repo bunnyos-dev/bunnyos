@@ -53,7 +53,13 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
   bunny talks to Portage through a small Python helper that returns JSON,
   instead of scraping emerge's text output. (Version 1 reads emerge's text
   as a shortcut; the helper is the next item after version 1, with text
-  reading kept as a fallback.)
+  reading kept as a fallback.) **Part 1:** `helper/bunny-portage.py`,
+  embedded in bunny and run as `python3 -c`, answers `plan` with the install
+  list as JSON, using `_emerge`'s `parse_opts` (with EMERGE_DEFAULT_OPTS),
+  `backtrack_depgraph` and the vartree, and FEATURES=getbinpkg handled like
+  emerge does. The quiet install uses it first and falls back to emerge's
+  text (which also explains refusals). The weekly canary checks the helper
+  agrees with emerge.
 - **Init:** OpenRC. systemd may be added later (see "Init systems").
 
 ## The `bunny` tool

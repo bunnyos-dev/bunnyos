@@ -63,6 +63,17 @@ else
     fail "emerge's install list still looks the way bunny reads it" "$(grep -m3 'tmux' "$work/pretend.txt")"
 fi
 
+# bunny's Portage helper should give the same install list as emerge's text.
+"$bunny" helper plan app-misc/tmux >"$work/helper.json" 2>"$work/helper-err.txt"
+helper_names="$(grep -o '"name": "[^"]*"' "$work/helper.json" | sed 's/"name": "//; s/"$//' | sort)"
+emerge_names="$(sed -n 's/^\[\(ebuild\|binary\)[^]]*\] \([^ ]*\)-[0-9].*/\2/p' "$work/pretend.txt" | sort)"
+if [ -n "$helper_names" ] && [ "$helper_names" = "$emerge_names" ]; then
+    pass "bunny's Portage helper agrees with emerge ($(echo "$helper_names" | wc -l) packages)"
+else
+    fail "bunny's Portage helper agrees with emerge" "helper: $(tr '\n' ' ' < "$work/helper.json" | cut -c1-300) | $(tail -3 "$work/helper-err.txt" | tr '\n' ' ')"
+    echo "      emerge: $(echo "$emerge_names" | tr '\n' ' ')"
+fi
+
 # A missing package: bunny should explain it, not say it doesn't recognise it.
 emerge --pretend --color=n app-misc/bunny-canary-no-such-package >"$work/missing.txt" 2>&1
 if "$bunny" explain "$work/missing.txt" 2>&1 | grep -qi "no package"; then

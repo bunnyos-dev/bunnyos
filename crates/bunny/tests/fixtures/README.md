@@ -5,6 +5,9 @@ Real emerge output used to test `bunny explain`.
 - `use-change-swtpm.txt`, `keyword-live-openssl.txt`, `news-and-depclean.txt`,
   `world-missing-package.txt`:
   captured on a real system / the test VM.
+- `required-use-mpv-change-use.txt`: the `(Change USE: …)` lines are from the
+  test VM (`bunny add mpv` on a system without X or Wayland); the lines
+  around them are approximated.
 - The others are written from emerge's documented message formats and should
   be replaced with real captures when they show up.
 

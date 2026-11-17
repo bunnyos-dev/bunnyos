@@ -78,6 +78,29 @@ impl fmt::Display for Problem {
 }
 
 impl Config {
+    /// USE flags per package as they should be applied: the config's own,
+    /// plus BunnyOS defaults for packages bunny installs itself. A package's
+    /// own `[pkg]` entry always wins over a default.
+    pub fn use_flags(&self) -> BTreeMap<String, Vec<String>> {
+        let mut flags: BTreeMap<String, Vec<String>> = self
+            .pkg
+            .iter()
+            .filter(|(_, s)| !s.use_flags.is_empty())
+            .map(|(atom, s)| (atom.clone(), s.use_flags.clone()))
+            .collect();
+        if let Some(sec) = &self.security {
+            for (atom, defaults) in sec.privilege.default_use() {
+                if !self.pkg.contains_key(*atom) {
+                    flags.insert(
+                        atom.to_string(),
+                        defaults.iter().map(|f| f.to_string()).collect(),
+                    );
+                }
+            }
+        }
+        flags
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("Couldn't read {}", path.display()))?;
@@ -310,5 +333,18 @@ mod tests {
         assert!(is_use_flag("python_targets_python3_12"));
         assert!(!is_use_flag("-"));
         assert!(!is_use_flag("bad flag"));
+    }
+
+    #[test]
+    fn sudo_gets_bunnyos_default_flags_unless_set() {
+        let c = Config::parse("[security]\nprivilege = \"sudo\"\nadmins = [\"you\"]\n").unwrap();
+        assert_eq!(c.use_flags()["app-admin/sudo"], ["-sendmail"]);
+        let c = Config::parse(
+            "[security]\nprivilege = \"sudo\"\n[pkg.\"app-admin/sudo\"]\nuse = [\"sendmail\"]\n",
+        )
+        .unwrap();
+        assert_eq!(c.use_flags()["app-admin/sudo"], ["sendmail"]);
+        let c = Config::parse("[security]\nprivilege = \"doas\"\n").unwrap();
+        assert!(c.use_flags().is_empty());
     }
 }

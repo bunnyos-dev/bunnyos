@@ -90,8 +90,11 @@ feature PRs now update it as they go.)
       versions, each marked "config only" or "system only", with both ways
       to fix it (`bunny switch`, or config edits + `bunny lock`). Exits 1 when
       they differ.
-- [ ] **Quieter emerge output:** run emerge with less noise and summarise news
-      items and post-install messages instead of printing them raw. **(VM)**
+- [~] **Quieter emerge output:** a dry run first, shown as a short list
+      (with dependencies marked), one progress line while installing, the
+      full output in `/var/log/bunny/`, package messages summarised at the
+      end, and the same for removals. `--verbose` shows everything. Also:
+      sudo without a mail server, no sudo lecture. **(VM)**
 - [x] **`[security]` section:** `privilege` ("sudo" by default, or "doas"),
       `persist`, `admins`. Installs the tool, writes and checks
       `/etc/sudoers.d/bunny` or `/etc/doas.conf`, adds admins to `wheel`, never

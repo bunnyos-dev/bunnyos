@@ -4,6 +4,7 @@ mod apply;
 mod config;
 mod diff;
 mod edit;
+mod emerge;
 mod explain;
 mod import;
 mod init;
@@ -33,6 +34,24 @@ use crate::config::Config;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+    /// Show emerge's full output as it runs (instead of a summary and progress line)
+    #[arg(short, long, global = true)]
+    verbose: bool,
+}
+
+/// `--verbose`, for every command that runs emerge.
+static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `confirm` in the shape apply::Options wants.
+fn ask(question: &str, enter_means_yes: bool) -> anyhow::Result<bool> {
+    confirm(
+        question,
+        if enter_means_yes {
+            Default::Yes
+        } else {
+            Default::No
+        },
+    )
 }
 
 #[derive(Subcommand)]
@@ -193,6 +212,7 @@ enum Command {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    VERBOSE.store(cli.verbose, std::sync::atomic::Ordering::Relaxed);
     match run(cli) {
         Ok(code) => code,
         Err(err) => {
@@ -395,9 +415,22 @@ fn switch_inner(
         stamp: timestamp(),
         update_all: false,
         color: std::io::IsTerminal::is_terminal(&std::io::stdout()),
+        verbose: VERBOSE.load(std::sync::atomic::Ordering::Relaxed),
+        confirm: ask,
     };
     let mut runner = runner_for(real_system);
-    let (outcome, change) = lock::switch(&cfg, root, &plan, &lock_path, runner.as_mut(), &opts)?;
+    let (outcome, change) =
+        match lock::switch(&cfg, root, &plan, &lock_path, runner.as_mut(), &opts) {
+            Err(e) if e.is::<apply::Cancelled>() => {
+                println!("Nothing was changed.");
+                return Ok(Switched::NotApplied(ExitCode::SUCCESS));
+            }
+            Err(e) if e.is::<apply::Refused>() => {
+                eprintln!("✗ {e}");
+                return Ok(Switched::NotApplied(ExitCode::FAILURE));
+            }
+            result => result?,
+        };
 
     println!("\n✓ This system now matches {}.", config.display());
     if let (true, Some(snapshot)) = (real_system, &outcome.snapshot) {
@@ -414,8 +447,37 @@ fn switch_inner(
         println!("  Note: {note}");
     }
     report_lock_change(&change);
+    print_messages(&outcome);
     print_tips(&outcome.tips);
     Ok(Switched::Applied)
+}
+
+/// Messages packages left after installing, a few lines each, with the rest
+/// in the log.
+fn print_messages(outcome: &apply::Outcome) {
+    if outcome.messages.is_empty() {
+        if let Some(log) = &outcome.log {
+            println!("  emerge's full output is in {}.", log.display());
+        }
+        return;
+    }
+    const SHOWN: usize = 4;
+    println!("\nMessages from installed packages:");
+    for (name, lines) in &outcome.messages {
+        println!("  {name}");
+        for line in lines.iter().take(SHOWN) {
+            println!("    {line}");
+        }
+        if lines.len() > SHOWN {
+            println!("    … {} more line(s)", lines.len() - SHOWN);
+        }
+    }
+    if let Some(log) = &outcome.log {
+        println!(
+            "  The full messages and emerge's output are in {}.",
+            log.display()
+        );
+    }
 }
 
 fn print_tips(tips: &[String]) {
@@ -500,10 +562,22 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
         stamp: timestamp(),
         update_all: true,
         color: std::io::IsTerminal::is_terminal(&std::io::stdout()),
+        verbose: VERBOSE.load(std::sync::atomic::Ordering::Relaxed),
+        confirm: ask,
     };
     let mut runner = runner_for(real_system);
     let (outcome, change) =
-        lock::update(&cfg, root, &lock::path_for(config), runner.as_mut(), &opts)?;
+        match lock::update(&cfg, root, &lock::path_for(config), runner.as_mut(), &opts) {
+            Err(e) if e.is::<apply::Cancelled>() => {
+                println!("Nothing was changed.");
+                return Ok(ExitCode::SUCCESS);
+            }
+            Err(e) if e.is::<apply::Refused>() => {
+                eprintln!("✗ {e}");
+                return Ok(ExitCode::FAILURE);
+            }
+            result => result?,
+        };
 
     println!("\n✓ Updated.");
     if let (true, Some(snapshot)) = (real_system, &outcome.snapshot) {
@@ -516,6 +590,7 @@ fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode>
         println!("  Note: {note}");
     }
     report_lock_change(&change);
+    print_messages(&outcome);
     print_tips(&outcome.tips);
     Ok(ExitCode::SUCCESS)
 }

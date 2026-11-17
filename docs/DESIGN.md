@@ -189,6 +189,24 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   reminders) are shown as short tips after the summary. Also recognises
   misspelled or removed package names.
 
+- **Part 3 (quieter output):** by default `switch`/`update` run
+  `emerge --pretend` first (output captured, nothing changes), show the
+  merge list as a short table (prebuilt vs compile, what's a dependency), and
+  ask again only if emerge wants more than bunny's plan showed. If emerge
+  refuses at that stage, bunny restores the world file and package.use from
+  a full copy taken before the takeover, so the system is untouched. The real
+  run has no `--ask`; one progress line is drawn from `>>> Emerging (n of m)`
+  lines, and the full output is saved to `/var/log/bunny/<time>-emerge.log`.
+  Package messages (elog) are shown at the end, a few lines each. Removal
+  uses `emerge --depclean --pretend`, lists the packages from its "All
+  selected packages" line (falling back to emerge's own `--ask` if the count
+  doesn't match), and always asks. Cleanup also runs after USE changes and
+  updates, since both can orphan dependencies. `--verbose` restores the old
+  live, emerge-asks behaviour.
+- **BunnyOS default USE flags:** packages bunny installs itself can get
+  default flags (applied unless the config has its own `[pkg]` entry):
+  sudo is built with `-sendmail`, so it doesn't pull in a mail server.
+
 ### Commands (planned)
 
 | Command | Does |

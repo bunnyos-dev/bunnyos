@@ -52,6 +52,17 @@ impl Privilege {
         }
     }
 
+    /// USE flags BunnyOS sets for the tool unless the config has its own
+    /// `[pkg]` entry for it. sudo's `sendmail` flag pulls in a mail server
+    /// (nullmailer) just to email root about failed attempts; desktops don't
+    /// need that.
+    pub fn default_use(self) -> &'static [(&'static str, &'static [&'static str])] {
+        match self {
+            Privilege::Sudo => &[("app-admin/sudo", &["-sendmail"])],
+            Privilege::Doas => &[],
+        }
+    }
+
     /// The file bunny manages, relative to the root.
     pub fn file(self) -> &'static str {
         match self {
@@ -84,7 +95,8 @@ pub fn render(sec: &Security) -> String {
                   # Edit bunny.toml instead of this file.\n";
     match sec.privilege {
         Privilege::Sudo => {
-            let mut out = format!("{header}%wheel ALL=(ALL:ALL) ALL\n");
+            let mut out =
+                format!("{header}%wheel ALL=(ALL:ALL) ALL\nDefaults:%wheel lecture=never\n");
             if !sec.persist {
                 out.push_str("Defaults:%wheel timestamp_timeout=0\n");
             }
@@ -122,8 +134,13 @@ pub fn changes(sec: &Security, root: &Path) -> Changes {
     };
     let path = root.join(sec.privilege.file());
     let wanted = render(sec);
-    if std::fs::read_to_string(&path).ok().as_deref() != Some(wanted.as_str()) {
-        out.file = Some((path, wanted));
+    match std::fs::read_to_string(&path) {
+        Ok(current) if current == wanted => {}
+        // sudo's file is readable by root only, so read-only commands run
+        // as a normal user can't tell. Don't report a change that may not
+        // exist; `bunny switch` runs as root and sees the real file.
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {}
+        _ => out.file = Some((path, wanted)),
     }
 
     let users = users(root);
@@ -244,7 +261,8 @@ mod tests {
         assert!(render(&sec(Privilege::Doas, true, &[])).ends_with("permit persist :wheel\n"));
         assert!(render(&sec(Privilege::Doas, false, &[])).ends_with("permit :wheel\n"));
         let sudo = render(&sec(Privilege::Sudo, true, &[]));
-        assert!(sudo.ends_with("%wheel ALL=(ALL:ALL) ALL\n"));
+        assert!(sudo.contains("%wheel ALL=(ALL:ALL) ALL\n"));
+        assert!(sudo.ends_with("Defaults:%wheel lecture=never\n"));
         assert!(render(&sec(Privilege::Sudo, false, &[]))
             .ends_with("Defaults:%wheel timestamp_timeout=0\n"));
     }
@@ -301,5 +319,19 @@ mod tests {
             Privilege::Doas.check_command(Path::new("/x")),
             ["doas", "-C", "/x"]
         );
+    }
+
+    #[test]
+    fn a_file_only_root_can_read_isnt_reported_as_changed() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = fake_root("you");
+        let s = sec(Privilege::Sudo, true, &["you"]);
+        let path = root.path().join("etc/sudoers.d/bunny");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "old contents").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let readable = std::fs::read_to_string(&path).is_ok(); // true when tests run as root
+        let c = changes(&s, root.path());
+        assert_eq!(c.file.is_some(), readable);
     }
 }

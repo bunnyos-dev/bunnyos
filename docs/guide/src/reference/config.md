@@ -110,6 +110,13 @@ Safety:
   before the old one can be removed. Take the old one out of `packages` once
   you're happy.
 
+With sudo, BunnyOS also:
+
+- builds sudo **without `sendmail`**, which would otherwise install a mail
+  server just to email root about failed password attempts. To keep it, add
+  your own `[pkg."app-admin/sudo"]` entry (yours always wins).
+- turns off sudo's one-time "lecture" message.
+
 `sudo-rs` (a memory-safe rewrite of sudo) is planned once Gentoo marks it
 stable.
 

@@ -58,10 +58,8 @@ pub fn render_world(config: &Config) -> String {
 /// The contents bunny's package.use file should have.
 pub fn render_package_use(config: &Config) -> String {
     let mut out = String::from("# Managed by bunny. Edit bunny.toml instead of this file.\n");
-    for (atom, settings) in &config.pkg {
-        if !settings.use_flags.is_empty() {
-            out.push_str(&format!("{atom} {}\n", settings.use_flags.join(" ")));
-        }
+    for (atom, flags) in config.use_flags() {
+        out.push_str(&format!("{atom} {}\n", flags.join(" ")));
     }
     out
 }

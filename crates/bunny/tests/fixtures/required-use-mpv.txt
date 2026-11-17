@@ -1,0 +1,20 @@
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies  ... done!
+Dependency resolution took 3.12 s (backtrack: 0/20).
+
+
+!!! The ebuild selected to satisfy "media-video/mpv" has unmet requirements.
+The following USE changes are necessary to proceed:
+ (see "package.use" in the portage(5) man page for more details)
+# required by media-video/mpv-0.41.0-r2::gentoo
+# required by mpv (argument)
+>=media-libs/vulkan-loader-1.4.321.0 X
+# required by mpv (argument)
+>=media-video/mpv-0.41.0-r2 -X, this change violates use flag constraints defined by media-video/mpv-0.41.0-r2: 'exactly-one-of ( python_single_target_python3_12 python_single_target_python3_13 python_single_target_python3_14 python_single_target_python3_15 ) any-of ( cli libmpv ) egl? ( any-of ( X drm wayland ) ) lua? ( exactly-one-of ( lua_single_target_luajit lua_single_target_lua5-1 ) ) nvenc? ( any-of ( egl vulkan ) ) test? ( cli ) tools? ( cli ) uchardet? ( iconv ) vaapi? ( any-of ( X drm wayland ) ) vdpau? ( X ) vulkan? ( any-of ( X wayland ) ) xv? ( X )'
+
+Use --autounmask-write to write changes to config files (honoring
+CONFIG_PROTECT). Carefully examine the list of proposed changes,
+paying special attention to mask or keyword changes that may expose
+experimental or unstable packages.

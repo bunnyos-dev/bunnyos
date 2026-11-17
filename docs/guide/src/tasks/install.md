@@ -30,11 +30,30 @@ bunny:
 4. saves a snapshot of your system, so you can undo
 5. installs it, and records the exact version in `bunny.lock`
 
-Press **Enter** at "Apply these changes? [Y/n]" and at emerge's
-"[Yes/No]" question.
+Press **Enter** at "Apply these changes? [Y/n]".
 
-If you say **no**, nothing is installed and `bunny.toml` is put back exactly
-as it was.
+Then bunny asks emerge for its full list and shows it, including anything the
+program needs that you don't have yet:
+
+```
+emerge will install 3 packages, all prebuilt:
+  + media-libs/libass   0.17.3   (needed by another package)
+  + media-video/ffmpeg  7.1.1    (needed by another package)
+  + media-video/mpv     0.40.0
+
+Install these? [Y/n]
+```
+
+That question only appears when the list has more than you asked for. While
+it installs you see one line of progress, like `[2/3] Installing
+media-video/ffmpeg 7.1.1…`. emerge's full output is saved in
+`/var/log/bunny/` (or run with `--verbose` to watch it scroll by).
+
+If you say **no** at either question, nothing is installed and `bunny.toml` is
+put back exactly as it was.
+
+Some packages leave a message after installing (a setup step, a tip). bunny
+shows those at the end under **Messages from installed packages**.
 
 ## Several at once
 

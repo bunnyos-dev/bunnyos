@@ -13,6 +13,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/etc/runlevels/default/*` | Services from `services`, added with `rc-update`. |
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
+| `/var/log/bunny/<time>-emerge.log` | emerge's full output from each switch or update. |
 | `/var/lib/bunny/backups/<time>/` | Copies of the files above, from before each switch. |
 
 ## The package.use takeover
@@ -34,14 +35,28 @@ config, nothing is lost:
 | Step | Command |
 |---|---|
 | Snapshot | `btrfs subvolume snapshot -r / /.snapshots/bunny-<time>` |
-| Install / update | `emerge --update --deep --newuse --verbose --ask @world` |
-| Remove unused | `emerge --depclean --ask` (always asks) |
+| See what would be installed | `emerge --pretend --update --deep --newuse @world` |
+| Install / update | `emerge --update --deep --newuse --quiet-build=y @world` |
+| See what's unused | `emerge --depclean --pretend` |
+| Remove unused | `emerge --depclean` (after bunny asks, always) |
 | Services | `rc-update add <name> default`, `rc-service <name> start` |
 | Admin rights | `visudo -cf <file>` or `doas -C <file>` to check, `gpasswd -a <user> wheel` |
 | Update | `emerge --sync` first |
 
-emerge's output is shown live, as usual. bunny keeps a copy to explain any
-problem, and turns its notices (news, reminders) into short tips at the end.
+bunny asks emerge what it would do first (`--pretend`, which changes nothing),
+shows that as a short list, and asks. If emerge refuses at that point,
+bunny puts the world file and package.use back, so nothing has changed. While
+installing it shows one progress line; emerge's full output is saved to
+`/var/log/bunny/<time>-emerge.log`. With `--verbose`, emerge runs with
+`--verbose --ask` and its output is shown live instead, as it used to be.
+
+Either way, bunny reads emerge's output to explain any problem, turns its
+notices (news, reminders) into short tips, and shows the messages packages
+leave after installing.
+
+Unused packages are looked for after removing something from your config,
+after USE flag changes, and after updates, since all three can leave
+dependencies that nothing needs anymore.
 
 ## What bunny leaves alone
 

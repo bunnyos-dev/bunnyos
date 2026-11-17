@@ -78,6 +78,8 @@ impl Explanation {
 
 /// Explains everything bunny recognises in `output`, most important first.
 pub fn explain(output: &str) -> Vec<Explanation> {
+    // Color codes are invisible on screen but break reading the text.
+    let output = strip_ansi(output);
     let lines: Vec<&str> = output.lines().map(str::trim_end).collect();
     let mut found = Vec::new();
     found.extend(use_changes(&lines));
@@ -189,6 +191,8 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
     let mut found = Vec::new();
 
     // Form 1: "- net-libs/gnutls-3.8.13::gentoo (Change USE: +pkcs11 +tools)"
+    let form1_start = found.len();
+    let mut form1_conflict = None;
     for (i, line) in lines.iter().enumerate() {
         let Some(start) = line.find("(Change USE:") else {
             continue;
@@ -198,7 +202,24 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             .split_whitespace()
             .next();
         let Some(atom) = atom else { continue };
-        let inside = line[start + "(Change USE:".len()..].trim_end_matches(')');
+        let inside = &line[start + "(Change USE:".len()..];
+        // "(Change USE: -X, this change violates use flag constraints defined
+        // by …: '<rules>')": emerge's own suggestion breaks the rules.
+        if let Some(at) = inside.find("this change violates") {
+            let (suggested, rest) = inside.split_at(at);
+            let flags = suggested
+                .split_whitespace()
+                .map(|f| f.trim_end_matches(',').trim_start_matches('+').to_string())
+                .filter(|f| !f.is_empty())
+                .collect();
+            let rule = match (rest.find('\''), rest.rfind('\'')) {
+                (Some(a), Some(b)) if b > a => &rest[a + 1..b],
+                _ => "",
+            };
+            form1_conflict = Some(flag_rules_conflict(&base_name(atom), flags, rule));
+            continue;
+        }
+        let inside = inside.trim_end().trim_end_matches(')');
         let flags = inside
             .split_whitespace()
             .map(|f| f.trim_start_matches('+').to_string())
@@ -209,10 +230,18 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             .map(|rest| base_name(rest.split('"').next().unwrap_or(rest)));
         found.push(use_change(&base_name(atom), flags, needed_by));
     }
+    if let Some(c) = form1_conflict {
+        let others = found.drain(form1_start..).collect();
+        found.push(fold_attempt(c, others));
+    }
 
     // Form 2: the list after "The following USE changes are necessary".
     for block in blocks_after(lines, "The following USE changes are necessary") {
         let mut needed_by = None;
+        // If emerge's suggestion breaks a package's rules, the other changes
+        // in the same suggestion are part of an attempt that doesn't work.
+        let start = found.len();
+        let mut conflict = None;
         for line in block {
             if let Some(rest) = line.strip_prefix("# required by ") {
                 needed_by.get_or_insert_with(|| {
@@ -225,11 +254,187 @@ fn use_changes(lines: &[&str]) -> Vec<Explanation> {
             if !atom.contains('/') {
                 continue;
             }
+            // emerge's own suggestion breaks the package's rules: it couldn't
+            // find a working set of flags at all.
+            if let Some(at) = line.find("this change violates") {
+                let (suggested, rest) = line.split_at(at);
+                let flags = suggested
+                    .split_whitespace()
+                    .skip(1)
+                    .map(|f| f.trim_end_matches(',').to_string())
+                    .filter(|f| !f.is_empty())
+                    .collect();
+                let rule = rest
+                    .split_once('\'')
+                    .map(|(_, r)| r.trim_end().trim_end_matches('\''))
+                    .unwrap_or("");
+                conflict = Some(flag_rules_conflict(&base_name(atom), flags, rule));
+                needed_by.take();
+                continue;
+            }
             let flags = words.map(String::from).collect();
             found.push(use_change(&base_name(atom), flags, needed_by.take()));
         }
+        if let Some(c) = conflict {
+            let others = found.drain(start..).collect();
+            found.push(fold_attempt(c, others));
+        }
+    }
+    // emerge often prints the same suggestion in both forms. If any of them
+    // broke a package's rules, every other suggestion is part of an attempt
+    // that doesn't work: fold them all into the first conflict, once each.
+    if let Some(first) = found.iter().position(is_rules_conflict) {
+        let mut conflict = found.remove(first);
+        let mut others = Vec::new();
+        found.retain(|e| {
+            if is_rules_conflict(e) {
+                return true;
+            }
+            others.push(e.title.clone());
+            false
+        });
+        let mentioned = conflict.details.join("\n");
+        others.retain(|t| !mentioned.contains(t.trim_end_matches('.')));
+        others.dedup();
+        if !others.is_empty() {
+            conflict = fold_attempt(
+                conflict,
+                others
+                    .into_iter()
+                    .map(|t| Explanation::new(Severity::Problem, t))
+                    .collect(),
+            );
+        }
+        found.insert(0, conflict);
     }
     found
+}
+
+fn is_rules_conflict(e: &Explanation) -> bool {
+    e.title
+        .starts_with("emerge couldn't find a set of features")
+}
+
+/// The other changes emerge suggested alongside a broken one belong to the
+/// same attempt that doesn't work: mention them inside the conflict rather
+/// than offering each as a fix.
+fn fold_attempt(mut conflict: Explanation, others: Vec<Explanation>) -> Explanation {
+    let titles: Vec<String> = others
+        .iter()
+        .map(|e| e.title.trim_end_matches('.').to_string())
+        .collect();
+    if !titles.is_empty() {
+        conflict = conflict.detail(format!(
+            "emerge also suggested this as part of the same attempt; skip it too: {}.",
+            titles.join("; ")
+        ));
+    }
+    conflict
+}
+
+/// emerge couldn't find USE flags that satisfy a package's rules
+/// (REQUIRED_USE): its suggested change breaks them.
+fn flag_rules_conflict(package: &str, suggested: Vec<String>, rule: &str) -> Explanation {
+    let name = short(package);
+    let describe = |f: &String| match f.strip_prefix('-') {
+        Some(off) => format!("turning {off} off"),
+        None => format!("turning {f} on"),
+    };
+    let suggestion: Vec<String> = suggested.iter().map(describe).collect();
+    let mut e = Explanation::new(
+        Severity::Problem,
+        format!("emerge couldn't find a set of features that works for {name}."),
+    );
+    if !suggestion.is_empty() {
+        e = e.detail(format!(
+            "Its suggested fix ({}) breaks {name}'s own rules, so don't use it.",
+            suggestion.join(", ")
+        ));
+    }
+    let rules = required_use_rules(rule);
+    if !rules.is_empty() {
+        e = e.detail(format!("{name}'s rules:"));
+        for r in rules {
+            e = e.detail(format!("  • {r}"));
+        }
+    }
+    let display = ["X", "wayland"]
+        .iter()
+        .all(|f| rule.split_whitespace().any(|t| t == *f));
+    let fix = if display {
+        format!(
+            "{name} needs a way to show things on screen, and nothing is turned on.\n\
+             On a desktop, turn on the one you use (wayland or X), for example:\n\
+             [pkg.\"{package}\"]\n\
+             use = [\"wayland\"]\n\
+             Then run the same bunny command again. If another package then needs the\n\
+             same flag, bunny will say so."
+        )
+    } else {
+        format!(
+            "turn on features that meet the rules above in [pkg.\"{package}\"], then run the\n\
+             same bunny command again."
+        )
+    };
+    e.fix(fix)
+}
+
+/// Gentoo's REQUIRED_USE syntax in words, one rule per line:
+/// `any-of ( X wayland )` → "at least one of: X, wayland",
+/// `egl? ( any-of ( X drm ) )` → "if egl is on: at least one of: X, drm".
+fn required_use_rules(rule: &str) -> Vec<String> {
+    let tokens: Vec<&str> = rule.split_whitespace().collect();
+    let mut pos = 0;
+    let mut rules = Vec::new();
+    while pos < tokens.len() {
+        match required_use_item(&tokens, &mut pos) {
+            Some(text) => rules.push(text),
+            None => break,
+        }
+    }
+    rules
+}
+
+fn required_use_item(tokens: &[&str], pos: &mut usize) -> Option<String> {
+    let token = *tokens.get(*pos)?;
+    *pos += 1;
+    let group = |tokens: &[&str], pos: &mut usize| -> Option<Vec<String>> {
+        if tokens.get(*pos) != Some(&"(") {
+            return None;
+        }
+        *pos += 1;
+        let mut items = Vec::new();
+        while tokens.get(*pos).is_some_and(|t| *t != ")") {
+            items.push(required_use_item(tokens, pos)?);
+        }
+        *pos += 1; // ")"
+        Some(items)
+    };
+    let quantified = |word: &str, tokens: &[&str], pos: &mut usize| {
+        group(tokens, pos).map(|items| format!("{word}: {}", items.join(", ")))
+    };
+    match token {
+        "||" | "any-of" => quantified("at least one of", tokens, pos),
+        "^^" | "exactly-one-of" => quantified("exactly one of", tokens, pos),
+        "??" | "at-most-one-of" => quantified("at most one of", tokens, pos),
+        "(" => {
+            *pos -= 1;
+            group(tokens, pos).map(|items| format!("all of: {}", items.join(", ")))
+        }
+        t if t.ends_with('?') => {
+            let flag = t.trim_end_matches('?');
+            let condition = match flag.strip_prefix('!') {
+                Some(off) => format!("if {off} is off"),
+                None => format!("if {flag} is on"),
+            };
+            let items = group(tokens, pos)?;
+            Some(format!("{condition}: {}", items.join("; ")))
+        }
+        t => Some(match t.strip_prefix('!') {
+            Some(off) => format!("{off} off"),
+            None => t.to_string(),
+        }),
+    }
 }
 
 /// Lines after a heading, up to the next blank line (skipping emerge's
@@ -810,5 +1015,122 @@ mod tests {
             text.contains("\n       [pkg.\"net-libs/gnutls\"]\n"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_suggestion_that_breaks_the_rules_is_explained_in_words() {
+        let found = explain(&fixture("required-use-mpv.txt"));
+        let conflict = found
+            .iter()
+            .find(|e| e.title.contains("couldn't find a set of features"))
+            .expect("conflict explained");
+        let text = conflict.render();
+        assert!(text.contains("works for mpv."), "{text}");
+        assert!(
+            text.contains("Its suggested fix (turning X off) breaks mpv's own rules"),
+            "{text}"
+        );
+        assert!(text.contains("• at least one of: cli, libmpv"), "{text}");
+        assert!(
+            text.contains("• if egl is on: at least one of: X, drm, wayland"),
+            "{text}"
+        );
+        assert!(text.contains("• if xv is on: X"), "{text}");
+        assert!(text.contains("use = [\"wayland\"]"), "{text}");
+        // No flag salad from the rule text.
+        assert!(!found.iter().any(|e| e.render().contains("\"violates\"")));
+        // The other change was part of the same failed attempt: folded in,
+        // not offered as a fix of its own.
+        assert_eq!(
+            found
+                .iter()
+                .filter(|e| e.severity == Severity::Problem)
+                .count(),
+            1
+        );
+        assert!(
+            text.contains(
+                "skip it too: mpv needs vulkan-loader built with these features turned on: X"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn required_use_in_words() {
+        assert_eq!(
+            required_use_rules("^^ ( a b ) !c? ( d ) ( e f ) || ( g )"),
+            [
+                "exactly one of: a, b",
+                "if c is off: d",
+                "all of: e, f",
+                "at least one of: g"
+            ]
+        );
+    }
+
+    #[test]
+    fn broken_flag_rules_are_found_through_color_codes_and_spacing() {
+        let plain = fixture("required-use-mpv.txt");
+        let colored = plain.replace(
+            ">=media-video/mpv-0.41.0-r2 -X, this change",
+            ">=media-video/mpv-0.41.0-r2 \x1b[31;01m-X\x1b[39;49;00m,  this change",
+        );
+        for text in [plain, colored] {
+            let found = explain(&text);
+            let text = found
+                .iter()
+                .map(Explanation::render)
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(
+                text.contains("couldn't find a set of features that works for mpv"),
+                "{text}"
+            );
+            assert!(text.contains("(turning X off)"), "{text}");
+            assert!(!text.contains("\"violates\""), "{text}");
+        }
+    }
+
+    #[test]
+    fn broken_flag_rules_in_the_change_use_form() {
+        let found = explain(&fixture("required-use-mpv-change-use.txt"));
+        assert_eq!(
+            found
+                .iter()
+                .filter(|e| e.severity == Severity::Problem)
+                .count(),
+            1,
+            "{found:?}"
+        );
+        let text = found[0].render();
+        assert!(
+            text.contains("couldn't find a set of features that works for mpv"),
+            "{text}"
+        );
+        assert!(text.contains("(turning X off)"), "{text}");
+        assert!(text.contains("• if xv is on: X"), "{text}");
+        assert!(
+            text.contains("skip it too: mpv needs vulkan-loader"),
+            "{text}"
+        );
+        assert!(!text.contains("\"violates\""), "{text}");
+    }
+
+    #[test]
+    fn the_same_broken_attempt_in_both_forms_is_one_problem() {
+        let both = format!(
+            "{}\n{}",
+            fixture("required-use-mpv.txt"),
+            fixture("required-use-mpv-change-use.txt")
+        );
+        let found = explain(&both);
+        let problems: Vec<_> = found
+            .iter()
+            .filter(|e| e.severity == Severity::Problem)
+            .collect();
+        assert_eq!(problems.len(), 1, "{found:?}");
+        let text = problems[0].render();
+        assert_eq!(text.matches("vulkan-loader").count(), 1, "{text}");
     }
 }

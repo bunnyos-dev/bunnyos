@@ -32,6 +32,22 @@ pub trait Runner {
     fn run_captured(&mut self, cmd: &[String]) -> Result<(bool, String)> {
         Ok((self.run(cmd)?, String::new()))
     }
+
+    /// Runs a command without showing its output, calling `on_line` for each
+    /// line (for a progress display). Returns whether it succeeded and
+    /// everything it printed.
+    fn run_quiet(
+        &mut self,
+        cmd: &[String],
+        _on_line: &mut dyn FnMut(&str),
+    ) -> Result<(bool, String)> {
+        Ok((self.run(cmd)?, String::new()))
+    }
+
+    /// True if commands are only printed, not run (a test root).
+    fn dry(&self) -> bool {
+        false
+    }
 }
 
 /// Runs commands for real.
@@ -96,6 +112,60 @@ impl Runner for SystemRunner {
         Ok((status.success(), text))
     }
 
+    fn run_quiet(
+        &mut self,
+        cmd: &[String],
+        on_line: &mut dyn FnMut(&str),
+    ) -> Result<(bool, String)> {
+        use std::io::{BufRead, BufReader};
+        use std::process::Stdio;
+
+        let mut child = std::process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        // Read raw bytes per line, so output that isn't valid UTF-8 can't
+        // stop the reader (which would leave the command blocked).
+        fn reader<R: std::io::Read + Send + 'static>(
+            from: R,
+            tx: std::sync::mpsc::Sender<String>,
+        ) -> std::thread::JoinHandle<()> {
+            std::thread::spawn(move || {
+                let mut from = BufReader::new(from);
+                let mut buf = Vec::new();
+                loop {
+                    buf.clear();
+                    match from.read_until(b'\n', &mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            let line = String::from_utf8_lossy(&buf);
+                            let line = line.trim_end_matches(['\n', '\r']).to_string();
+                            if tx.send(line).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            })
+        }
+        let out = reader(child.stdout.take().expect("piped"), tx.clone());
+        let err = reader(child.stderr.take().expect("piped"), tx);
+        let mut all = String::new();
+        for line in rx {
+            on_line(&line);
+            all.push_str(&line);
+            all.push('\n');
+        }
+        let status = child.wait()?;
+        let _ = out.join();
+        let _ = err.join();
+        Ok((status.success(), all))
+    }
+
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
         let out = std::process::Command::new(&cmd[0])
             .args(&cmd[1..])
@@ -116,7 +186,37 @@ impl Runner for PrintRunner {
         println!("  (would run) {}", cmd.join(" "));
         Ok(true)
     }
+
+    fn dry(&self) -> bool {
+        true
+    }
 }
+
+/// The user said no at a question, so the switch stopped and its file
+/// changes were put back. Not an error to report, just "nothing changed".
+#[derive(Debug)]
+pub struct Cancelled;
+
+impl std::fmt::Display for Cancelled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Nothing was changed.")
+    }
+}
+
+impl std::error::Error for Cancelled {}
+
+/// emerge refused before installing anything (its dry run failed), and the
+/// files were put back, so nothing changed. Holds the explanation to show.
+#[derive(Debug)]
+pub struct Refused(pub String);
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Refused {}
 
 #[derive(Clone)]
 pub struct Options {
@@ -130,6 +230,11 @@ pub struct Options {
     /// Ask emerge for colors (its output is captured, so it can't tell it's
     /// talking to a terminal). Only when bunny's own output is a terminal.
     pub color: bool,
+    /// Show emerge's full output live, and let emerge ask its own questions,
+    /// instead of bunny's summary and progress line.
+    pub verbose: bool,
+    /// Asks the user a yes/no question; the bool is the answer Enter gives.
+    pub confirm: fn(&str, bool) -> Result<bool>,
 }
 
 /// What happened, for the summary at the end.
@@ -140,6 +245,10 @@ pub struct Outcome {
     pub notes: Vec<String>,
     /// emerge's notices (news, reminders), explained. Shown after the summary.
     pub tips: Vec<String>,
+    /// Messages packages left after installing, by package.
+    pub messages: Vec<(String, Vec<String>)>,
+    /// Where emerge's full output was saved (quiet mode).
+    pub log: Option<PathBuf>,
 }
 
 fn cmd(parts: &[&str]) -> Vec<String> {
@@ -163,18 +272,25 @@ pub fn switch(
     let snapshots = root.join(".snapshots");
     if snapshots.is_dir() {
         let target = snapshots.join(format!("bunny-{}", opts.stamp));
-        let ok = runner.run(&cmd(&[
-            "btrfs",
-            "subvolume",
-            "snapshot",
-            "-r",
-            &root.to_string_lossy(),
-            &target.to_string_lossy(),
-        ]))?;
+        // btrfs's own "Create readonly snapshot…" line isn't shown; bunny
+        // reports the snapshot itself at the end (and btrfs's words on failure).
+        let (ok, said) = runner.run_quiet(
+            &cmd(&[
+                "btrfs",
+                "subvolume",
+                "snapshot",
+                "-r",
+                &root.to_string_lossy(),
+                &target.to_string_lossy(),
+            ]),
+            &mut |_| {},
+        )?;
         if !ok {
             bail!(
                 "Couldn't take a snapshot before changing anything, so nothing was changed.\n  \
-                 bunny needs / on btrfs with a /.snapshots folder to be able to undo changes."
+                 bunny needs / on btrfs with a /.snapshots folder to be able to undo changes.\n  \
+                 btrfs said: {}",
+                said.trim()
             );
         }
         outcome.snapshot = Some(target);
@@ -196,7 +312,12 @@ pub fn switch(
     std::fs::create_dir_all(&outcome.backup_dir)
         .with_context(|| format!("Couldn't create {}", outcome.backup_dir.display()))?;
 
-    // 2. USE flags: bunny takes over package.use.
+    // 2. USE flags: bunny takes over package.use. A full copy is kept first,
+    //    so a cancelled switch can put everything back exactly.
+    let use_dir = portage::package_use_dir(root);
+    if use_dir.exists() {
+        copy_tree(&use_dir, &outcome.backup_dir.join(USE_BEFORE))?;
+    }
     adopt_package_use(config, root, &outcome.backup_dir)?;
 
     // 3. World set.
@@ -211,7 +332,11 @@ pub fn switch(
         .context("Couldn't write the world file")?;
 
     // 4. Install and update.
-    if opts.update_all || !plan.add_packages.is_empty() || !plan.use_changes.is_empty() {
+    let needs_emerge =
+        opts.update_all || !plan.add_packages.is_empty() || !plan.use_changes.is_empty();
+    if needs_emerge && !opts.verbose && !runner.dry() {
+        install_quietly(root, plan, runner, opts, &mut outcome)?;
+    } else if needs_emerge {
         let mut emerge = cmd(&["emerge", "--update", "--deep", "--newuse", "--verbose"]);
         if !opts.yes {
             emerge.push("--ask".into());
@@ -238,12 +363,23 @@ pub fn switch(
     //    one works).
     apply_security(plan, runner, &outcome)?;
 
-    // 6. Remove packages that aren't in the config. Always asks.
-    if !plan.remove_packages.is_empty() && !runner.run(&cmd(&["emerge", "--depclean", "--ask"]))? {
-        outcome.notes.push(format!(
-            "Unused packages weren't removed. Run `{} emerge --depclean --ask` when you're ready.",
-            crate::security::admin()
-        ));
+    // 6. Remove packages nothing needs anymore: ones taken out of the config,
+    //    and dependencies left over after USE changes or updates (sudo built
+    //    without `sendmail` no longer needs a mail server). Always asks.
+    let cleanup =
+        !plan.remove_packages.is_empty() || !plan.use_changes.is_empty() || opts.update_all;
+    if cleanup {
+        let removed = if opts.verbose || runner.dry() {
+            runner.run(&cmd(&["emerge", "--depclean", "--ask"]))?
+        } else {
+            remove_quietly(runner, opts, &outcome)?
+        };
+        if !removed {
+            outcome.notes.push(format!(
+                "Unused packages weren't removed. Run `{} emerge --depclean --ask` when you're ready.",
+                crate::security::admin()
+            ));
+        }
     }
 
     // 7. Services. Check again: packages installed above may have added them.
@@ -313,6 +449,272 @@ fn emerge_failed(explained: &[explain::Explanation], outcome: &Outcome) -> Strin
     text
 }
 
+/// The copy of package.use taken before the takeover, inside the backup folder.
+const USE_BEFORE: &str = "package.use.before";
+
+/// Copies a file or a folder (recursively).
+fn copy_tree(from: &Path, to: &Path) -> Result<()> {
+    if from.is_dir() {
+        std::fs::create_dir_all(to)?;
+        for entry in std::fs::read_dir(from)? {
+            let entry = entry?;
+            copy_tree(&entry.path(), &to.join(entry.file_name()))?;
+        }
+    } else {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(from, to).with_context(|| format!("Couldn't copy {}", from.display()))?;
+    }
+    Ok(())
+}
+
+/// Puts the world file and package.use back as they were before this switch.
+/// Used when emerge refuses or the user cancels before anything is installed.
+fn restore_files(root: &Path, backup: &Path) -> Result<()> {
+    let world = portage::world_path(root);
+    let saved = backup.join("world");
+    if saved.exists() {
+        std::fs::copy(&saved, &world).context("Couldn't put the world file back")?;
+    } else {
+        let _ = std::fs::remove_file(&world);
+    }
+    let use_dir = portage::package_use_dir(root);
+    if use_dir.is_dir() {
+        std::fs::remove_dir_all(&use_dir)?;
+    } else if use_dir.exists() {
+        std::fs::remove_file(&use_dir)?;
+    }
+    let before = backup.join(USE_BEFORE);
+    if before.exists() {
+        copy_tree(&before, &use_dir).context("Couldn't put package.use back")?;
+    }
+    Ok(())
+}
+
+/// One line that updates in place on a terminal ("[3/9] Installing …"),
+/// or one line per step when the output is a file or pipe.
+struct ProgressLine {
+    terminal: bool,
+    shown: bool,
+}
+
+impl ProgressLine {
+    fn new() -> Self {
+        Self {
+            terminal: std::io::IsTerminal::is_terminal(&std::io::stdout()),
+            shown: false,
+        }
+    }
+
+    fn show(&mut self, text: &str) {
+        use std::io::Write;
+        if self.terminal {
+            print!("\r\x1b[2K  {text}");
+            let _ = std::io::stdout().flush();
+        } else {
+            println!("  {text}");
+        }
+        self.shown = true;
+    }
+
+    fn clear(&mut self) {
+        if self.terminal && self.shown {
+            print!("\r\x1b[2K");
+        }
+        self.shown = false;
+    }
+}
+
+/// Saves emerge's full output, so nothing is lost by not showing it.
+fn save_log(root: &Path, stamp: &str, what: &str, text: &str) -> Option<PathBuf> {
+    let dir = root.join("var/log/bunny");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join(format!("{stamp}-{what}.log"));
+    std::fs::write(&path, text).ok()?;
+    Some(path)
+}
+
+/// Asks emerge what it would install (changing nothing), shows that as a
+/// short list, asks if it's more than the plan showed, then installs with a
+/// progress line. The full output goes to /var/log/bunny.
+fn install_quietly(
+    root: &Path,
+    plan: &Plan,
+    runner: &mut dyn Runner,
+    opts: &Options,
+    outcome: &mut Outcome,
+) -> Result<()> {
+    let update = ["emerge", "--update", "--deep", "--newuse", "--color=n"];
+
+    println!("\nAsking emerge what it needs to do…");
+    let mut pretend = cmd(&update);
+    pretend.insert(1, "--pretend".into());
+    pretend.push("@world".into());
+    let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
+    // --color=n should mean no color codes, but strip any that slip through:
+    // an invisible code breaks reading the message.
+    let raw = output;
+    let output = explain::strip_ansi(&raw);
+    if !ok {
+        restore_files(root, &outcome.backup_dir)?;
+        let log = save_log(
+            root,
+            &opts.stamp,
+            "emerge",
+            &format!("$ {}\n{raw}", pretend.join(" ")),
+        );
+        let explained = explain::explain(&output);
+        let mut text = String::from(
+            "emerge found a problem before installing anything, so nothing was changed.\n",
+        );
+        if explained.is_empty() {
+            text.push_str("\nbunny doesn't recognise emerge's message yet. The end of it:\n\n");
+            text.push_str(&crate::emerge::tail(&output, 20));
+            text.push_str(
+                "\n\nPaste the full message into `bunny explain`, or run with --verbose to see it all.\n\
+                 If you share it, bunny can learn to explain it.",
+            );
+        } else {
+            text.push_str("\nHere's what happened:\n\n");
+            for e in &explained {
+                text.push_str(&e.render());
+                text.push('\n');
+            }
+            text.push_str("Fix the problem, then run the same bunny command again.");
+        }
+        if let Some(log) = log {
+            text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
+        }
+        return Err(Refused(text).into());
+    }
+
+    let list = crate::emerge::parse_merge_list(&output);
+    if list.is_empty() {
+        println!("emerge has nothing to install.");
+        return Ok(());
+    }
+    print!(
+        "\n{}",
+        crate::emerge::render_merge_list(&list, &plan.add_packages)
+    );
+    // Only ask again if emerge wants more than the plan showed (dependencies,
+    // rebuilds, updates). Same packages as the plan: the user already said yes.
+    let planned = |name: &String| {
+        plan.add_packages.contains(name) || plan.use_changes.iter().any(|c| &c.atom == name)
+    };
+    let more_than_planned = list.iter().any(|m| !planned(&m.name));
+    if !opts.yes && more_than_planned && !(opts.confirm)("\nInstall these?", true)? {
+        restore_files(root, &outcome.backup_dir)?;
+        return Err(Cancelled.into());
+    }
+
+    let mut install = cmd(&update);
+    install.push("--quiet-build=y".into());
+    install.push("@world".into());
+    let mut progress = ProgressLine::new();
+    let mut on_line = |line: &str| {
+        if let Some((n, total, name, version, binary)) = crate::emerge::parse_progress(line) {
+            let verb = if binary { "Installing" } else { "Compiling" };
+            progress.show(&format!("[{n}/{total}] {verb} {name} {version}…"));
+        }
+    };
+    println!();
+    let (ok, install_output) = runner.run_quiet(&install, &mut on_line)?;
+    let install_output = explain::strip_ansi(&install_output);
+    progress.clear();
+    let log_text = format!(
+        "$ {}\n{output}\n$ {}\n{install_output}",
+        pretend.join(" "),
+        install.join(" ")
+    );
+    outcome.log = save_log(root, &opts.stamp, "emerge", &log_text);
+
+    let explained = explain::explain(&install_output);
+    if !ok {
+        let mut text = emerge_failed(&explained, outcome);
+        if explained.is_empty() {
+            text = text.replace(
+                "bunny doesn't recognise emerge's message yet (it's shown above).",
+                &format!(
+                    "bunny doesn't recognise emerge's message yet. The end of it:\n\n{}\n",
+                    crate::emerge::tail(&install_output, 20)
+                ),
+            );
+        }
+        if let Some(log) = &outcome.log {
+            text.push_str(&format!("\nemerge's full output is in {}.", log.display()));
+        }
+        bail!("{text}");
+    }
+    println!(
+        "  ✓ Installed {} package{}.",
+        list.len(),
+        if list.len() == 1 { "" } else { "s" }
+    );
+    outcome.messages = crate::emerge::parse_messages(&install_output);
+    outcome.tips.extend(
+        explained
+            .iter()
+            .filter(|e| e.severity != explain::Severity::Problem)
+            .map(|e| e.render()),
+    );
+    Ok(())
+}
+
+/// Shows which packages aren't needed anymore and asks before removing them
+/// (always, even with --yes). Returns false if they weren't removed.
+fn remove_quietly(runner: &mut dyn Runner, opts: &Options, outcome: &Outcome) -> Result<bool> {
+    let (ok, output) = runner.run_quiet(
+        &cmd(&["emerge", "--depclean", "--pretend", "--color=n"]),
+        &mut |_| {},
+    )?;
+    if !ok {
+        return Ok(false);
+    }
+    let list = crate::emerge::parse_depclean(&output).unwrap_or_default();
+    let count = crate::emerge::depclean_count(&output).unwrap_or(0);
+    if list.len() != count {
+        // emerge's output changed shape: let emerge show its own list and ask.
+        return runner.run(&cmd(&["emerge", "--depclean", "--ask"]));
+    }
+    if list.is_empty() {
+        return Ok(true);
+    }
+    println!("\nThese packages aren't needed anymore (nothing you asked for uses them):");
+    let split: Vec<(&str, &str)> = list
+        .iter()
+        .map(|cpv| match crate::import::strip_version(cpv) {
+            Some(name) => (name, &cpv[name.len() + 1..]),
+            None => (cpv.as_str(), ""),
+        })
+        .collect();
+    let width = split.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+    for (name, version) in split {
+        println!("  - {name:<width$}  {version}");
+    }
+    let undoable = outcome.snapshot.is_some();
+    if !(opts.confirm)("Remove them?", undoable)? {
+        return Ok(false);
+    }
+    let mut progress = ProgressLine::new();
+    let mut on_line = |line: &str| {
+        if let Some((n, total, name)) = crate::emerge::parse_unmerge_progress(line) {
+            progress.show(&format!("[{n}/{total}] Removing {name}…"));
+        }
+    };
+    let (ok, _) = runner.run_quiet(&cmd(&["emerge", "--depclean", "--color=n"]), &mut on_line)?;
+    progress.clear();
+    if ok {
+        println!(
+            "  ✓ Removed {} package{}.",
+            list.len(),
+            if list.len() == 1 { "" } else { "s" }
+        );
+    }
+    Ok(ok)
+}
+
 /// Writes the sudo/doas file and adds admins to `wheel`. The file is checked
 /// with the tool's own checker first; if it fails, nothing is replaced and the
 /// switch stops before depclean, so the tool you have keeps working.
@@ -333,13 +735,16 @@ fn apply_security(plan: &Plan, runner: &mut dyn Runner, outcome: &Outcome) -> Re
         .with_context(|| format!("Couldn't write {}", staged.display()))?;
     std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(privilege.mode()))?;
 
-    if !runner.run(&privilege.check_command(&staged))? {
+    let (ok, said) = runner.run_quiet(&privilege.check_command(&staged), &mut |_| {})?;
+    if !ok {
         let _ = std::fs::remove_file(&staged);
         bail!(
             "{} rejected the file bunny generated for it, so it wasn't put in place,\n  \
              and no packages were removed. Your current admin setup still works.\n  \
+             It said: {}\n  \
              Please report this: https://github.com/bunnyos-dev/bunnyos/issues",
-            privilege.command()
+            privilege.command(),
+            said.trim()
         );
     }
     if path.exists() {
@@ -580,6 +985,10 @@ mod tests {
             stamp: "20261116-120000".into(),
             update_all: false,
             color: false,
+            // These tests cover emerge's own output and questions; the quiet
+            // path has its own tests below.
+            verbose: true,
+            confirm: |_, _| Ok(true),
         }
     }
 
@@ -690,6 +1099,8 @@ mod tests {
                 stamp: stamp.into(),
                 update_all: false,
                 color: false,
+                verbose: true,
+                confirm: |_, _| Ok(true),
             };
             switch(&config, root.path(), &plan, &mut Recorder::default(), &opts).unwrap();
         }
@@ -701,5 +1112,265 @@ mod tests {
         .unwrap();
         // The kept line is still there exactly once.
         assert_eq!(kept.matches("<dev-libs/x-2 y").count(), 1, "{kept}");
+    }
+
+    /// Answers each command with canned output (matched by a piece of the
+    /// command line), and feeds it line by line like emerge would.
+    #[derive(Default)]
+    struct Scripted {
+        commands: Vec<String>,
+        replies: Vec<(&'static str, bool, String)>,
+    }
+
+    impl Scripted {
+        fn reply(&mut self, line: &str) -> (bool, String) {
+            self.commands.push(line.to_string());
+            self.replies
+                .iter()
+                .find(|(pat, _, _)| line.contains(pat))
+                .map(|(_, ok, out)| (*ok, out.clone()))
+                .unwrap_or((true, String::new()))
+        }
+    }
+
+    impl Runner for Scripted {
+        fn run(&mut self, cmd: &[String]) -> Result<bool> {
+            Ok(self.reply(&cmd.join(" ")).0)
+        }
+
+        fn run_quiet(
+            &mut self,
+            cmd: &[String],
+            on_line: &mut dyn FnMut(&str),
+        ) -> Result<(bool, String)> {
+            let (ok, out) = self.reply(&cmd.join(" "));
+            out.lines().for_each(on_line);
+            Ok((ok, out))
+        }
+    }
+
+    fn quiet(yes: bool, answer: bool) -> Options {
+        Options {
+            yes,
+            verbose: false,
+            confirm: if answer {
+                |_, _| Ok(true)
+            } else {
+                |_, _| Ok(false)
+            },
+            ..opts()
+        }
+    }
+
+    const PRETEND: &str = "[binary   N     ] acct-group/nullmail-0-r2::gentoo\n\
+                           [binary   N     ] app-misc/tmux-3.6a::gentoo\n";
+    const INSTALL: &str = ">>> Emerging binary (1 of 2) acct-group/nullmail-0-r2::gentoo\n\
+                           >>> Emerging binary (2 of 2) app-misc/tmux-3.6a::gentoo\n\
+                           \n * Messages for package app-misc/tmux-3.6a:\n\n * Read the manual.\n";
+
+    #[test]
+    fn quiet_install_asks_emerge_first_then_installs_without_its_questions() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Scripted {
+            replies: vec![
+                ("--pretend --update", true, PRETEND.into()),
+                ("--quiet-build=y", true, INSTALL.into()),
+            ],
+            ..Scripted::default()
+        };
+        let outcome = switch(
+            &config,
+            root.path(),
+            &plan,
+            &mut runner,
+            &quiet(false, true),
+        )
+        .unwrap();
+        let emerges: Vec<&String> = runner
+            .commands
+            .iter()
+            .filter(|c| c.starts_with("emerge --"))
+            .collect();
+        assert!(emerges[0].starts_with("emerge --pretend --update --deep --newuse"));
+        assert!(emerges[1].contains("--quiet-build=y @world"));
+        assert!(!emerges[1].contains("--ask"), "{}", emerges[1]);
+        assert_eq!(
+            outcome.messages,
+            [(
+                "app-misc/tmux".to_string(),
+                vec!["Read the manual.".to_string()]
+            )]
+        );
+        let log = outcome.log.expect("log saved");
+        assert!(std::fs::read_to_string(log)
+            .unwrap()
+            .contains(">>> Emerging binary (2 of 2)"));
+    }
+
+    #[test]
+    fn saying_no_to_extra_packages_puts_everything_back() {
+        let root = fake_system();
+        let use_dir = root.path().join(portage::PACKAGE_USE_DIR);
+        let world = portage::world_path(root.path());
+        let world_before = std::fs::read_to_string(&world).unwrap();
+        let files_before: Vec<_> = std::fs::read_dir(&use_dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Scripted {
+            replies: vec![("--pretend --update", true, PRETEND.into())],
+            ..Scripted::default()
+        };
+        let err = switch(
+            &config,
+            root.path(),
+            &plan,
+            &mut runner,
+            &quiet(false, false),
+        )
+        .unwrap_err();
+        assert!(err.is::<Cancelled>());
+        assert!(!runner.commands.iter().any(|c| c.contains("--quiet-build")));
+        assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
+        let mut files_after: Vec<_> = std::fs::read_dir(&use_dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        let mut files_before = files_before;
+        files_before.sort();
+        files_after.sort();
+        assert_eq!(files_after, files_before);
+    }
+
+    #[test]
+    fn a_refusal_before_installing_changes_nothing_and_is_explained() {
+        let root = fake_system();
+        let world = portage::world_path(root.path());
+        let world_before = std::fs::read_to_string(&world).unwrap();
+        let config = Config::parse(CONFIG).unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Scripted {
+            replies: vec![("--pretend --update", false, fixture("use-change-swtpm.txt"))],
+            ..Scripted::default()
+        };
+        let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("before installing anything, so nothing was changed"),
+            "{err}"
+        );
+        assert!(err.contains("gnutls"), "{err}");
+        assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
+    }
+
+    #[test]
+    fn quiet_removal_lists_and_always_asks() {
+        let root = fake_system();
+        let config = Config::parse("packages = []").unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        assert!(!plan.remove_packages.is_empty());
+        let depclean = "All selected packages: =app-text/tree-2.2.1\n\nNumber to remove:     1\n";
+        // --yes, but the user says no at the removal question.
+        let mut runner = Scripted {
+            replies: vec![("--depclean --pretend", true, depclean.into())],
+            ..Scripted::default()
+        };
+        let outcome = switch(
+            &config,
+            root.path(),
+            &plan,
+            &mut runner,
+            &quiet(true, false),
+        )
+        .unwrap();
+        assert!(!runner
+            .commands
+            .iter()
+            .any(|c| c == "emerge --depclean --color=n"));
+        assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
+
+        let mut runner = Scripted {
+            replies: vec![("--depclean --pretend", true, depclean.into())],
+            ..Scripted::default()
+        };
+        switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+        assert!(runner
+            .commands
+            .iter()
+            .any(|c| c == "emerge --depclean --color=n"));
+    }
+
+    #[test]
+    fn unreadable_depclean_output_falls_back_to_emerges_own_question() {
+        let root = fake_system();
+        let config = Config::parse("packages = []").unwrap();
+        let plan = plan::make(&config, root.path()).unwrap();
+        let mut runner = Scripted {
+            replies: vec![("--depclean --pretend", true, "Number to remove: 3\n".into())],
+            ..Scripted::default()
+        };
+        switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+        assert!(runner
+            .commands
+            .iter()
+            .any(|c| c == "emerge --depclean --ask"));
+    }
+
+    #[test]
+    fn system_runner_runs_quietly_line_by_line() {
+        let cmd = cmd(&[
+            "sh",
+            "-c",
+            "echo '>>> Emerging (1 of 2) a/b-1'; printf 'bad \\377 byte\\n'; echo err >&2; echo '>>> Emerging (2 of 2) a/c-2'; exit 1",
+        ]);
+        let mut seen = Vec::new();
+        let (ok, text) = SystemRunner
+            .run_quiet(&cmd, &mut |l| seen.push(l.to_string()))
+            .unwrap();
+        assert!(!ok);
+        assert_eq!(seen.len(), 4, "{seen:?}");
+        assert!(seen.contains(&">>> Emerging (2 of 2) a/c-2".to_string()));
+        assert!(text.contains("bad"));
+        assert!(text.contains("err"));
+    }
+
+    #[test]
+    fn no_second_question_when_emerge_wants_only_what_the_plan_showed() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let mut plan = plan::make(&config, root.path()).unwrap();
+        plan.add_packages.clear();
+        plan.use_changes = vec![crate::plan::UseChange {
+            atom: "app-admin/sudo".into(),
+            from: vec![],
+            to: vec!["-sendmail".into()],
+        }];
+        let mut runner = Scripted {
+            replies: vec![(
+                "--pretend --update",
+                true,
+                "[ebuild   R    ] app-admin/sudo-1.9.17_p2::gentoo\n".into(),
+            )],
+            ..Scripted::default()
+        };
+        // The answer would be "no" if asked; it must not be asked.
+        switch(
+            &config,
+            root.path(),
+            &plan,
+            &mut runner,
+            &quiet(false, false),
+        )
+        .unwrap();
+        assert!(runner
+            .commands
+            .iter()
+            .any(|c| c.contains("--quiet-build=y")));
     }
 }

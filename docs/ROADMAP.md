@@ -153,7 +153,7 @@ so the maintainer's time goes to testing and decisions.
       (`emerge --pretend`) read by bunny. If anything breaks (emerge changed
       its messages, a profile moved), it opens an issue so the daily session
       picks it up.
-- [~] **Security advisories in `bunny status`:** a line saying whether any
+- [x] **Security advisories in `bunny status`:** a line saying whether any
       Gentoo security advisory (GLSA, via `glsa-check`) affects installed
       packages, and to run `bunny update` if so.
 - [ ] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):

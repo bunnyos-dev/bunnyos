@@ -20,6 +20,7 @@ Words that might be new are explained in the [Glossary](glossary.md).
 ## The short version
 
 ```sh
+bunny status                  # is everything in order?
 bunny search browser          # find something
 bunny add firefox             # install it
 bunny remove firefox          # remove it

@@ -203,7 +203,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny rollback [number or name]` | Restore a generation (takes effect on reboot); `bunny rollback list` lists them |
 | `bunny clean [--keep N]` | Remove old generations and rollback leftovers |
 | `bunny try` | Build and boot a generation without making it permanent |
-| `bunny status` | Show drift (anything changed outside bunny) |
+| `bunny status` | One screen: config applied?, versions vs lock, last change, undo, last sync |
 | `bunny diff [--baseline]` | Show differences from the config or from the Baseline |
 | `bunny why <pkg>` | Explain why a package or flag is set |
 | `bunny flags <pkg>` | Explain a package's USE flags in plain English |
@@ -257,6 +257,18 @@ commands are only printed.
 - `bunny remove <names>` takes full or short names and works the same way;
   removing from the system goes through `emerge --depclean --ask`.
 - `plan`'s "doesn't exist" check uses the same package index.
+- `bunny status` is read-only and needs no root. One line each, marked
+  ✓/⚠/✗ with what to do underneath:
+  - **Config:** applied or not (anything added outside bunny, like `emerge
+    foo` or a hand-edited package.use file, shows as a change not applied),
+    plus services started at boot that aren't in the config.
+  - **Versions:** installed versions vs `bunny.lock`.
+  - **Last change:** from `bunny-state.toml`, and whether a rollback is
+    waiting for a restart.
+  - **Undo:** whether `/.snapshots` exists, and how many generations.
+  - **Updates:** when the Gentoo tree was last synced (newest of
+    `metadata/timestamp.chk` and `.git/FETCH_HEAD`); older than 7 days is a ⚠.
+    It doesn't run emerge to count pending updates, to stay instant.
 
 ### Config files (`/etc`)
 

@@ -66,6 +66,25 @@ your packages at those versions until you choose to update.
 
 ## Done
 
+Check on things any time with:
+
+```sh
+bunny status
+```
+
+```
+✓ Config        the system matches your config
+✓ Versions      all 812 packages match bunny.lock
+· Last change   a switch, 2026-11-17 09:15:00 UTC (3 hours ago)
+✓ Undo          1 generation saved, newest 2026-11-17 09:15:00 UTC
+                `bunny rollback list` shows them.
+✓ Updates       last checked 2 days ago
+
+Everything is in order.
+```
+
+Anything marked ⚠ or ✗ has a line underneath saying what to do.
+
 From now on:
 
 - [Install a program](../tasks/install.md) with `bunny add`

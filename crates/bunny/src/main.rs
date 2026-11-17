@@ -12,6 +12,7 @@ mod plan;
 mod portage;
 mod repo;
 mod rollback;
+mod status;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -34,6 +35,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Show at a glance whether everything is in order (changes nothing)
+    Status {
+        /// Path to the config
+        #[arg(default_value = "/etc/bunny/bunny.toml")]
+        config: PathBuf,
+        /// System root to look at (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Check bunny.toml for mistakes and explain how to fix them
     Check {
         /// Path to the config
@@ -205,6 +215,14 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 println!();
                 print!("{}", lock::compare(&locked, &now).render());
             }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Status { config, root } => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            print!("{}", status::gather(&config, &root, now).render());
             Ok(ExitCode::SUCCESS)
         }
         Command::Switch { config, yes, root } => switch(&config, yes, &root),

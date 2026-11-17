@@ -426,6 +426,54 @@ the others are packaged and supported, the "set it up yourself" ones on
 purpose bare. Config: `[desktop] name = "bunny" | "plasma" | "xfce" |
 "hyprland" | "mango" | "none"`, `accent = "#…"`.
 
+## Look and feel
+
+Decided November 2026. Mockups: "BunnyOS: boot and installer mockups"
+(claude.ai artifact), which covers the boot screens, installer and desktop.
+
+The idea: Apple hides the system; BunnyOS shows it calmly, and only when you
+ask. The calm, centered, one-thing-at-a-time feel is kept. What's ours is
+that your system is a readable file, every change is saved, and anything can
+be undone, and the design says so.
+
+- **Black and monochrome.** True black background (`#000000`), dark greys
+  for surfaces (`#0B0B0D`, `#0D0D0F`, `#111113`), hairline borders
+  (`#1C1C1F`, `#26262A`), warm white text (`#F2F1EE`), muted text
+  (`#9A9AA0`), faint text (`#5C5C63`). No colored wallpapers behind the
+  boot screens or installer.
+- **Color means something.** One accent, used sparingly: the focused window,
+  the main button, the current item. Default is **Paper** (the off-white, so
+  the default look is fully monochrome); choices are Amber `#F5B85C`, Mint
+  `#8BE0C1`, Lilac `#C6B6FF`, Coral `#FF8E7A`. Status colors: amber for
+  "needs attention", coral for "can't be undone". Not Apple blue.
+- **Two type voices.** Geist for words; Geist Mono for anything that is
+  "the system": file names, versions, times, config lines, key hints.
+- **Centered by default, under the hood on request.** Screens are centered,
+  one decision at a time. A `{ } bunny.toml` button (installer) or
+  `{ } under the hood` (Settings) slides a panel in from the right showing
+  the file your choices write, with the current change highlighted. It is
+  never needed, and closed by default.
+- **Undo is visible.** The boot menu, Settings → History and notifications
+  ("Saved a version first, so you can go back. Undo") all show it.
+- **Glass, barely.** Flat surfaces. A soft shadow only on things that float
+  (menus, the launcher, notifications). No live blur needed anywhere, so the
+  same look works in GRUB, Plymouth, the installer and the desktop.
+- **Motion:** short and quiet (about 0.4 s, ease-out). Panels slide; nothing
+  bounces.
+- **Logo:** the placeholder bunny until a designer makes the real one.
+
+### Staying light
+
+The look must not cost speed. Targets (not yet measured):
+
+- BunnyOS Desktop idle memory under 600 MB; Settings opens in under 300 ms.
+- Power button to login screen under 10 seconds on an NVMe disk.
+- Boot screens are static images plus one progress bar: no video, no blur.
+- The shell is one Quickshell process; no background services that only
+  exist to look nice.
+- Every visual feature has an off switch in `[desktop]`, and the "set it up
+  yourself" desktops ship none of it.
+
 ## Boot experience
 
 ```
@@ -438,6 +486,14 @@ power on → hidden GRUB (hold Esc for the BunnyOS-themed menu)
 - `quiet splash loglevel=3`, early KMS, and `GRUB_GFXPAYLOAD_LINUX=keep` for a
   flicker-free handoff.
 - GRUB is the default loader with a real BunnyOS theme, hidden by default.
+- **The menu is grouped:** *Start* (BunnyOS, BunnyOS Gaming, other systems
+  found), *Go back to* (recent generations named by what changed, e.g.
+  "Before you added mpv · today 09:15", then "Earlier versions"), *Other*
+  (firmware settings). A *History* timeline beside it shows each saved
+  change. Starting an older version never deletes anything newer.
+- **Loading screen:** black, the white logo, one thin progress line, and a
+  faint "esc · details". Esc shows the startup log; a failed service gets a
+  plain-English note under the log.
 
 ```toml
 [boot]
@@ -460,8 +516,9 @@ kernel_args = ["quiet", "splash"]
 - Always keeps Microsoft's keys when Windows is present.
 - Clock fix: `[dualboot] clock = "windows-compatible"`.
 - `keep_first = true` keeps BunnyOS first in the boot order after Windows updates.
-- Installer offers "Install alongside Windows" with safety checks
-  (hibernation, Fast Startup, BitLocker).
+- Installer offers "Install alongside <the system it found>" (Windows, macOS
+  on Intel Macs, another Linux, etc.), with safety checks for that system
+  (for Windows: hibernation, Fast Startup, BitLocker).
 
 ## Disk layout
 
@@ -500,14 +557,22 @@ GPT
   compositor, software-render fallback). Plain Qt Quick is the fallback choice.
 - The installer only writes a `bunny.toml`; `bunny install` does the work.
 - **Layout (decided November 2026):** not the sidebar-and-steps layout
-  most Linux installers share. One centered window over a dark background, a
-  small top bar (installer name, a Utilities menu, language, Wi-Fi,
-  battery), and **one decision per screen**: a big picture or title, a line of
-  explanation, the choice, and Back / Continue at the bottom with step dots.
-  Mockups: "BunnyOS: boot and installer mockups" (claude.ai artifact).
-- Flow: welcome (language) → disk (whole disk or next to Windows, encryption
-  on) → account → desktop → color → summary (with "Show bunny.toml") →
+  most Linux installers share. Full-screen black with a centered column, a
+  small top bar (installer name, a Utilities menu, language, Wi-Fi, battery,
+  and the `{ } bunny.toml` button), and **one decision per screen**: a step
+  counter (`02 / 07  REGION`), a big title, a line of explanation, the
+  choice, and Back / Continue at the bottom. See "Look and feel".
+- **bunny.toml panel:** hidden by default. When opened it slides in from the
+  right, the content moves aside, and the file fills in section by section
+  as you answer, with the current section highlighted. The summary links to
+  it ("See the file this creates").
+- Flow: welcome (language) → region → disk (whole disk or alongside the
+  system it found, encryption on) → account → desktop → color → summary →
   installing → done.
+- **Region:** a dotted world map. Clicking a city sets the country, time
+  zone and keyboard; scrolling, pinching or +/− zooms in and shows more
+  cities; dragging moves the map. Choosing a country or time zone from the
+  lists below moves the pin there. Shows the local time and coordinates.
 - **Utilities menu:** "Use the terminal instead" switches to a text console
   that says: welcome to the BunnyOS installer (terminal mode), how to get back
   (`bunny-install --gui`, or Ctrl+Alt+F1), the install guide's URL ("Installing
@@ -532,7 +597,7 @@ install). Two kinds:
 - **Erase everything** (USB only): wipes the disk and installs fresh, for
   selling or giving a computer away. Can't be undone; asks to type ERASE.
 
-Needs the Baseline image (phase 6 and 9).
+Needs the Baseline image (phases 6 and 7).
 
 ### ISO
 

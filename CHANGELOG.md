@@ -21,6 +21,8 @@ The first release, `0.1.0`, will be version 1 of bunny:
 - `bunny status`: one screen saying whether everything is in order.
 - `bunny diff`: config and system side by side, with both ways to fix each
   difference.
+- `bunny status` says whether any Gentoo security advisories affect the
+  system (needs gentoolkit's `glsa-check`).
 
 ### Changing a system
 - `bunny switch` makes the system match the config: packages, USE flags,
@@ -30,7 +32,9 @@ The first release, `0.1.0`, will be version 1 of bunny:
   kept).
 - `bunny update` syncs, updates and records the new versions.
 - Quieter emerge: a short install list first, one progress line, the full
-  output saved to `/var/log/bunny/`, and package messages summarised.
+  output saved to `/var/log/bunny/`, and package messages summarised. The
+  news tip only comes back when the number of unread items changes, and
+  emerge's "remove unused packages" reminder isn't repeated.
 - `[security]`: sudo (the default) or doas, checked before it's put in place,
   and built so it can't lock you out.
 
@@ -43,6 +47,11 @@ The first release, `0.1.0`, will be version 1 of bunny:
   `bunny rollback list` and `bunny clean`.
 - `[boot] undo_entry`: an "undo the last change" entry in the boot menu, for
   when a change stops the system from starting.
+- Undoing a change (from bunny or the boot menu) puts `bunny.toml` and
+  `bunny.lock` back too, so config and system match right away.
+- After an undo, the boot menu's undo entry is removed until the next change,
+  so picking it again can't take you further back; picking it twice does
+  nothing.
 
 ### Errors in plain English
 - `bunny explain`, and automatic explanations when emerge stops: USE changes,

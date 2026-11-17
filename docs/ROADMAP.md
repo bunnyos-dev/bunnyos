@@ -15,7 +15,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 2. Change a system | `switch`: packages, USE flags, services, backups | ✅ Done, tested in the VM |
 | 3. Undo | snapshots, `generations`, `rollback`, `clean` | ✅ Done, tested in the VM (boot-menu undo still to do) |
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
-| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | 🔶 Part 1 in review |
+| 5. Understandable errors | plain-English emerge errors, `status`, `diff` | 🔶 Part 1 done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
@@ -41,6 +41,8 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
       `bunny.lock`; `bunny plan` shows drift from it
 - [x] Version pins: `bunny switch` keeps to the lock and updates it;
       `bunny update` syncs, updates everything and relocks
+- [x] `bunny explain`: emerge messages in plain English with a fix; risky
+      live/`**` versions flagged
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
       `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
 
@@ -54,7 +56,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [x] **Lockfile, part 2:** `bunny update` syncs the tree, runs the switch, and
       rewrites the lock. `bunny switch` refuses to silently drift from the lock
       (explains what changed). **(VM)**
-- [~] **Error translation, part 1:** recognise emerge's "USE changes are
+- [x] **Error translation, part 1:** recognise emerge's "USE changes are
       necessary", masked/keyworded package, slot conflict, blocker and fetch
       failure messages and explain each in plain English with the fix. Use real
       outputs as test fixtures (see `tests/fixtures/` once created). Live
@@ -62,6 +64,14 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [ ] **Error translation, part 2:** run emerge so bunny sees its output
       (while still showing it live), and explain failures automatically at the
       end of `switch` / `update` instead of asking the user to paste them. **(VM)**
+- [ ] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.
+      `search` finds packages fast (by name and description, from a local
+      index of the package tree) and shows plain-English descriptions.
+      `add <name>` and `remove <name>` edit `bunny.toml` for you (keeping your
+      comments and layout, via `toml_edit`), accept short names when they're
+      unambiguous (`firefox` → `www-client/firefox`), show the plan, and run
+      the switch. "Installing" stays declarative: it's always "add to the
+      config, then switch". **(VM)**
 - [ ] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
       published to GitHub Pages by a GitHub Actions workflow. Two tracks:
       "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
@@ -86,6 +96,9 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 Rough order. These get split into PR-sized items when we reach them.
 
 ### Phase 6: fast installs
+- [ ] **Clean build container** (`[build] isolated = true`): compile inside
+      a throwaway container made from a pinned stage3, so the live system's
+      state can't leak into builds. Works locally or on a build server.
 - [ ] Recipe hash for binary packages (ebuild + USE + CFLAGS + deps)
 - [ ] `[build] sources` / `mode`: download from a cache, compile as fallback
 - [ ] `bunny serve`: share one machine's builds (e.g. over Tailscale)
@@ -112,6 +125,13 @@ Rough order. These get split into PR-sized items when we reach them.
 - [ ] ISO build (Net and Offline editions), checksums and signatures
 - [ ] Hosting: GitHub Releases + Cloudflare R2
 - [ ] `bunny-overlay` repo (Quickshell, MangoWM, themes, bunny itself)
+
+### Long-term: Portage-free systems
+- [ ] Portage (Python, its tools) lives only inside the build container;
+      installed systems get finished packages through a small Rust installer
+      in bunny. Bash probably stays (package install scripts use it).
+- [ ] Own dependency solver in Rust (e.g. `resolvo`), with Portage only
+      doing the building.
 
 ### Outside our control
 - Epic accepting BunnyOS's signing key (anti-cheat games)

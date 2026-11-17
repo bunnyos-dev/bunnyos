@@ -202,6 +202,8 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny flags <pkg>` | Explain a package's USE flags in plain English |
 | `bunny pin <pkg> <ver>` | Pin a package (keeps a copy of its ebuild and binary) |
 | `bunny search <term>` | Fast search from a prebuilt index |
+| `bunny add <name>` / `bunny remove <name>` | Edit `bunny.toml` for you (keeps comments), then switch |
+| `bunny explain [file]` | Explain an emerge message in plain English |
 | `bunny news` | Gentoo news items, translated, marked if they affect you |
 | `bunny adopt <file>` | Bring a hand-edited config file under bunny's management |
 | `bunny doctor [topic]` | Checklists (e.g. `secureboot`, `gaming`) |

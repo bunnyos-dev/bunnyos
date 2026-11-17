@@ -20,7 +20,7 @@ polished, quiet experience from power button to desktop.
 | 2. Change a system (`switch`) | ✅ Done |
 | 3. Undo (`generations`, `rollback`, `clean`) | ✅ Done (boot-menu undo to do) |
 | 4. Same system everywhere (lockfile) | ✅ Done |
-| 5. Understandable errors | ⬜ Next |
+| 5. Understandable errors | 🔶 Part 1 done |
 | 6. Fast installs (package cache) | ⬜ |
 | 7. The look (boot animation, GRUB, login) | ⬜ |
 | 8. Security + gaming | ⬜ |

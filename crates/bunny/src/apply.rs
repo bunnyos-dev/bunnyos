@@ -259,18 +259,25 @@ pub fn switch(
     let snapshots = root.join(".snapshots");
     if snapshots.is_dir() {
         let target = snapshots.join(format!("bunny-{}", opts.stamp));
-        let ok = runner.run(&cmd(&[
-            "btrfs",
-            "subvolume",
-            "snapshot",
-            "-r",
-            &root.to_string_lossy(),
-            &target.to_string_lossy(),
-        ]))?;
+        // btrfs's own "Create readonly snapshot…" line isn't shown; bunny
+        // reports the snapshot itself at the end (and btrfs's words on failure).
+        let (ok, said) = runner.run_quiet(
+            &cmd(&[
+                "btrfs",
+                "subvolume",
+                "snapshot",
+                "-r",
+                &root.to_string_lossy(),
+                &target.to_string_lossy(),
+            ]),
+            &mut |_| {},
+        )?;
         if !ok {
             bail!(
                 "Couldn't take a snapshot before changing anything, so nothing was changed.\n  \
-                 bunny needs / on btrfs with a /.snapshots folder to be able to undo changes."
+                 bunny needs / on btrfs with a /.snapshots folder to be able to undo changes.\n  \
+                 btrfs said: {}",
+                said.trim()
             );
         }
         outcome.snapshot = Some(target);
@@ -567,7 +574,10 @@ fn install_quietly(
     );
     // Only ask again if emerge wants more than the plan showed (dependencies,
     // rebuilds, updates). Same packages as the plan: the user already said yes.
-    let more_than_planned = list.iter().any(|m| !plan.add_packages.contains(&m.name));
+    let planned = |name: &String| {
+        plan.add_packages.contains(name) || plan.use_changes.iter().any(|c| &c.atom == name)
+    };
+    let more_than_planned = list.iter().any(|m| !planned(&m.name));
     if !opts.yes && more_than_planned && !(opts.confirm)("\nInstall these?", true)? {
         restore_files(root, &outcome.backup_dir)?;
         return Err(Cancelled.into());
@@ -645,12 +655,16 @@ fn remove_quietly(runner: &mut dyn Runner, opts: &Options, outcome: &Outcome) ->
         return Ok(true);
     }
     println!("\nThese packages aren't needed anymore (nothing you asked for uses them):");
-    for cpv in &list {
-        let (name, version) = match crate::import::strip_version(cpv) {
+    let split: Vec<(&str, &str)> = list
+        .iter()
+        .map(|cpv| match crate::import::strip_version(cpv) {
             Some(name) => (name, &cpv[name.len() + 1..]),
             None => (cpv.as_str(), ""),
-        };
-        println!("  - {name}  {version}");
+        })
+        .collect();
+    let width = split.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+    for (name, version) in split {
+        println!("  - {name:<width$}  {version}");
     }
     let undoable = outcome.snapshot.is_some();
     if !(opts.confirm)("Remove them?", undoable)? {
@@ -694,13 +708,16 @@ fn apply_security(plan: &Plan, runner: &mut dyn Runner, outcome: &Outcome) -> Re
         .with_context(|| format!("Couldn't write {}", staged.display()))?;
     std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(privilege.mode()))?;
 
-    if !runner.run(&privilege.check_command(&staged))? {
+    let (ok, said) = runner.run_quiet(&privilege.check_command(&staged), &mut |_| {})?;
+    if !ok {
         let _ = std::fs::remove_file(&staged);
         bail!(
             "{} rejected the file bunny generated for it, so it wasn't put in place,\n  \
              and no packages were removed. Your current admin setup still works.\n  \
+             It said: {}\n  \
              Please report this: https://github.com/bunnyos-dev/bunnyos/issues",
-            privilege.command()
+            privilege.command(),
+            said.trim()
         );
     }
     if path.exists() {
@@ -1294,5 +1311,39 @@ mod tests {
         assert!(seen.contains(&">>> Emerging (2 of 2) a/c-2".to_string()));
         assert!(text.contains("bad"));
         assert!(text.contains("err"));
+    }
+
+    #[test]
+    fn no_second_question_when_emerge_wants_only_what_the_plan_showed() {
+        let root = fake_system();
+        let config = Config::parse(CONFIG).unwrap();
+        let mut plan = plan::make(&config, root.path()).unwrap();
+        plan.add_packages.clear();
+        plan.use_changes = vec![crate::plan::UseChange {
+            atom: "app-admin/sudo".into(),
+            from: vec![],
+            to: vec!["-sendmail".into()],
+        }];
+        let mut runner = Scripted {
+            replies: vec![(
+                "--pretend --update",
+                true,
+                "[ebuild   R    ] app-admin/sudo-1.9.17_p2::gentoo\n".into(),
+            )],
+            ..Scripted::default()
+        };
+        // The answer would be "no" if asked; it must not be asked.
+        switch(
+            &config,
+            root.path(),
+            &plan,
+            &mut runner,
+            &quiet(false, false),
+        )
+        .unwrap();
+        assert!(runner
+            .commands
+            .iter()
+            .any(|c| c.contains("--quiet-build=y")));
     }
 }

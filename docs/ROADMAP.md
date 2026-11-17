@@ -70,7 +70,7 @@ list, with the CI check along the way, and the Guide last.
 - [x] **Error translation, part 2:** run emerge so bunny sees its output
       (while still showing it live), and explain failures automatically at the
       end of `switch` / `update` instead of asking the user to paste them. **(VM)**
-- [ ] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.
+- [~] **`bunny search`, `bunny add`, `bunny remove`:** the everyday commands.
       `search` finds packages fast (by name and description, from a local
       index of the package tree) and shows plain-English descriptions.
       `add <name>` and `remove <name>` edit `bunny.toml` for you (keeping your

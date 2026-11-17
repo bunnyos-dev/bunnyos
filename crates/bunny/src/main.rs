@@ -2,6 +2,7 @@
 
 mod apply;
 mod config;
+mod edit;
 mod explain;
 mod import;
 mod init;
@@ -9,6 +10,7 @@ mod lock;
 mod notes;
 mod plan;
 mod portage;
+mod repo;
 mod rollback;
 
 use std::path::{Path, PathBuf};
@@ -101,6 +103,45 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
+    /// Find packages by name or description
+    Search {
+        /// What to look for, e.g. "browser" or "firefox"
+        #[arg(required = true)]
+        query: Vec<String>,
+        /// System root (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Add packages to your config and install them (shows the changes and asks first)
+    Add {
+        /// Package names, short (firefox) or full (www-client/firefox)
+        #[arg(required = true)]
+        names: Vec<String>,
+        /// Path to the config
+        #[arg(long, default_value = "/etc/bunny/bunny.toml")]
+        config: PathBuf,
+        /// Don't ask before applying or installing
+        #[arg(short, long)]
+        yes: bool,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Remove packages from your config and the system (shows the changes and asks first)
+    Remove {
+        /// Package names, short (firefox) or full (www-client/firefox)
+        #[arg(required = true)]
+        names: Vec<String>,
+        /// Path to the config
+        #[arg(long, default_value = "/etc/bunny/bunny.toml")]
+        config: PathBuf,
+        /// Don't ask before applying (removing packages from the system always asks)
+        #[arg(short, long)]
+        yes: bool,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Explain an emerge message in plain English (paste it in, or give a file)
     Explain {
         /// A file with emerge's output. Without it, paste the message and press Ctrl+D.
@@ -172,6 +213,19 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
         Command::Lock { config, root } => lock_cmd(&config, &root),
         Command::Explain { file } => explain_cmd(file.as_deref()),
+        Command::Search { query, root } => search_cmd(&query.join(" "), &root),
+        Command::Add {
+            names,
+            config,
+            yes,
+            root,
+        } => add_cmd(&names, &config, yes, &root),
+        Command::Remove {
+            names,
+            config,
+            yes,
+            root,
+        } => remove_cmd(&names, &config, yes, &root),
         Command::Update { config, yes, root } => update_cmd(&config, yes, &root),
         Command::Import {
             output,
@@ -208,16 +262,36 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     }
 }
 
+/// How a switch ended, so `add` and `remove` know whether to keep their edit.
+#[derive(Debug, PartialEq)]
+enum Switched {
+    /// Changes were applied (or at least started).
+    Applied,
+    /// The system already matched.
+    NothingToDo,
+    /// Stopped before changing anything (problems found, or cancelled).
+    NotApplied(ExitCode),
+}
+
 fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     let real_system = root == Path::new("/");
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    Ok(match switch_inner(config, yes, root)? {
+        Switched::Applied | Switched::NothingToDo => ExitCode::SUCCESS,
+        Switched::NotApplied(code) => code,
+    })
+}
+
+/// The switch itself, for a caller that's already root.
+fn switch_inner(config: &Path, yes: bool, root: &Path) -> anyhow::Result<Switched> {
+    let real_system = root == Path::new("/");
 
     let cfg = Config::load(config)?;
     if report_problems(&cfg, config) != ExitCode::SUCCESS {
         eprintln!("Fix these first, then run `bunny switch` again.");
-        return Ok(ExitCode::FAILURE);
+        return Ok(Switched::NotApplied(ExitCode::FAILURE));
     }
     let plan = plan::make(&cfg, root)?;
     print!("{}", plan.render());
@@ -226,14 +300,14 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
             "Nothing was changed. Fix the package names in {}, then run `bunny switch` again.",
             config.display()
         );
-        return Ok(ExitCode::FAILURE);
+        return Ok(Switched::NotApplied(ExitCode::FAILURE));
     }
     let lock_path = lock::path_for(config);
     if plan.is_empty() {
         for message in lock::ensure(root, &lock_path)? {
             println!("{message}");
         }
-        return Ok(ExitCode::SUCCESS);
+        return Ok(Switched::NothingToDo);
     }
 
     let foreign = apply::foreign_package_use_files(root);
@@ -270,7 +344,7 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
         )?
     {
         println!("Nothing was changed.");
-        return Ok(ExitCode::SUCCESS);
+        return Ok(Switched::NotApplied(ExitCode::SUCCESS));
     }
 
     let opts = apply::Options {
@@ -298,7 +372,7 @@ fn switch(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     }
     report_lock_change(&change);
     print_tips(&outcome.tips);
-    Ok(ExitCode::SUCCESS)
+    Ok(Switched::Applied)
 }
 
 fn print_tips(tips: &[String]) {
@@ -760,6 +834,173 @@ fn explain_cmd(file: Option<&Path>) -> anyhow::Result<ExitCode> {
         print!("{}", e.render());
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn search_cmd(query: &str, root: &Path) -> anyhow::Result<ExitCode> {
+    let packages = repo::all(root);
+    if packages.is_empty() {
+        anyhow::bail!(
+            "Couldn't find any package repositories in {}.\n  \
+             Sync them first: doas emerge --sync",
+            root.join("var/db/repos").display()
+        );
+    }
+    let results = repo::search(&packages, query);
+    if results.is_empty() {
+        println!("Nothing matches \"{query}\". Try a shorter or different word.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let installed: std::collections::BTreeSet<String> = lock::installed_packages(root)?
+        .into_keys()
+        .map(|k| k.split(':').next().unwrap_or(&k).to_string())
+        .collect();
+    const SHOWN: usize = 20;
+    let width = results
+        .iter()
+        .take(SHOWN)
+        .map(|p| p.name.len())
+        .max()
+        .unwrap_or(0);
+    for p in results.iter().take(SHOWN) {
+        let mark = if installed.contains(&p.name) {
+            "  (installed)"
+        } else {
+            ""
+        };
+        println!(
+            "  {:width$}  {}{mark}",
+            p.name,
+            p.description.as_deref().unwrap_or("")
+        );
+    }
+    if results.len() > SHOWN {
+        println!(
+            "\n  …and {} more. Add another word to narrow it down.",
+            results.len() - SHOWN
+        );
+    }
+    println!("\nTo install one: bunny add <name>");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Turns what the user typed into full package names, or explains why not.
+fn resolve_all(root: &Path, names: &[String]) -> anyhow::Result<Option<Vec<String>>> {
+    let packages = repo::all(root);
+    if packages.is_empty() {
+        anyhow::bail!(
+            "Couldn't find any package repositories in {}.\n  \
+             Sync them first: doas emerge --sync",
+            root.join("var/db/repos").display()
+        );
+    }
+    let mut resolved = Vec::new();
+    let mut ok = true;
+    for name in names {
+        match repo::resolve(&packages, name) {
+            repo::Resolved::Found(full) => resolved.push(full),
+            repo::Resolved::Ambiguous(options) => {
+                ok = false;
+                eprintln!("✗ Several packages are called \"{name}\". Pick one:");
+                for option in options {
+                    eprintln!("    bunny add {option}");
+                }
+            }
+            repo::Resolved::NotFound(similar) => {
+                ok = false;
+                eprintln!("✗ There's no package called \"{name}\".");
+                if !similar.is_empty() {
+                    eprintln!("  Did you mean: {}?", similar.join(", "));
+                }
+                eprintln!("  Search for it with: bunny search {name}");
+            }
+        }
+    }
+    Ok(ok.then_some(resolved))
+}
+
+fn add_cmd(names: &[String], config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    let real_system = root == Path::new("/");
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
+    }
+    let Some(full) = resolve_all(root, names)? else {
+        eprintln!("Nothing was changed.");
+        return Ok(ExitCode::FAILURE);
+    };
+    let old = read_config_text(config)?;
+    let edited = edit::add_packages(&old, &full)?;
+    for name in &edited.unchanged {
+        println!("{name} is already in {}.", config.display());
+    }
+    if edited.changed.is_empty() {
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!(
+        "Adding {} to {}.\n",
+        edited.changed.join(", "),
+        config.display()
+    );
+    edit_then_switch(config, &old, &edited.text, yes, root)
+}
+
+fn remove_cmd(names: &[String], config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    let real_system = root == Path::new("/");
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
+    }
+    let old = read_config_text(config)?;
+    let edited = edit::remove_packages(&old, names)?;
+    for name in &edited.unchanged {
+        println!(
+            "\"{name}\" isn't in {}, so there's nothing to remove.",
+            config.display()
+        );
+    }
+    if edited.changed.is_empty() {
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!(
+        "Removing {} from {}.\n",
+        edited.changed.join(", "),
+        config.display()
+    );
+    edit_then_switch(config, &old, &edited.text, yes, root)
+}
+
+fn read_config_text(config: &Path) -> anyhow::Result<String> {
+    std::fs::read_to_string(config).with_context(|| {
+        format!(
+            "Couldn't read {}.\n  If you don't have a config yet, make one from this system: bunny import -o {}",
+            config.display(),
+            config.display()
+        )
+    })
+}
+
+/// Saves the edited config and switches. If nothing gets applied (problems,
+/// or the user says no), the old config is put back.
+fn edit_then_switch(
+    config: &Path,
+    old: &str,
+    new: &str,
+    yes: bool,
+    root: &Path,
+) -> anyhow::Result<ExitCode> {
+    std::fs::write(config, new).with_context(|| format!("Couldn't write {}", config.display()))?;
+    let result = switch_inner(config, yes, root);
+    let put_back = || {
+        std::fs::write(config, old)
+            .with_context(|| format!("Couldn't put {} back", config.display()))
+    };
+    match result {
+        Ok(Switched::Applied) | Ok(Switched::NothingToDo) => Ok(ExitCode::SUCCESS),
+        Ok(Switched::NotApplied(code)) => {
+            put_back()?;
+            println!("{} wasn't changed either.", config.display());
+            Ok(code)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Whether we're running as root (checks who owns our own /proc entry).

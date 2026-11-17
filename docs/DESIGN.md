@@ -242,6 +242,22 @@ elevation themselves through the configured tool (doas by default).
 With `--root` pointing anywhere but `/`, files are written to that root and
 commands are only printed.
 
+### Everyday commands (current behaviour)
+
+- `bunny search <words>` searches package names and descriptions from each
+  repository's metadata cache (`metadata/md5-cache`; folder names when a
+  repository has no cache), best matches first, marking installed ones.
+- `bunny add <names>` accepts short names when they're unambiguous
+  (`tmux` → `app-misc/tmux`), suggests similar names for typos, and asks you
+  to pick when several categories share a name. It edits `bunny.toml` with
+  `toml_edit`, keeping comments, order and layout (new entries go in
+  alphabetical position; comments stay with their own lines), then runs the
+  switch. If nothing gets applied (cancelled, or problems found), the config
+  is put back as it was.
+- `bunny remove <names>` takes full or short names and works the same way;
+  removing from the system goes through `emerge --depclean --ask`.
+- `plan`'s "doesn't exist" check uses the same package index.
+
 ### Config files (`/etc`)
 
 - Managed files are stored as **overrides on top of the package default**:

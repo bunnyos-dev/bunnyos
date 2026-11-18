@@ -126,7 +126,7 @@ Agreed with the maintainer: version 1 reads emerge's screen text, which breaks
 whenever emerge changes its wording. The design always said bunny should ask
 Portage for structured answers instead.
 
-- [~] **Developer mode:** `[dev] report` records every command as it looked
+- [x] **Developer mode:** `[dev] report` records every command as it looked
       in the terminal; `bunny report` files them as an issue in a private
       repo (personal details swapped out); `"auto"` sends problems by
       themselves. Daily sessions read the reports and turn bugs into PRs.
@@ -252,3 +252,6 @@ to-do list. Appearance work comes last and a little at a time.
   `GRUB_DISTRIBUTOR`; part of the boot menu work).
 - The install progress line (`[2/2] Compiling …`) isn't cleared before
   "✓ Installed 2 packages", so they run together on one line.
+- Pressing Ctrl+C during an install ends bunny with no explanation. It
+  should say what got installed, what didn't, and that `bunny rollback`
+  undoes the whole attempt.

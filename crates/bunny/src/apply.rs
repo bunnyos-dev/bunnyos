@@ -569,7 +569,7 @@ fn interrupted_message(
     }
     if !asked.is_empty() {
         text.push_str(&format!(
-            "  Your config still lists {}, so `bunny status` will show it as not applied yet.\n",
+            "  Your config still lists {}, so `bunny status`\n  will show it as not applied yet.\n",
             asked.join(", ")
         ));
     }
@@ -1093,7 +1093,7 @@ mod tests {
         );
         assert!(
             text.contains(
-                "101 of 102 packages finished installing; www-client/firefox was in progress"
+                "101 of 102 packages finished installing.\n  www-client/firefox was in progress"
             ),
             "{text}"
         );

@@ -324,6 +324,21 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] greetd + Quickshell login screen
 - [ ] `[boot]` config section; `bunny boot list` / `preview`
 
+### Towards a fork of Gentoo (slowly, see DESIGN.md "Relationship to Gentoo")
+- [ ] **Overrides list:** `OVERRIDES.md` in `bunny-overlay` with a reason for
+      every ebuild that shadows a `::gentoo` one, and a CI check that fails
+      when one is missing. Can be done any time; it's small.
+- [ ] **The Bunny tree (`bunny-tree`):** the tested baseline publishes its
+      tree snapshot as a git repo, plus an archive of ebuilds that published
+      locks still use (fixes "locked version removed from the tree").
+      Needs the tested baseline (phase 6).
+- [ ] **Bunny profiles** inheriting Gentoo's, so defaults come from the profile.
+- [ ] **Patch queue:** Bunny Linux's changes to Gentoo packages as patches a bot
+      re-applies to each weekly snapshot; upstream first.
+- [ ] **The Bunny tree is the only tree** (the actual fork): weekly bot merge
+      from Gentoo, own binaries and advisories. Needs the maintainer's
+      explicit go-ahead.
+
 ### Long-term: Portage-free systems
 - [ ] Portage (Python, its tools) lives only inside the build container;
       installed systems get finished packages through a small Rust installer

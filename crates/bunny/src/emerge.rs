@@ -93,8 +93,13 @@ pub fn parse_merge_list(output: &str) -> Vec<Merge> {
         .collect()
 }
 
-/// The merge list, explained. `asked` are the packages the user asked for,
-/// so the rest can be labelled as needed by them.
+/// Dependencies shown in full up to this many; more are folded.
+const SHOWN_NEEDED: usize = 15;
+
+/// The merge list, explained. `asked` are the packages the user asked for.
+/// They come first; new packages they need follow under their own heading
+/// (folded when there are many), so every line stays short enough not to
+/// wrap in a narrow terminal.
 pub fn render_merge_list(list: &[Merge], asked: &[String]) -> String {
     let mut out = String::new();
     let build = list.iter().filter(|m| !m.binary).count();
@@ -113,52 +118,163 @@ pub fn render_merge_list(list: &[Merge], asked: &[String]) -> String {
             let _ = writeln!(out, " ({p} prebuilt, {b} to compile):");
         }
     }
-    let width = list.iter().map(|m| m.name.len()).max().unwrap_or(0);
-    let rows: Vec<(&str, &str, String, &str, &str)> = list
-        .iter()
-        .map(|m| {
-            let what = match (m.action, &m.from) {
-                (Action::New, _) => m.version.clone(),
-                (Action::Update, Some(from)) | (Action::Downgrade, Some(from)) => {
-                    format!("{from} → {}", m.version)
-                }
-                (Action::Rebuild, _) => format!("{} (rebuild)", m.version),
-                (_, None) => m.version.clone(),
-            };
-            let mark = match m.action {
-                Action::New => "+",
-                Action::Rebuild => "~",
-                Action::Update => "↑",
-                Action::Downgrade => "↓",
-            };
-            let how = if m.binary { "" } else { "compile" };
-            let needed = if m.action == Action::New && !asked.iter().any(|a| a == &m.name) {
-                "(needed by another package)"
-            } else {
-                ""
-            };
-            (mark, m.name.as_str(), what, how, needed)
-        })
-        .collect();
-    let what_width = rows.iter().map(|r| r.2.chars().count()).max().unwrap_or(0);
-    // Columns: name, version, "compile" (only if anything compiles), note.
-    let how_width = if rows.iter().any(|r| !r.3.is_empty()) {
-        "compile".len() + 3
-    } else {
-        0
+    let needed = |m: &Merge| m.action == Action::New && !asked.iter().any(|a| a == &m.name);
+    let (main, deps): (Vec<&Merge>, Vec<&Merge>) = list.iter().partition(|m| !needed(m));
+
+    let what = |m: &Merge| match (m.action, &m.from) {
+        (Action::New, _) => m.version.clone(),
+        (Action::Update, Some(from)) | (Action::Downgrade, Some(from)) => {
+            format!("{from} → {}", m.version)
+        }
+        (Action::Rebuild, _) => format!("{} (rebuild)", m.version),
+        (_, None) => m.version.clone(),
     };
-    for (mark, name, what, how, needed) in rows {
-        let pad = what_width - what.chars().count();
+    let shown_deps: Vec<&Merge> = if deps.len() > SHOWN_NEEDED + 3 {
+        deps.iter().take(SHOWN_NEEDED).copied().collect()
+    } else {
+        deps.clone()
+    };
+    let visible: Vec<&Merge> = main.iter().chain(shown_deps.iter()).copied().collect();
+    let width = visible.iter().map(|m| m.name.len()).max().unwrap_or(0);
+    let what_width = visible
+        .iter()
+        .map(|m| what(m).chars().count())
+        .max()
+        .unwrap_or(0);
+    let row = |out: &mut String, m: &Merge| {
+        let mark = match m.action {
+            Action::New => "+",
+            Action::Rebuild => "~",
+            Action::Update => "↑",
+            Action::Downgrade => "↓",
+        };
+        let w = what(m);
+        let pad = what_width - w.chars().count();
+        let how = if m.binary { "" } else { "compile" };
         let line = format!(
-            "  {mark} {name:<width$}  {what}{}{how:<how_width$}{needed}",
+            "  {mark} {:<width$}  {w}{}{how}",
+            m.name,
             " ".repeat(pad + 3)
         );
         let _ = writeln!(out, "{}", line.trim_end());
+    };
+    for m in &main {
+        row(&mut out, m);
+    }
+    if !deps.is_empty() {
+        if !main.is_empty() {
+            let dep_build = deps.iter().filter(|m| !m.binary).count();
+            let _ = writeln!(
+                out,
+                "\n  And {} package{} {} need{}{}:",
+                deps.len(),
+                if deps.len() == 1 { "" } else { "s" },
+                if main.len() == 1 { "it" } else { "they" },
+                if main.len() == 1 { "s" } else { "" },
+                match dep_build {
+                    0 => String::new(),
+                    n if n == deps.len() => ", all to compile".to_string(),
+                    n => format!(" ({n} to compile)"),
+                }
+            );
+        }
+        for m in &shown_deps {
+            row(&mut out, m);
+        }
+        let hidden = deps.len() - shown_deps.len();
+        if hidden > 0 {
+            let _ = writeln!(
+                out,
+                "  … and {hidden} more. `--verbose` lists every one, and so does the log afterwards."
+            );
+        }
     }
     if build > 0 {
         out.push_str("  Compiling can take a while for big packages.\n");
     }
     out
+}
+
+/// Asked-for packages that would be compiled although the repositories have
+/// a prebuilt version (`<name>-bin`): (package, prebuilt package).
+pub fn prebuilt_alternatives(
+    list: &[Merge],
+    asked: &[String],
+    available: &std::collections::BTreeSet<String>,
+) -> Vec<(String, String)> {
+    list.iter()
+        .filter(|m| !m.binary && asked.iter().any(|a| a == &m.name))
+        .filter_map(|m| {
+            let bin = format!("{}-bin", m.name);
+            available.contains(&bin).then(|| (m.name.clone(), bin))
+        })
+        .collect()
+}
+
+/// How far a build is, from the end of its build log: build tools print
+/// counters like `[1234/5678] Compiling …` (ninja, meson, cargo-ninja) or
+/// `[ 45%] Building …` (make with CMake). Returns a percentage.
+pub fn build_percent(log_tail: &str) -> Option<u8> {
+    for line in log_tail.lines().rev() {
+        let line = line.trim_start();
+        let Some(inner) = line.strip_prefix('[').and_then(|l| l.split_once(']')) else {
+            continue;
+        };
+        let inner = inner.0.trim();
+        if let Some(pct) = inner.strip_suffix('%') {
+            if let Ok(p) = pct.trim().parse::<u8>() {
+                if p <= 100 {
+                    return Some(p);
+                }
+            }
+        } else if let Some((done, total)) = inner.split_once('/') {
+            if let (Ok(done), Ok(total)) = (done.trim().parse::<u64>(), total.trim().parse::<u64>())
+            {
+                if total > 0 && done <= total {
+                    return Some((done * 100 / total) as u8);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// How long each package took to build last time, from Portage's own
+/// history (`/var/log/emerge.log`): `category/name` → seconds.
+pub fn build_times(emerge_log: &str) -> std::collections::BTreeMap<String, u64> {
+    let mut started: std::collections::BTreeMap<String, u64> = Default::default();
+    let mut took = std::collections::BTreeMap::new();
+    for line in emerge_log.lines() {
+        let Some((time, rest)) = line.split_once(':') else {
+            continue;
+        };
+        let Ok(time) = time.trim().parse::<u64>() else {
+            continue;
+        };
+        let rest = rest.trim();
+        let (done, rest) = if let Some(r) = rest.strip_prefix(">>> emerge (") {
+            (false, r)
+        } else if let Some(r) = rest.strip_prefix("::: completed emerge (") {
+            (true, r)
+        } else {
+            continue;
+        };
+        let Some(cpv) = rest
+            .split_once(") ")
+            .and_then(|(_, r)| r.split_whitespace().next())
+        else {
+            continue;
+        };
+        if done {
+            if let Some(start) = started.remove(cpv) {
+                let (name, _) = split_cpv(cpv);
+                took.insert(name, time.saturating_sub(start));
+            }
+        } else {
+            started.insert(cpv.to_string(), time);
+        }
+    }
+    took
 }
 
 /// Progress from a line like `>>> Emerging (3 of 9) app-admin/sudo-1.9::gentoo`
@@ -339,17 +455,12 @@ Dependency resolution took 2.31 s (backtrack: 0/20).
         let list = parse_merge_list(PRETEND);
         let text = render_merge_list(&list[..5], &["app-admin/sudo".into()]);
         assert!(text.starts_with("emerge will install 5 packages (2 prebuilt, 3 to compile):\n"));
-        // Notes line up in one column, whatever the version's length.
+        // "compile" lines up in one column, whatever the version's length.
         let column = |needle: &str, what: &str| {
             text.lines()
                 .find(|l| l.contains(needle))
                 .and_then(|l| l.find(what))
         };
-        assert_eq!(
-            column("nullmail ", "(needed"),
-            column("nullmailer", "(needed"),
-            "{text}"
-        );
         assert_eq!(
             column("nullmailer", "compile"),
             column("sudo", "compile"),
@@ -362,6 +473,81 @@ Dependency resolution took 2.31 s (backtrack: 0/20).
         assert!(text.contains("~ app-admin/sudo"));
         assert!(text.contains("1.9.17_p2 (rebuild)"), "{text}");
         assert!(text.contains("Compiling can take a while"));
+        // What was asked for (and updates) first; new dependencies after.
+        let sudo = text.find("app-admin/sudo").unwrap();
+        let heading = text.find("And 2 packages they need").expect(&text);
+        assert!(sudo < heading && heading < text.find("acct-group/nullmail").unwrap());
+        assert!(!text.contains("needed by"), "{text}");
+    }
+
+    #[test]
+    fn many_dependencies_are_folded() {
+        let mut pretend = String::from("[ebuild  N     ] www-client/firefox-153.7.0::gentoo\n");
+        for i in 0..40 {
+            pretend.push_str(&format!("[ebuild  N     ] dev-libs/lib{i}-1.0::gentoo\n"));
+        }
+        let text = render_merge_list(&parse_merge_list(&pretend), &["www-client/firefox".into()]);
+        assert!(
+            text.contains("And 40 packages it needs, all to compile:"),
+            "{text}"
+        );
+        assert!(text.contains("dev-libs/lib14 "), "{text}");
+        assert!(!text.contains("dev-libs/lib15 "), "{text}");
+        assert!(text.contains("… and 25 more."), "{text}");
+        let longest = text.lines().map(|l| l.chars().count()).max().unwrap();
+        assert!(
+            longest <= 80,
+            "a line would wrap in an 80-column terminal: {text}"
+        );
+    }
+
+    #[test]
+    fn suggests_a_prebuilt_version() {
+        let list = parse_merge_list(
+            "[ebuild  N     ] www-client/firefox-153.7.0::gentoo\n\
+             [ebuild  N     ] llvm-core/clang-22.1.8::gentoo\n",
+        );
+        let available: std::collections::BTreeSet<String> =
+            ["www-client/firefox-bin", "llvm-core/clang"]
+                .map(String::from)
+                .into();
+        assert_eq!(
+            prebuilt_alternatives(&list, &["www-client/firefox".into()], &available),
+            vec![("www-client/firefox".into(), "www-client/firefox-bin".into())]
+        );
+        // Only for what was asked for: a dependency isn't something to swap.
+        assert!(prebuilt_alternatives(&list, &[], &available).is_empty());
+    }
+
+    #[test]
+    fn reads_build_counters() {
+        assert_eq!(
+            build_percent("make stuff\n[1234/5678] Compiling foo.o\nwarning: x\n"),
+            Some(21)
+        );
+        assert_eq!(build_percent("[ 45%] Building CXX object a.o\n"), Some(45));
+        assert_eq!(
+            build_percent("[ok] fine\n[2026-11-18] date\nno counters\n"),
+            None
+        );
+        assert_eq!(build_percent("[5/0] nonsense\n[10/5] also\n"), None);
+    }
+
+    #[test]
+    fn reads_build_times_from_portage_history() {
+        let log = "1700000000:  >>> emerge (1 of 2) www-client/firefox-150.0::gentoo to /\n\
+                   1700000001:  === (1 of 2) Compiling/Merging (www-client/firefox-150.0::gentoo)\n\
+                   1700004800:  ::: completed emerge (1 of 2) www-client/firefox-150.0::gentoo to /\n\
+                   1700004801:  >>> emerge (2 of 2) app-misc/tmux-3.6a::gentoo to /\n\
+                   1700009000:  >>> emerge (1 of 1) www-client/firefox-153.7.0::gentoo to /\n\
+                   1700012000:  ::: completed emerge (1 of 1) www-client/firefox-153.7.0::gentoo to /\n";
+        let times = build_times(log);
+        assert_eq!(
+            times.get("www-client/firefox"),
+            Some(&3000),
+            "the newest build counts"
+        );
+        assert_eq!(times.get("app-misc/tmux"), None, "never finished");
     }
 
     #[test]

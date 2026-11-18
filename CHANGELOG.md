@@ -10,6 +10,14 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The install progress line keeps moving: a spinner, how long the current
+  package has taken, a percentage when the build reports one, and otherwise
+  how long it took last time. It never wraps in a narrow terminal.
+- The install list shows what you asked for first, then "And N packages it
+  needs", folded after 15, so it stays readable in a narrow terminal.
+- Before a big compile, bunny says when a prebuilt version exists
+  (`www-client/firefox-bin` for `www-client/firefox`).
+
 - bunny installs with emerge from the BunnyOS overlay (`app-admin/bunny-bin`
   for releases, `app-admin/bunny` for the newest code). A switch keeps
   bunny's own package installed even if it's not in `bunny.toml`.

@@ -32,22 +32,40 @@ bunny:
 
 Press **Enter** at "Apply these changes? [Y/n]".
 
-Then bunny asks emerge for its full list and shows it, including anything the
-program needs that you don't have yet:
+Then bunny asks emerge for its full list and shows it: what you asked for
+first, then anything it needs that you don't have yet:
 
 ```
 emerge will install 3 packages, all prebuilt:
-  + media-libs/libass   0.17.3   (needed by another package)
-  + media-video/ffmpeg  7.1.1    (needed by another package)
   + media-video/mpv     0.40.0
+
+  And 2 packages it needs:
+  + media-libs/libass   0.17.3
+  + media-video/ffmpeg  7.1.1
 
 Install these? [Y/n]
 ```
 
-That question only appears when the list has more than you asked for. While
-it installs you see one line of progress, like `[2/3] Installing
-media-video/ffmpeg 7.1.1…`. emerge's full output is saved in
-`/var/log/bunny/` (or run with `--verbose` to watch it scroll by).
+That question only appears when the list has more than you asked for. A long
+list of dependencies is folded after the first 15 (`--verbose` shows them
+all). `compile` marks packages that are built on your computer instead of
+downloaded ready-made.
+
+**Big programs:** some, like Firefox, take hours to compile. If a prebuilt
+version exists (`www-client/firefox-bin`), bunny says so before anything
+starts. Answer **n**, then `bunny add www-client/firefox-bin`.
+
+While it installs you see one line that keeps moving:
+
+```
+  ⠹ [101/102] Compiling www-client/firefox 153.7.0  ·  37%  ·  24m 10s
+```
+
+The spinner turns as long as work is happening. The percentage appears when
+the build reports how far it is; when it doesn't, bunny shows how long the
+same package took last time, if it was installed on this computer before.
+emerge's full output is saved in `/var/log/bunny/` (or run with `--verbose`
+to watch it scroll by).
 
 If you say **no** at either question, nothing is installed and `bunny.toml` is
 put back exactly as it was.

@@ -228,6 +228,18 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [ ] **26 unread Gentoo announcements on a fresh install.** They're all
       older than the system. `bunny install` should mark them read
       (`eselect news read --quiet all`), so only new ones are mentioned.
+- [ ] **Guide, What to do first: the git steps don't work as written.**
+      `git init` makes a `master` branch (the page later pushes `main`), and
+      the commit fails with "Author identity unknown" because root has no
+      git name or email. Then `sudo git push` would fail too: the GitHub
+      sign-in belongs to your user, not root. Fix the page (`git init -b
+      main`, set a name and email for the repository, sign root in with
+      `sudo gh auth login` + `sudo gh auth setup-git`), or better:
+- [ ] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
+      (branch `main`, a first commit "As installed", identity from the
+      install's answers), and a later `bunny git`/`bunny publish` connects it
+      to GitHub with your own sign-in. Then the Guide's git section is one
+      command.
 - [ ] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1

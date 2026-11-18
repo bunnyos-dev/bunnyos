@@ -28,6 +28,7 @@
 - [Generations and rollback, in detail](reference/generations.md)
 - [What bunny changes on your system](reference/what-bunny-changes.md)
 - [The disk layout](reference/disk-layout.md)
+- [Moving an existing install to the layout](reference/converting.md)
 - [Testing Bunny Linux in a virtual machine](reference/testing-in-a-vm.md)
 - [Developer mode: sending reports](reference/developer-mode.md)
 

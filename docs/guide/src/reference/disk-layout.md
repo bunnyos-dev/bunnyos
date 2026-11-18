@@ -40,4 +40,6 @@ default for the Bunny Linux installer. The VM installer doesn't encrypt yet.
 
 ## Setting it up
 
-The [VM installer](testing-in-a-vm.md) creates exactly this layout.
+The [VM installer](testing-in-a-vm.md) creates exactly this layout. To move
+an existing install over, see
+[Moving an existing install to the layout](converting.md).

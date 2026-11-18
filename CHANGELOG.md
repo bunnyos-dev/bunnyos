@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `tools/convert-layout.sh` moves an existing Gentoo on btrfs (with `/` at the
+  top of the volume) to the Bunny Linux layout, so undo works. Plan first,
+  nothing deleted, and a boot menu entry back to the old system.
+
 - Ctrl+C is safe everywhere. At a question it counts as "no" and the config
   is put back; during an install, bunny says how far it got and how to undo
   (`bunny rollback`) or finish (`bunny switch`) it. Before, it stopped with

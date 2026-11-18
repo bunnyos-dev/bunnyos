@@ -160,6 +160,7 @@ if [ -n "$SWAPS" ]; then
         size="$(stat -c %s "${ROOT}$f")"
         step "Swap: move $f ($((size / 1024 / 1024)) MB) to its own subvolume, @swap (/swap/swapfile), so it can't block saved versions."
     done
+    step "Add a small boot service, swapfiles, that turns swap on once /swap is mounted."
 fi
 step "Write @'s /etc/fstab for the new layout (other lines, like /boot or network shares, stay)."
 if [ "$REAL" = 1 ]; then
@@ -251,6 +252,34 @@ if [ "$SWAP_SIZE" -gt 0 ]; then
     mkdir -p "${NEW:?}/swap"
     for f in $SWAPS; do rm -f "${NEW:?}${f:?}"; done
     SWAP_LINE="/swap/swapfile  none  swap  defaults  0 0"
+
+    # OpenRC's swap service runs before localmount, so /swap isn't mounted
+    # yet and the swapfile is skipped without a word. This small service
+    # runs swapon again once everything in fstab is mounted.
+    mkdir -p "${NEW:?}/etc/init.d"
+    cat > "${NEW:?}/etc/init.d/swapfiles" <<'EOF'
+#!/sbin/openrc-run
+# Added by Bunny Linux's convert-layout.sh.
+# Turns on swapfiles that live on their own subvolume (/swap/swapfile).
+# OpenRC's own swap service runs before those are mounted.
+
+description="Turn on swapfiles once all filesystems are mounted"
+
+depend() {
+	need localmount
+	after swap
+	keyword -docker -podman -jail -lxc -openvz -prefix -systemd-nspawn -vserver -wsl
+}
+
+start() {
+	ebegin "Activating swapfiles"
+	swapon -a >/dev/null 2>&1
+	eend 0
+}
+EOF
+    chmod 755 "${NEW:?}/etc/init.d/swapfiles"
+    mkdir -p "${NEW:?}/etc/runlevels/boot"
+    ln -sf /etc/init.d/swapfiles "${NEW:?}/etc/runlevels/boot/swapfiles"
 fi
 
 say "Writing @'s /etc/fstab"

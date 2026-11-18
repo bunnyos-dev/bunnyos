@@ -29,7 +29,9 @@ It also:
 - copies subvolumes that were inside `/` (like `/srv`) into `@` as normal
   folders, since nested subvolumes aren't part of saved versions;
 - moves swap out of `/`, because btrfs won't save a version of a subvolume
-  with an active swapfile in it;
+  with an active swapfile in it, and adds a small boot service, `swapfiles`,
+  that turns that swap on once `/swap` is mounted (OpenRC's own swap
+  service runs too early to see it);
 - writes `@`'s `/etc/fstab` for the new layout, keeping every other line
   (`/boot`, network shares) and saving the old one as
   `/etc/fstab.before-bunny-layout`;

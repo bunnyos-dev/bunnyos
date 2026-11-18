@@ -239,6 +239,12 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   doesn't match), and always asks. Cleanup also runs after USE changes and
   updates, since both can orphan dependencies. `--verbose` restores the old
   live, emerge-asks behaviour.
+- **Ctrl+C:** stops bunny at once, except at a question during a switch
+  (it counts as "no", so the usual clean-up puts the config, world file and
+  package.use back) and while emerge installs (emerge stops; bunny says how
+  many packages finished, which one didn't, and offers `bunny rollback` or
+  `bunny switch`). A parent bunny waiting on sudo, doas or the developer-mode
+  recorder ignores it, so the child can finish explaining.
 - **Bunny Linux default USE flags:** packages bunny installs itself can get
   default flags (applied unless the config has its own `[pkg]` entry):
   sudo is built with `-sendmail`, so it doesn't pull in a mail server.

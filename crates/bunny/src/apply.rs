@@ -548,6 +548,49 @@ fn write_undo_entry(root: &Path, opts: &Options, outcome: &Outcome) -> Result<Op
 
 /// What to tell the user when emerge stops: bunny's explanation if it
 /// recognised the message, and where their old system is.
+/// What to tell someone who pressed Ctrl+C while emerge was installing.
+/// `reached` is (the package emerge was on, of how many, its name).
+fn interrupted_message(
+    reached: Option<&(usize, usize, String)>,
+    asked: &[String],
+    outcome: &Outcome,
+) -> String {
+    let mut text = String::from("Stopped with Ctrl+C while installing.\n");
+    match reached {
+        Some((n, total, name)) => {
+            let done = n.saturating_sub(1);
+            text.push_str(&format!(
+                "  {done} of {total} package{} finished installing.\n  \
+                 {name} was in progress and didn't.\n",
+                if *total == 1 { "" } else { "s" }
+            ));
+        }
+        None => text.push_str("  emerge hadn't started installing anything yet.\n"),
+    }
+    if !asked.is_empty() {
+        text.push_str(&format!(
+            "  Your config still lists {}, so `bunny status`\n  will show it as not applied yet.\n",
+            asked.join(", ")
+        ));
+    }
+    text.push_str("\nTwo ways on from here:\n");
+    if let Some(snapshot) = &outcome.snapshot {
+        text.push_str(&format!(
+            "  • Undo the whole attempt: `bunny rollback`, then restart. It goes back to\n    \
+             {} (the system just before this).\n",
+            snapshot.display()
+        ));
+    }
+    text.push_str("  • Finish it later: `bunny switch` picks up where this stopped.");
+    if let Some(log) = &outcome.log {
+        text.push_str(&format!(
+            "\nemerge's output so far is in {}.",
+            log.display()
+        ));
+    }
+    text
+}
+
 fn emerge_failed(explained: &[explain::Explanation], outcome: &Outcome) -> String {
     let mut text = String::from("emerge stopped, so the changes weren't installed.\n");
     if explained.is_empty() {
@@ -756,8 +799,11 @@ fn install_quietly(
         .map(|log| crate::emerge::build_times(&log))
         .unwrap_or_default();
     let mut progress = crate::progress::Ticker::new();
+    // Which package emerge was on, for explaining a Ctrl+C.
+    let mut reached: Option<(usize, usize, String)> = None;
     let mut on_line = |line: &str| {
         if let Some((n, total, name, version, binary)) = crate::emerge::parse_progress(line) {
+            reached = Some((n, total, name.clone()));
             let verb = if binary { "Installing" } else { "Compiling" };
             let build_log = (!binary).then(|| crate::progress::build_log(root, &name, &version));
             progress.step(
@@ -768,9 +814,25 @@ fn install_quietly(
         }
     };
     println!();
-    let (ok, install_output) = runner.run_quiet(&install, &mut on_line)?;
+    let (ok, install_output) = {
+        // Ctrl+C stops emerge; bunny stays to explain where that leaves things.
+        let _careful = crate::interrupt::Careful::start();
+        runner.run_quiet(&install, &mut on_line)?
+    };
     let install_output = explain::strip_ansi(&install_output);
     progress.finish();
+    if !ok && crate::interrupt::happened() {
+        outcome.log = save_log(
+            root,
+            &opts.stamp,
+            "emerge",
+            &format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" ")),
+        );
+        bail!(
+            "{}",
+            interrupted_message(reached.as_ref(), &plan.add_packages, outcome)
+        );
+    }
     let log_text = format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" "));
     outcome.log = save_log(root, &opts.stamp, "emerge", &log_text);
 
@@ -1012,6 +1074,54 @@ fn kept_origins(path: &Path) -> std::collections::HashMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explains_a_ctrl_c_during_install() {
+        let outcome = Outcome {
+            snapshot: Some(PathBuf::from("/.snapshots/bunny-20261118-042343")),
+            log: Some(PathBuf::from("/var/log/bunny/20261118-042343-emerge.log")),
+            ..Outcome::default()
+        };
+        let text = interrupted_message(
+            Some(&(102, 102, "www-client/firefox".to_string())),
+            &["www-client/firefox".to_string()],
+            &outcome,
+        );
+        assert!(
+            text.starts_with("Stopped with Ctrl+C while installing."),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "101 of 102 packages finished installing.\n  www-client/firefox was in progress"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains("Your config still lists www-client/firefox"),
+            "{text}"
+        );
+        assert!(text.contains("`bunny rollback`, then restart"), "{text}");
+        assert!(text.contains("/.snapshots/bunny-20261118-042343"), "{text}");
+        assert!(
+            text.contains("`bunny switch` picks up where this stopped"),
+            "{text}"
+        );
+        assert!(
+            text.contains("emerge's output so far is in /var/log/bunny/"),
+            "{text}"
+        );
+
+        let early = interrupted_message(None, &[], &Outcome::default());
+        assert!(
+            early.contains("hadn't started installing anything"),
+            "{early}"
+        );
+        assert!(
+            !early.contains("rollback"),
+            "no snapshot, so no rollback to offer: {early}"
+        );
+    }
     use crate::plan;
 
     /// Records commands instead of running them.

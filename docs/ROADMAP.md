@@ -220,7 +220,9 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [ ] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
-      and 2.
+      and 2. Also say that without a desktop, `gh auth login` warns it can't
+      copy the code or open a browser, which is expected: open
+      github.com/login/device on another device and type the code.
 - [ ] **Live USB welcome says "Not online yet" when it is online.** The
       welcome checks once, 3 seconds after login, by pinging
       `distfiles.gentoo.org` (needs DNS too). In the VM, `ping 1.1.1.1`

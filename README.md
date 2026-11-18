@@ -1,4 +1,4 @@
-# BunnyOS
+# Bunny Linux
 
 A Gentoo-based operating system with NixOS-style reproducibility and a
 polished, quiet experience from power button to desktop.
@@ -33,10 +33,10 @@ and the full to-do list are in the [roadmap](docs/ROADMAP.md).
 ## Documentation
 
 - **[Changelog](CHANGELOG.md)** and **[how releases work](docs/RELEASING.md)**.
-- **[The BunnyOS Guide](https://bunnyos-dev.github.io/bunnyos/)**: how to use
+- **[The Bunny Linux Guide](https://bunnyos-dev.github.io/bunnyos/)**: how to use
   bunny, from first steps to every setting. Source in `docs/guide/`.
 
-- [Design](docs/DESIGN.md): what BunnyOS is, every decision so far, and the
+- [Design](docs/DESIGN.md): what Bunny Linux is, every decision so far, and the
   version 1 scope.
 - [Roadmap](docs/ROADMAP.md): what's done and what's next.
 
@@ -65,7 +65,7 @@ See the comments at the top of the script for snapshots and other commands.
 
 ## How it's made
 
-BunnyOS is designed by its maintainer and largely written with AI assistance.
+Bunny Linux is designed by its maintainer and largely written with AI assistance.
 Everything is tested in a VM before it's considered working.
 
 ## Licence

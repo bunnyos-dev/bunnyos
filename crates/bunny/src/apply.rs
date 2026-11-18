@@ -540,7 +540,7 @@ fn write_undo_entry(root: &Path, opts: &Options, outcome: &Outcome) -> Result<Op
     std::fs::write(&path, boot::merge_custom_cfg(&text, &block))
         .with_context(|| format!("Couldn't write {}", path.display()))?;
     Ok(Some(
-        "If this change stops the system from starting, pick \"BunnyOS: undo the last change\" \
+        "If this change stops the system from starting, pick \"Bunny Linux: undo the last change\" \
          in the boot menu (hold Shift or Esc while starting if the menu is hidden)."
             .to_string(),
     ))

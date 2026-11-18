@@ -1,4 +1,4 @@
-//! bunny: declarative, reproducible system management for BunnyOS.
+//! bunny: declarative, reproducible system management for Bunny Linux.
 
 mod applied;
 mod apply;

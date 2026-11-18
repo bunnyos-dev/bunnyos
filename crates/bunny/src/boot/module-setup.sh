@@ -1,5 +1,5 @@
 #!/bin/bash
-# BunnyOS: "Undo" from the boot menu. Installed by bunny ([boot] undo_entry).
+# Bunny Linux: "Undo" from the boot menu. Installed by bunny ([boot] undo_entry).
 # Adds a small step to the startup image (initramfs) that does nothing unless
 # the boot menu passed bunny.rollback=<generation>.
 

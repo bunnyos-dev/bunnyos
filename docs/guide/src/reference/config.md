@@ -47,7 +47,7 @@ dependencies nothing else needs.
 Two things are kept even if they're not in the list:
 
 - the admin tool chosen in [`[security]`](#security) (sudo or doas), and
-- bunny itself, when it was installed from the BunnyOS overlay
+- bunny itself, when it was installed from the Bunny Linux overlay
   (`app-admin/bunny-bin` or `app-admin/bunny`), so a switch never removes
   bunny.
 
@@ -91,11 +91,11 @@ undo_entry = true   # add "undo the last change" to the boot menu
 | `undo_entry` | `true` / `false` | `false` | After each change, add a boot menu entry that undoes it, for when the system won't start. See [Undo a change](../tasks/undo.md#if-the-system-doesnt-start-at-all). |
 
 It's off by default for now, while it's new, because it changes the startup
-image. The BunnyOS installer will turn it on.
+image. The Bunny Linux installer will turn it on.
 
 ## `[dev]`
 
-Developer mode, for people testing BunnyOS: records every command and sends
+Developer mode, for people testing Bunny Linux: records every command and sends
 reports to the developers. Off unless you add it.
 
 ```toml
@@ -144,7 +144,7 @@ Safety:
   before the old one can be removed. Take the old one out of `packages` once
   you're happy.
 
-With sudo, BunnyOS also:
+With sudo, Bunny Linux also:
 
 - builds sudo **without `sendmail`**, which would otherwise install a mail
   server just to email root about failed password attempts. To keep it, add

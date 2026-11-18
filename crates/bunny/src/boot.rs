@@ -195,7 +195,7 @@ pub fn render_entry(
     let _ = writeln!(out, "{BEGIN}");
     let _ = writeln!(
         out,
-        "menuentry 'BunnyOS: undo the last change (back to {when})' --class bunnyos {{"
+        "menuentry 'Bunny Linux: undo the last change (back to {when})' --class bunny {{"
     );
     let _ = writeln!(out, "    insmod btrfs");
     let _ = writeln!(out, "    search --no-floppy --fs-uuid --set=root {uuid}");
@@ -288,8 +288,9 @@ mod tests {
             "1234",
             "root=UUID=1234 bunny.rollback=bunny-1",
         );
-        assert!(entry
-            .contains("menuentry 'BunnyOS: undo the last change (back to 2026-11-17 09:15 UTC)'"));
+        assert!(entry.contains(
+            "menuentry 'Bunny Linux: undo the last change (back to 2026-11-17 09:15 UTC)'"
+        ));
         assert!(entry.contains("search --no-floppy --fs-uuid --set=root 1234"));
         assert!(entry.contains(
             "linux /@snapshots/bunny-1/boot/vmlinuz-6.12.58 root=UUID=1234 bunny.rollback=bunny-1"

@@ -85,7 +85,7 @@ impl fmt::Display for Problem {
 
 impl Config {
     /// USE flags per package as they should be applied: the config's own,
-    /// plus BunnyOS defaults for packages bunny installs itself. A package's
+    /// plus Bunny Linux defaults for packages bunny installs itself. A package's
     /// own `[pkg]` entry always wins over a default.
     pub fn use_flags(&self) -> BTreeMap<String, Vec<String>> {
         let mut flags: BTreeMap<String, Vec<String>> = self

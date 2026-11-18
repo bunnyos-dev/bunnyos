@@ -12,10 +12,23 @@
 #
 # Options (environment variables):
 #   MEM=8G CPUS=4 DISK_SIZE=60G GL=1   (GL=0 if 3D graphics won't start)
+#   VM=laptop   a second, separate VM (its own disk, snapshots and SSH port
+#               2223), for testing with the laptop's disk layout:
+#               VM=laptop ./bunny-vm.sh run
 
 set -eu
 
-VM_DIR="${VM_DIR:-$HOME/bunny-vm}"
+VM="${VM:-}"
+if [ -n "$VM" ]; then
+    case "$VM" in *[!a-z0-9-]*) echo "✗ VM names use a-z, 0-9 and -"; exit 1 ;; esac
+    VM_DIR="${VM_DIR:-$HOME/bunny-vm-$VM}"
+    NAME="bunny-$VM"
+    PORT="${PORT:-2223}"
+else
+    VM_DIR="${VM_DIR:-$HOME/bunny-vm}"
+    NAME="bunnyos-test"
+    PORT="${PORT:-2222}"
+fi
 DISK="$VM_DIR/disk.qcow2"
 VARS="$VM_DIR/OVMF_VARS.fd"
 TPM_DIR="$VM_DIR/tpm"
@@ -58,7 +71,7 @@ setup() {
 }
 
 check_off() {
-    if pgrep -f "qemu-system-x86_64 -name bunnyos-test" >/dev/null; then
+    if pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; then
         echo "✗ The VM is running. Shut it down first."
         exit 1
     fi
@@ -86,9 +99,9 @@ run() {
         CDROM="-cdrom $1"
     fi
 
-    echo "→ Starting Bunny Linux test VM ($CPUS CPUs, $MEM RAM)"
+    echo "→ Starting the ${VM:-main} Bunny Linux test VM ($CPUS CPUs, $MEM RAM, SSH on port $PORT)"
     # shellcheck disable=SC2086
-    exec qemu-system-x86_64 -name bunnyos-test \
+    exec qemu-system-x86_64 -name "$NAME" \
         -enable-kvm -cpu host -smp "$CPUS" -m "$MEM" \
         -machine q35,smm=on \
         -global driver=cfi.pflash01,property=secure,value=on \
@@ -99,7 +112,7 @@ run() {
         -tpmdev emulator,id=tpm0,chardev=chrtpm \
         -device tpm-tis,tpmdev=tpm0 \
         $GFX \
-        -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \
+        -nic user,model=virtio-net-pci,hostfwd=tcp::$PORT-:22 \
         -device virtio-rng-pci \
         -usb -device usb-tablet \
         $CDROM
@@ -112,8 +125,8 @@ case "${1:-run}" in
     snaps)      qemu-img snapshot -l "$DISK" ;;
     reset-keys) check_off; find_firmware; cp "$VARS_TEMPLATE" "$VARS"; echo "✓ Secure Boot keys wiped (Setup Mode)" ;;
     put)        shift; [ $# -gt 0 ] || { echo "✗ Name at least one file to copy."; exit 1; }
-                exec scp -P 2222 -o StrictHostKeyChecking=no "$@" you@localhost: ;;
+                exec scp -P "$PORT" -o StrictHostKeyChecking=no "$@" you@localhost: ;;
     # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
-    ssh)        TERM=xterm-256color exec ssh -p 2222 -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
-    *)          sed -n '2,16p' "$0" ;;
+    ssh)        TERM=xterm-256color exec ssh -p "$PORT" -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
+    *)          sed -n '2,19p' "$0" ;;
 esac

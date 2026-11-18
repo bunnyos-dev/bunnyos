@@ -27,7 +27,13 @@ stays exactly where it was.
 It also:
 
 - copies subvolumes that were inside `/` (like `/srv`) into `@` as normal
-  folders, since nested subvolumes aren't part of saved versions;
+  folders, since nested subvolumes aren't part of saved versions. A
+  subvolume at one of the folders above (like `/home` as a subvolume) is
+  copied into its new `@` subvolume instead, and its old fstab line is kept
+  as a comment;
+- leaves alone any of those folders that's already its own filesystem (say
+  `/home` on another disk, or `/var/tmp/portage` in memory as tmpfs): no
+  subvolume is made for it, and its fstab line stays;
 - moves swap out of `/`, because btrfs won't save a version of a subvolume
   with an active swapfile in it, and adds a small boot service, `swapfiles`,
   that turns that swap on once `/swap` is mounted (OpenRC's own swap
@@ -39,8 +45,12 @@ It also:
 - adds a boot menu entry, **"Before the Bunny Linux layout"**, that starts the
   old, untouched system.
 
-Encrypted disks and a separate `/boot` partition are fine: neither is
-changed.
+**`/boot` has to be its own partition** (usually the EFI partition, as on
+an encrypted install). Then the boot menu and kernels sit outside the btrfs
+volume and keep working as they are. If `/boot` is a folder inside `/`, the
+script stops before changing anything: GRUB would have to be reinstalled
+too, which it doesn't do yet. Encrypted disks are fine; nothing about the
+encryption changes.
 
 ## Do it
 

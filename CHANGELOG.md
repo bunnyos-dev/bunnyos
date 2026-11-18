@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `tools/convert-layout.sh` fixes from the code review: it now stops
+  before changing anything if `/boot` isn't its own partition (it used to stop
+  partway and could leave the computer unable to start); a `/home` that was
+  already a subvolume isn't copied twice or mounted twice; folders that are
+  their own filesystem (like a tmpfs `/var/tmp/portage`) are left alone;
+  and `--finish` only edits the boot menu on the real system.
 - `tools/convert-layout.sh` moves an existing Gentoo on btrfs (with `/` at the
   top of the volume) to the Bunny Linux layout, so undo works. Plan first,
   nothing deleted, and a boot menu entry back to the old system.

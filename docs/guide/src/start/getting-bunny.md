@@ -1,7 +1,7 @@
 # Getting bunny
 
-> Today, bunny is installed on an existing Gentoo system, from the BunnyOS
-> overlay. A ready-made BunnyOS installer is planned.
+> Today, bunny is installed on an existing Gentoo system, from the Bunny Linux
+> overlay. A ready-made Bunny Linux installer is planned.
 
 ## What you need
 
@@ -16,12 +16,12 @@
 
 > **Try it in a virtual machine first.** The repository has a script that
 > sets one up with the right layout. See
-> [Testing BunnyOS in a virtual machine](../reference/testing-in-a-vm.md).
+> [Testing Bunny Linux in a virtual machine](../reference/testing-in-a-vm.md).
 
-## Add the BunnyOS overlay
+## Add the Bunny Linux overlay
 
 An overlay is an extra package repository that sits next to Gentoo's own.
-BunnyOS's is called `bunny`. Adding it needs `eselect repository`, and git
+Bunny Linux's is called `bunny`. Adding it needs `eselect repository`, and git
 to download it:
 
 ```sh

@@ -5,7 +5,7 @@ bunny's undo needs btrfs, laid out like this:
 ```
 Disk (GPT)
 ├─ EFI partition   2 GB   FAT32    mounted at /efi
-└─ BunnyOS         rest   btrfs
+└─ Bunny Linux         rest   btrfs
    ├─ @            /                   ← snapshotted as generations
    ├─ @home        /home               ← never rolled back
    ├─ @log         /var/log            ← never rolled back
@@ -36,7 +36,7 @@ cost.
 ## Planned
 
 Encryption (LUKS2, unlocked at a pretty boot screen) is planned as the
-default for the BunnyOS installer. The VM installer doesn't encrypt yet.
+default for the Bunny Linux installer. The VM installer doesn't encrypt yet.
 
 ## Setting it up
 

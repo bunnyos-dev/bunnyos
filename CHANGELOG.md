@@ -10,6 +10,16 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- New: `repositories` in `bunny.toml` for package repositories besides
+  Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
+  up and downloads them before installing, so a package from one installs in
+  the same switch.
+- New: `keywords` under `[pkg]` allows testing versions (`["~amd64"]`).
+  emerge's "only available as a testing version" is now explained with the
+  lines to add.
+- `bunny add` knows where a few packages that aren't in Gentoo's own tree
+  went (Mango, Hyprland), and offers to add their repository and testing
+  versions.
 - New: `bunny install` puts Bunny Linux on a computer from a live USB. It
   lists the disks (leaving out ones in use), shows exactly what will be
   erased, asks you to type the disk's name, and installs a minimal encrypted

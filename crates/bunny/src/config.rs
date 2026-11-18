@@ -19,6 +19,10 @@ pub struct Config {
     /// Services to enable at boot, by plain name.
     #[serde(default)]
     pub services: Vec<String>,
+    /// Package repositories (overlays) besides Gentoo's own, by the names in
+    /// Gentoo's list of repositories, e.g. `["guru"]`.
+    #[serde(default)]
+    pub repositories: Vec<String>,
     /// Per-package settings, keyed by `category/name`.
     #[serde(default)]
     pub pkg: BTreeMap<String, PkgSettings>,
@@ -151,6 +155,10 @@ pub struct PkgSettings {
     /// USE flags, e.g. `["pgo", "-telemetry"]`.
     #[serde(default, rename = "use")]
     pub use_flags: Vec<String>,
+    /// Versions to accept beyond stable ones, e.g. `["~amd64"]` for testing
+    /// versions (Portage's package.accept_keywords).
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 /// Something wrong with the config, explained for humans.
@@ -188,6 +196,15 @@ impl Config {
             }
         }
         flags
+    }
+
+    /// Accepted keywords per package, from `[pkg] keywords`.
+    pub fn keywords(&self) -> BTreeMap<String, Vec<String>> {
+        self.pkg
+            .iter()
+            .filter(|(_, s)| !s.keywords.is_empty())
+            .map(|(atom, s)| (atom.clone(), s.keywords.clone()))
+            .collect()
     }
 
     /// Reads the config and, if there is one, this computer's host file.
@@ -297,14 +314,42 @@ impl Config {
                 }
             }
             check_use_conflicts(atom, &settings.use_flags, &mut problems);
+            for keyword in &settings.keywords {
+                if !is_keyword(keyword) {
+                    problems.push(Problem {
+                        what: format!("\"{keyword}\" in the keywords for {atom} isn't a keyword."),
+                        fix: "Use \"~amd64\" for testing versions (or \"**\" for any version, \
+                              including unreleased ones from git)."
+                            .into(),
+                    });
+                }
+            }
         }
+
+        for name in &self.repositories {
+            if !is_repository_name(name) {
+                problems.push(Problem {
+                    what: format!("\"{name}\" in `repositories` isn't a repository name."),
+                    fix: "Use the name from Gentoo's list, like \"guru\" \
+                          (see https://repos.gentoo.org)."
+                        .into(),
+                });
+            } else if name == "gentoo" {
+                problems.push(Problem {
+                    what: "\"gentoo\" is in `repositories`, but Gentoo's own is always there."
+                        .into(),
+                    fix: "Remove it from the list.".into(),
+                });
+            }
+        }
+        check_duplicates(&self.repositories, "repositories", &mut problems);
 
         problems
     }
 }
 
 /// Top-level keys that are easy to accidentally put below a `[section]`.
-const TOP_LEVEL_KEYS: [&str; 2] = ["packages", "services"];
+const TOP_LEVEL_KEYS: [&str; 3] = ["packages", "services", "repositories"];
 
 /// If a TOML error is a top-level key that landed inside a section, returns it.
 fn misplaced_top_level_key(message: &str) -> Option<&'static str> {
@@ -336,6 +381,26 @@ pub fn is_package_name(s: &str) -> bool {
                 .all(|c| c.is_ascii_alphanumeric() || "+_.-".contains(c))
     };
     ok(cat) && ok(name) && !name.contains('/') && slot.is_none_or(ok)
+}
+
+/// A keyword for package.accept_keywords: `amd64`, `~amd64`, `**`, `~*`, `*`.
+fn is_keyword(s: &str) -> bool {
+    if matches!(s, "**" | "~*" | "*") {
+        return true;
+    }
+    let arch = s.strip_prefix('~').unwrap_or(s);
+    let mut chars = arch.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// A repository name as Portage allows: letters, digits, `_` and `-`, not
+/// starting with `-`.
+pub fn is_repository_name(s: &str) -> bool {
+    !s.is_empty()
+        && !s.starts_with('-')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// A USE flag, optionally prefixed with `-` to disable it.
@@ -372,6 +437,47 @@ fn check_use_conflicts(atom: &str, flags: &[String], problems: &mut Vec<Problem>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checks_keywords_and_repositories() {
+        let c = Config::parse(
+            "repositories = [\"guru\", \"hyproverlay\"]\n\
+             [pkg.\"gui-wm/dwl\"]\nkeywords = [\"~amd64\"]\n\
+             [pkg.\"gui-libs/scenefx\"]\nkeywords = [\"**\"]\n",
+        )
+        .unwrap();
+        assert!(c.problems().is_empty(), "{:?}", c.problems());
+        assert_eq!(c.keywords()["gui-wm/dwl"], ["~amd64"]);
+        assert!(!c.use_flags().contains_key("gui-wm/dwl"));
+
+        let bad = Config::parse(
+            "repositories = [\"guru\", \"guru\", \"my repo\", \"gentoo\"]\n\
+             [pkg.\"gui-wm/dwl\"]\nkeywords = [\"amd64~\"]\n",
+        )
+        .unwrap();
+        let text: Vec<String> = bad.problems().iter().map(|p| p.what.clone()).collect();
+        assert!(
+            text.iter()
+                .any(|t| t.contains("\"amd64~\" in the keywords")),
+            "{text:?}"
+        );
+        assert!(text
+            .iter()
+            .any(|t| t.contains("\"my repo\" in `repositories`")));
+        assert!(text.iter().any(|t| t.contains("\"guru\" is listed twice")));
+        assert!(text
+            .iter()
+            .any(|t| t.contains("Gentoo's own is always there")));
+
+        // The section trap catches `repositories` too.
+        let err = Config::parse("[system]\nrepositories = []")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("`repositories` ended up inside a [section]"),
+            "{err}"
+        );
+    }
 
     #[test]
     fn adds_the_host_file_on_top() {

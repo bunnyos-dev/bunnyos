@@ -444,6 +444,17 @@ admins = ["you"]
    track.
 3. **Flatpak** for large GUI apps.
 
+**Current behaviour (repositories and testing versions, November 2026):**
+`repositories = ["guru"]` in `bunny.toml` names repositories from Gentoo's
+list (`api.gentoo.org/overlays/repositories.xml`). A switch writes
+`repos.conf/bunny-<name>.conf` (git, auto-sync) and runs `emaint sync` right
+after the snapshot, then checks packages; repositories set up outside bunny
+are reported, not touched. `[pkg] keywords` go in
+`package.accept_keywords/zz-bunny`. `bunny add` has a short list of
+well-known packages outside `::gentoo` (Mango in GURU, Hyprland in
+hyproverlay) and offers their repository and keywords. Custom repository
+addresses (not in Gentoo's list) are later work.
+
 ## Desktop
 
 Decided November 2026. The installer offers, in this order:

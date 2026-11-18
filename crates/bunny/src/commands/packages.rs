@@ -58,8 +58,23 @@ pub(crate) fn search_cmd(query: &str, root: &Path) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// What `bunny add` resolved: full names, plus repositories (and testing
+/// versions) to add for packages that live outside Gentoo's own tree.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct Resolved {
+    pub names: Vec<String>,
+    pub homes: Vec<crate::overlays::Home>,
+}
+
 /// Turns what the user typed into full package names, or explains why not.
-pub(crate) fn resolve_all(root: &Path, names: &[String]) -> anyhow::Result<Option<Vec<String>>> {
+/// For a well-known package that lives in another repository, says which and
+/// asks whether to add it (`ask` gives the answer; Enter means no).
+pub(crate) fn resolve_all(
+    root: &Path,
+    names: &[String],
+    repositories: &[String],
+    ask: &mut dyn FnMut(&str) -> anyhow::Result<bool>,
+) -> anyhow::Result<Option<Resolved>> {
     let packages = repo::all(root);
     if packages.is_empty() {
         anyhow::bail!(
@@ -69,16 +84,48 @@ pub(crate) fn resolve_all(root: &Path, names: &[String]) -> anyhow::Result<Optio
             security::admin()
         );
     }
-    let mut resolved = Vec::new();
+    let mut resolved = Resolved::default();
     let mut ok = true;
     for name in names {
         match repo::resolve(&packages, name) {
-            repo::Resolved::Found(full) => resolved.push(full),
+            repo::Resolved::Found(full) => resolved.names.push(full),
             repo::Resolved::Ambiguous(options) => {
                 ok = false;
                 eprintln!("✗ Several packages are called \"{name}\". Pick one:");
                 for option in options {
                     eprintln!("    bunny add {option}");
+                }
+            }
+            repo::Resolved::NotFound(_) if crate::overlays::known_home(name).is_some() => {
+                let home = crate::overlays::known_home(name).expect("checked");
+                if repositories.iter().any(|r| r == home.repository) {
+                    // Listed but not downloaded yet: the switch gets it.
+                    resolved.names.push(home.package.to_string());
+                    resolved.homes.push(home);
+                    continue;
+                }
+                eprintln!(
+                    "· {} isn't in Gentoo's own package tree. It's in the {} repository.",
+                    home.package, home.repository
+                );
+                for line in crate::overlays::trust_note(home.official).lines() {
+                    eprintln!("  {line}");
+                }
+                if !home.testing.is_empty() {
+                    eprintln!(
+                        "  It only has testing versions there, so bunny also accepts those for:\n    {}",
+                        home.testing.join(", ")
+                    );
+                }
+                let question = format!(
+                    "Add the {} repository to your config, and install {} from it? [y/N]",
+                    home.repository, home.package
+                );
+                if ask(&question)? {
+                    resolved.names.push(home.package.to_string());
+                    resolved.homes.push(home);
+                } else {
+                    ok = false;
                 }
             }
             repo::Resolved::NotFound(similar) => {
@@ -104,23 +151,50 @@ pub(crate) fn add_cmd(
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
-    let Some(full) = resolve_all(root, names)? else {
+    let old = read_config_text(config)?;
+    let listed = crate::config::Config::parse(&old)
+        .map(|c| c.repositories)
+        .unwrap_or_default();
+    let mut ask = |q: &str| -> anyhow::Result<bool> {
+        use std::io::Write;
+        print!("{q} ");
+        std::io::stdout().flush()?;
+        let answer = crate::interrupt::read_line()?.unwrap_or_default();
+        Ok(matches!(answer.trim().to_lowercase().as_str(), "y" | "yes"))
+    };
+    let Some(found) = resolve_all(root, names, &listed, &mut ask)? else {
         eprintln!("Nothing was changed.");
         return Ok(ExitCode::FAILURE);
     };
-    let old = read_config_text(config)?;
-    let edited = edit::add_packages(&old, &full)?;
+    let mut text = old.clone();
+    for home in &found.homes {
+        text = edit::add_repository(&text, home.repository)?;
+        for atom in home.testing {
+            text = edit::set_keywords(&text, atom, &["~amd64"])?;
+        }
+    }
+    let edited = edit::add_packages(&text, &found.names)?;
     for name in &edited.unchanged {
         println!("{name} is already in {}.", config.display());
     }
     if edited.changed.is_empty() {
         return Ok(ExitCode::SUCCESS);
     }
-    println!(
-        "Adding {} to {}.\n",
-        edited.changed.join(", "),
-        config.display()
-    );
+    let repos: Vec<&str> = found.homes.iter().map(|h| h.repository).collect();
+    if repos.is_empty() {
+        println!(
+            "Adding {} to {}.\n",
+            edited.changed.join(", "),
+            config.display()
+        );
+    } else {
+        println!(
+            "Adding {} (and the {} repository) to {}.\n",
+            edited.changed.join(", "),
+            repos.join(", "),
+            config.display()
+        );
+    }
     edit_then_switch(config, &old, &edited.text, yes, root, false)
 }
 
@@ -177,5 +251,55 @@ pub(crate) fn edit_then_switch(
             Ok(code)
         }
         Err(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fake_repo() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        let cache = root
+            .path()
+            .join("var/db/repos/gentoo/metadata/md5-cache/app-misc");
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::write(cache.join("tmux-3.5"), "DESCRIPTION=Terminal multiplexer\n").unwrap();
+        root
+    }
+
+    #[test]
+    fn offers_the_repository_a_known_package_lives_in() {
+        let root = fake_repo();
+        let names = vec!["tmux".to_string(), "mangowm".to_string()];
+        let mut asked = Vec::new();
+        let mut yes = |q: &str| {
+            asked.push(q.to_string());
+            Ok(true)
+        };
+        let found = resolve_all(root.path(), &names, &[], &mut yes)
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.names, ["app-misc/tmux", "gui-wm/mangowm"]);
+        assert_eq!(found.homes[0].repository, "guru");
+        assert!(asked[0].contains("Add the guru repository"), "{asked:?}");
+
+        // Saying no changes nothing.
+        let mut no = |_: &str| Ok(false);
+        assert!(resolve_all(root.path(), &names, &[], &mut no)
+            .unwrap()
+            .is_none());
+
+        // Already in `repositories` (not downloaded yet): no question.
+        let mut never = |_: &str| -> anyhow::Result<bool> { panic!("asked") };
+        let found = resolve_all(
+            root.path(),
+            &["mangowm".into()],
+            &["guru".into()],
+            &mut never,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.names, ["gui-wm/mangowm"]);
     }
 }

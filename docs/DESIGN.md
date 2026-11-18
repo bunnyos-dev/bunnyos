@@ -670,6 +670,15 @@ testing and decisions.
   that affect the system.
 - **Dogfooding:** the maintainer runs BunnyOS on a real machine as early as
   it's safe, with their `bunny.toml` in git.
+- **Developer mode (`[dev] report`):** testers' machines record every bunny
+  command with util-linux `script` (terminal output exactly as seen, without
+  changing behaviour), keeping recordings in `~/.local/state/bunny/sessions/`.
+  `bunny report` cleans them (colour codes, redrawn progress lines),
+  swaps user names, home folders, the hostname, emails and `*.ts.net` names
+  for placeholders, and files one issue in the private
+  `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
+  `"auto"` sends any command that fails or shows ⚠/✗. Daily sessions read
+  new reports first.
 
 ## Testing
 

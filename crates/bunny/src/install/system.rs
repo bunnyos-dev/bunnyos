@@ -12,6 +12,8 @@ use crate::apply::Runner;
 
 pub const MIRROR: &str = "https://distfiles.gentoo.org/releases/amd64/autobuilds";
 const INSIDE: &str = include_str!("inside.sh");
+/// Turns swap on after `/swap` is mounted (OpenRC's swap service runs too early).
+const SWAPFILES: &str = include_str!("swapfiles.initd");
 
 /// What goes into the new system besides the disk layout.
 #[derive(Debug, Clone, PartialEq)]
@@ -268,11 +270,20 @@ pub fn configure(
     if account.ssh {
         services.push("sshd");
     }
-    let boot_services = if uuids.home_luks.is_some() {
-        "dmcrypt"
-    } else {
-        ""
-    };
+    let mut boot_services = Vec::new();
+    if uuids.home_luks.is_some() {
+        boot_services.push("dmcrypt");
+    }
+    if choices.swap_mib > 0 {
+        put(
+            runner,
+            &mnt.join("etc/init.d/swapfiles"),
+            SWAPFILES,
+            Some(0o755),
+        )?;
+        boot_services.push("swapfiles");
+    }
+    let boot_services = boot_services.join(" ");
     put(
         runner,
         &mnt.join("root/bunny-install.env"),
@@ -446,6 +457,7 @@ mod tests {
         let choices = Choices {
             disk: "/dev/vda".into(),
             mnt: dir.path().to_path_buf(),
+            swap_mib: 2048,
             ..Default::default()
         };
         let account = Account {
@@ -486,6 +498,8 @@ mod tests {
         assert!(env.contains("CMDLINE=\"rd.luks.uuid=luks\""), "{env}");
         assert!(env.contains("sys-fs/cryptsetup"), "{env}");
         assert!(env.contains("SERVICES=\"dhcpcd sysklogd sshd\""), "{env}");
+        assert!(env.contains("BOOT_SERVICES=\"swapfiles\""), "{env}");
+        assert!(read("etc/init.d/swapfiles").contains("need localmount"));
         assert!(read("root/bunny-inside.sh").contains("grub-install"));
         assert!(dir.path().join("srv").is_dir());
         assert!(dir.path().join("usr/local/bin/bunny").is_file());

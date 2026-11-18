@@ -325,7 +325,7 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] `[boot]` config section; `bunny boot list` / `preview`
 
 ### Towards a fork of Gentoo (slowly, see DESIGN.md "Relationship to Gentoo")
-- [ ] **Overrides list:** `OVERRIDES.md` in `bunny-overlay` with a reason for
+- [~] **Overrides list** (bunny-overlay#2): `OVERRIDES.md` in `bunny-overlay` with a reason for
       every ebuild that shadows a `::gentoo` one, and a CI check that fails
       when one is missing. Can be done any time; it's small.
 - [ ] **The Bunny tree (`bunny-tree`):** the tested baseline publishes its

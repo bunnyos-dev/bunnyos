@@ -659,11 +659,15 @@ boot handling, boot theme, musl/BusyBox, systemd, sandboxes and dev shells.
 3. Lockfile and `bunny update`.
 4. `bunny switch` with generations and GRUB entries.
 5. Error translation.
-6. Binary cache and `bunny serve`.
-7. Boot experience (Plymouth, GRUB theme, greetd).
-8. Secure Boot + gaming kernel.
-9. Installer + ISO.
-10. Polish.
+6. A first, minimal ISO: terminal installer (`bunny install`), no desktop,
+   so Bunny Linux can be installed from scratch and learned from the Guide.
+7. Binary cache and `bunny serve`.
+8. Graphical installer, Baseline image, Bunny Desktop, full ISO.
+9. Secure Boot + gaming kernel.
+10. The look: boot experience (Plymouth, GRUB theme, greetd), polish.
+
+(Reordered November 2026: function first, and a minimal ISO early so the
+maintainer can learn Bunny Linux as a new user would.)
 
 ## Upkeep
 

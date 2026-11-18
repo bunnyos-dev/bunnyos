@@ -17,12 +17,21 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ✅ Done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
-| 7. The look | boot animation, GRUB theme, login screen | ⬜ |
+| 7. Installing Bunny Linux | installer, ISO, hosting | ⬜ (a first, minimal ISO comes sooner: see below) |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
-| 9. Installing Bunny Linux | installer, ISO, hosting | ⬜ |
+| 9. The look | boot animation, GRUB theme, login screen | ⬜ |
 
-**Version 1** (phases 1–5, running on an existing Gentoo install) is roughly
-**two-thirds done**. The **whole vision** (all 9 phases) is roughly **a fifth done**.
+**Version 1** (phases 1–5, running on an existing Gentoo install) is **done**.
+The **whole vision** (all 9 phases) is roughly **a third done**.
+
+**Order agreed with the maintainer (November 2026):**
+
+1. A first, minimal ISO (terminal installer, no desktop)
+2. The maintainer's dry run in the VM: install from the ISO, then learn and
+   customize the system using only the Guide
+3. Guide and bunny fixes from what the dry run finds
+4. The maintainer's laptop
+5. The rest of the Portage helper
 
 ### Done so far
 
@@ -120,7 +129,48 @@ feature PRs now update it as they go.)
       rollback, so `bunny status` is ✓ right after an undo. Update the guide's
       "Your config file after a rollback". **(VM)**
 
-## Talk to Portage directly (after the config fix)
+## A first ISO (next)
+
+Agreed with the maintainer: a plain, working ISO before the graphical
+installer, so Bunny Linux can be installed from scratch and learned the way a
+new user would. It boots to a terminal and installs a **minimal** system: the
+Bunny Linux disk layout, encryption, OpenRC, a kernel, networking, one user,
+sudo and bunny. No desktop: adding one with bunny is the first thing a new
+user learns. Packages come from Gentoo's binary host, one by one (the
+prebuilt Baseline image comes with phase 6). Not styled yet.
+
+- [ ] **`bunny install`, part 1:** turn `tools/vm-install-gentoo.sh` into a
+      real installer for any disk: lists the disks, asks which one, shows
+      exactly what will be erased and asks to type the disk's name. LUKS2
+      encryption on by default (`--no-encrypt` to skip). Same layout as the
+      VM script. Refuses to touch a disk that's mounted or in use. **(VM)**
+- [ ] **`bunny install`, part 2:** writes a minimal starter `bunny.toml` to
+      `/etc/bunny/bunny.toml` (with comments pointing to the Guide), asks for
+      the user name, password, time zone, keyboard and host name, runs the
+      first `bunny switch` and `bunny lock` inside the new system, and turns
+      on boot-menu undo. **(VM)**
+- [ ] **The live USB image:** a script that builds a small bootable image
+      (UEFI, GRUB) with bunny, `bunny install` and the tools it needs. It
+      boots to a terminal welcome: what this is, `bunny install` to start,
+      the Guide's URL, and how to get online (Ethernet works by itself;
+      Wi-Fi with `iwctl`). **(VM)**
+- [ ] **ISO in CI:** a GitHub Actions workflow builds the ISO on a tag (and
+      by hand), with SHA256 sums, attached to the GitHub Release.
+      `tools/bunny-vm.sh` can boot it (`ISO=…`).
+- [ ] **Guide: "Install Bunny Linux":** writing the USB, booting it,
+      `bunny install` step by step, first boot, and "what to do first" (add a
+      desktop, set up your config in git). Plus a page on turning on
+      developer mode during the dry run.
+- [ ] **Dry run** (the maintainer): install from the ISO in the VM, then use
+      it for a day or two following only the Guide, with developer mode on
+      and notes on anything confusing. Each confusing spot becomes a Guide or
+      bunny fix below.
+
+### Fixes from the dry run
+
+(Filled in from the maintainer's notes and developer-mode reports.)
+
+## Talk to Portage directly (after the dry run and the laptop)
 
 Agreed with the maintainer: version 1 reads emerge's screen text, which breaks
 whenever emerge changes its wording. The design always said bunny should ask

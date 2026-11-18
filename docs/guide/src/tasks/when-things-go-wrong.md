@@ -33,8 +33,10 @@ It's safe to stop bunny at any point:
 
   ```
   ✗ Stopped with Ctrl+C while installing.
-    101 of 102 packages finished installing; www-client/firefox was in progress and didn't.
-    Your config still lists www-client/firefox, so `bunny status` will show it as not applied yet.
+    101 of 102 packages finished installing.
+    www-client/firefox was in progress and didn't.
+    Your config still lists www-client/firefox, so `bunny status`
+    will show it as not applied yet.
 
   Two ways on from here:
     • Undo the whole attempt: `bunny rollback`, then restart. …

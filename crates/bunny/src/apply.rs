@@ -560,7 +560,8 @@ fn interrupted_message(
         Some((n, total, name)) => {
             let done = n.saturating_sub(1);
             text.push_str(&format!(
-                "  {done} of {total} package{} finished installing; {name} was in progress and didn't.\n",
+                "  {done} of {total} package{} finished installing.\n  \
+                 {name} was in progress and didn't.\n",
                 if *total == 1 { "" } else { "s" }
             ));
         }

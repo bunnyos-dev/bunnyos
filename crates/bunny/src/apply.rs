@@ -729,8 +729,9 @@ fn install_quietly(
     let alternatives = crate::emerge::prebuilt_alternatives(&list, &plan.add_packages, &available);
     for (package, bin) in &alternatives {
         println!(
-            "  Tip: {bin} is a prebuilt version of {package}. It installs in a minute\n  \
-             instead of compiling. To use it, answer n here, then: bunny add {bin}"
+            "  Tip: {bin} is a prebuilt version of {package}.\n  \
+             It installs in a minute instead of compiling. To use it,\n  \
+             answer n here, then: bunny add {bin}"
         );
     }
     // Only ask again if emerge wants more than the plan showed (dependencies,

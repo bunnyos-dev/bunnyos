@@ -250,7 +250,7 @@ to-do list. Appearance work comes last and a little at a time.
 
 - The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
   `GRUB_DISTRIBUTOR`; part of the boot menu work).
-- [~] The install progress line (`[2/2] Compiling …`) wasn't cleared before
+- [x] The install progress line (`[2/2] Compiling …`) wasn't cleared before
       "✓ Installed 2 packages", and stood still during long builds. Now a
       spinner, times and a percentage; the list fits narrow terminals.
 - Pressing Ctrl+C during an install ends bunny with no explanation. It

@@ -222,6 +222,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `(would run)` line is shown, and long ones wrap. For someone learning,
       the steps in plain words would be clearer: each step's name and what
       it does, with the exact commands behind `--dry-run --verbose`.
+- [ ] **The installed system's boot menu looks like Gentoo's.** It has the
+      Gentoo logo behind it, calls the system "Bunny Linux GNU/Linux", and
+      lists every firmware entry (UiApp, DVD-ROM, PXE and HTTP boot, a second
+      "Bunny Linux (EFI BootNext)"). Until the real look (phase 9): no Gentoo
+      theme, the name "Bunny Linux", and only Bunny Linux, its advanced
+      options, Undo and firmware settings in the list.
+- [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
+      even though the install asked for a time zone. Show local time, and for
+      the first generation say "as installed".
 - [ ] **Developer mode can't record `bunny install`.** It's set in
       `bunny.toml`, and the live USB has none, so the install itself (the
       part being tested most) isn't recorded. Idea: preview ISOs record by

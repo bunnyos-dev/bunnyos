@@ -66,7 +66,7 @@ if [ "$LAYOUT" = laptop ]; then EFI_SIZE=1GiB; else EFI_SIZE=2GiB; fi
 sfdisk --quiet "$DISK" <<EOF
 label: gpt
 size=$EFI_SIZE, type=U, name=EFI
-type=L, name=Bunny Linux
+type=L, name="Bunny Linux"
 EOF
 sleep 1
 

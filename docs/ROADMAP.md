@@ -231,6 +231,11 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
       even though the install asked for a time zone. Show local time, and for
       the first generation say "as installed".
+- [ ] **`tools/bunny-vm.sh ssh` warns "REMOTE HOST IDENTIFICATION HAS
+      CHANGED" for a new VM.** Every named VM (`VM=laptop`, `VM=fresh`, …)
+      uses port 2223, so SSH remembers the last VM's key and refuses the new
+      one. Fix: keep each VM's key in its own known_hosts file
+      (`$VM_DIR/known_hosts`), or give each VM its own port.
 - [ ] **Developer mode can't record `bunny install`.** It's set in
       `bunny.toml`, and the live USB has none, so the install itself (the
       part being tested most) isn't recorded. Idea: preview ISOs record by

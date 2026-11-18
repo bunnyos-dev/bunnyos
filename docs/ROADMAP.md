@@ -177,7 +177,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `--config <file>` installs from your own (written by hand or from a git
       repo). Then runs the first `bunny switch` and `bunny lock` inside the
       new system and turns on boot-menu undo. **(VM)**
-- [ ] **`bunny install`, part 3 (manual partitioning):** `bunny install
+- [~] **`bunny install`, part 3 (manual partitioning):** `bunny install
       --mounted /mnt` for people who partition and mount everything
       themselves. bunny doesn't touch the disks: it reads what's mounted,
       writes the host file from it, and explains anything that limits it

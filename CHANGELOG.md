@@ -22,6 +22,10 @@ a minor version can change how things work).
   on). `--config` installs from your own config (a file, or a git repository
   like `github:you/my-system`), checked before anything is erased; `--edit`
   lets you change it first.
+- `bunny install --mounted <folder>` installs onto partitions you made and
+  mounted yourself, without erasing anything. It explains what limits your
+  layout (like no undo on ext4) and can make the standard btrfs subvolumes
+  on an empty filesystem.
 - New: host files. `hosts/<computer name>.toml` next to `bunny.toml` adds
   packages, services and USE flags for one computer only, so the main config
   works everywhere. `bunny install` writes one with what the computer needs

@@ -257,6 +257,13 @@ enum Command {
         /// Read the list of disks from this file (lsblk --json output) instead of lsblk
         #[arg(long, hide = true)]
         lsblk: Option<PathBuf>,
+        /// Install onto partitions you made and mounted here yourself (nothing is erased)
+        #[arg(long, value_name = "FOLDER",
+              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "hibernate", "home_disk"])]
+        mounted: Option<PathBuf>,
+        /// Read what's mounted from this file (findmnt --json output) instead of findmnt
+        #[arg(long, hide = true)]
+        findmnt: Option<PathBuf>,
     },
     /// Write a bunny.toml that describes this system as it is now (changes nothing)
     Import {
@@ -373,6 +380,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             config,
             dry_run,
             lsblk,
+            mounted,
+            findmnt,
         } => commands::install_cmd(commands::InstallArgs {
             disk,
             no_encrypt,
@@ -385,6 +394,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             config,
             dry_run,
             lsblk,
+            mounted,
+            findmnt,
         }),
         Command::Import {
             output,

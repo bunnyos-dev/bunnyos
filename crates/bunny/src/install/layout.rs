@@ -46,6 +46,10 @@ pub struct Choices {
     pub home_disk: Option<String>,
     /// Where the new system is mounted while it's installed.
     pub mnt: PathBuf,
+    /// `--mounted`: partitions you made and mounted yourself. bunny
+    /// doesn't touch the disks, and fstab and the kernel settings come from
+    /// what's mounted.
+    pub mounted: Option<super::mounted::Mounted>,
 }
 
 impl Default for Choices {
@@ -58,6 +62,7 @@ impl Default for Choices {
             hibernate: false,
             home_disk: None,
             mnt: PathBuf::from("/mnt/bunny"),
+            mounted: None,
         }
     }
 }
@@ -194,6 +199,9 @@ impl Choices {
 
     /// `/etc/fstab` for the new system.
     pub fn fstab(&self, u: &Uuids) -> String {
+        if let Some(m) = &self.mounted {
+            return m.fstab();
+        }
         let mut out = String::from(
             "# Written by bunny install. The layout is described in the Guide:\n\
              # \"The disk layout\".\n\
@@ -219,6 +227,9 @@ impl Choices {
 
     /// Kernel command line additions (GRUB adds `root=` itself).
     pub fn cmdline(&self, u: &Uuids, resume_offset: Option<&str>) -> String {
+        if let Some(m) = &self.mounted {
+            return m.cmdline();
+        }
         let mut words = Vec::new();
         if let Some(luks) = &u.root_luks {
             words.push(format!("rd.luks.uuid={luks}"));

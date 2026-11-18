@@ -211,12 +211,17 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       moment. Fix: wait up to ~15 s ("Checking the connection…"), check the
       address and DNS separately (so "online, but names don't work" is its
       own message), and say "type welcome to check again".
-- [ ] **The live USB console can't draw ✗** (it shows `x`). Check which
-      symbols the console font has (✓ ✗ ⚠ ·) and use plain ones on the USB,
-      or load a font that has them.
+- [ ] **The live USB console can't draw ✓ or ✗** (they show as `v` and
+      `x`, e.g. "v Dry run finished"). Check which symbols the console font
+      has (✓ ✗ ⚠ ·) and load a font that has them on the USB (or fall back
+      to plain text when the terminal is the Linux console).
 - [ ] **"Welcome to your new account!"** appears above the welcome on the
       live USB, which is confusing there (it isn't a new account). Find what
       prints it at the first login and turn it off on the USB.
+- [ ] **`bunny install --dry-run` is a wall of commands.** Every
+      `(would run)` line is shown, and long ones wrap. For someone learning,
+      the steps in plain words would be clearer: each step's name and what
+      it does, with the exact commands behind `--dry-run --verbose`.
 - [ ] **Developer mode can't record `bunny install`.** It's set in
       `bunny.toml`, and the live USB has none, so the install itself (the
       part being tested most) isn't recorded. Idea: preview ISOs record by

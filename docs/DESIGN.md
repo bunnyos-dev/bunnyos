@@ -596,6 +596,26 @@ GPT
   from your own. For people who want to leave the Baseline and set up
   everything themselves. Also: Reset an installed Bunny Linux, Disks, logs.
 - "Restore from config" rebuilds a machine from a git repo or USB.
+- **Partitioning, three ways** (decided November 2026):
+  1. **Guided** (default, fully supported): pick a disk; the standard layout
+     with encryption. Common changes as options: no encryption, sizes,
+     hibernation swapfile, `/home` on a second disk, alongside another OS.
+  2. **From the config:** a `[disk]` section describes the layout (like
+     NixOS's disko) and `bunny install` partitions to match.
+  3. **Manual:** partition and mount at `/mnt` yourself, then `bunny install
+     --mounted /mnt`. bunny never touches the disks, reads what's mounted,
+     and explains anything that limits it (ext4: no undo; btrfs without
+     subvolumes: offers to add them). Allowed and checked, not every layout
+     tested.
+- **The config is written for you, but it's yours.** Every mode writes a
+  starter `bunny.toml` (like `nixos-generate-config`). `--edit` stops to edit
+  it before installing; `--config <file or repo>` installs from your own.
+  Disk details go in the host file (`hosts/<host>.toml`), like NixOS's
+  `hardware-configuration.nix`, so the main config works on any machine.
+- **One step from the config (later, needs phase 6):** `bunny install
+  --config github:you/my-system` partitions, writes the Baseline image and
+  applies the config and lock in one command. Same recipe, not bit-for-bit
+  (see "Lockfile").
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 

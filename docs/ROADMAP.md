@@ -26,12 +26,14 @@ The **whole vision** (all 9 phases) is roughly **a third done**.
 
 **Order agreed with the maintainer (November 2026):**
 
-1. A first, minimal ISO (terminal installer, no desktop)
-2. The maintainer's dry run in the VM: install from the ISO, then learn and
+1. Code cleanup so other people can review the code, then an independent
+   review
+2. A first, minimal ISO (terminal installer, no desktop)
+3. The maintainer's dry run in the VM: install from the ISO, then learn and
    customize the system using only the Guide
-3. Guide and bunny fixes from what the dry run finds
-4. The maintainer's laptop
-5. The rest of the Portage helper
+4. Guide and bunny fixes from what the dry run finds
+5. The maintainer's laptop
+6. The rest of the Portage helper
 
 ### Done so far
 
@@ -129,6 +131,26 @@ feature PRs now update it as they go.)
       rollback, so `bunny status` is ✓ right after an undo. Update the guide's
       "Your config file after a rollback". **(VM)**
 
+## Code cleanup and review (before the ISO)
+
+Agreed with the maintainer: make the code easy for other people to read and
+review before the installer adds a lot more of it.
+
+- [ ] **Split the big files:** `apply.rs` (about 1,800 lines) into smaller
+      modules (the switch steps, quiet install and removal, package.use
+      takeover, admin rights), and the command handlers out of `main.rs`
+      into their own modules. Long functions (`switch`, `install_quietly`)
+      broken into named steps. No change in behaviour; all tests still pass.
+- [ ] **`CONTRIBUTING.md`:** a code map for human contributors: where to
+      start, what each module does, how a `bunny switch` flows through the
+      files, how to run the tests and the VM, and the rules from
+      `CLAUDE.md` that apply to everyone. Comments on each Portage call in
+      `bunny-portage.py` explaining what it asks Portage and why.
+- [ ] **Independent review:** a separate agent that hasn't seen the code
+      being written reads the whole repo (Rust, the Portage helper and the
+      shell scripts, especially the ones that touch disks) and files each
+      finding as an issue. Real bugs get fixed before the ISO work.
+
 ## A first ISO (next)
 
 Agreed with the maintainer: a plain, working ISO before the graphical
@@ -139,16 +161,28 @@ sudo and bunny. No desktop: adding one with bunny is the first thing a new
 user learns. Packages come from Gentoo's binary host, one by one (the
 prebuilt Baseline image comes with phase 6). Not styled yet.
 
-- [ ] **`bunny install`, part 1:** turn `tools/vm-install-gentoo.sh` into a
-      real installer for any disk: lists the disks, asks which one, shows
-      exactly what will be erased and asks to type the disk's name. LUKS2
-      encryption on by default (`--no-encrypt` to skip). Same layout as the
-      VM script. Refuses to touch a disk that's mounted or in use. **(VM)**
-- [ ] **`bunny install`, part 2:** writes a minimal starter `bunny.toml` to
-      `/etc/bunny/bunny.toml` (with comments pointing to the Guide), asks for
-      the user name, password, time zone, keyboard and host name, runs the
-      first `bunny switch` and `bunny lock` inside the new system, and turns
-      on boot-menu undo. **(VM)**
+- [ ] **`bunny install`, part 1 (guided):** turn `tools/vm-install-gentoo.sh`
+      into a real installer for any disk: lists the disks, asks which one,
+      shows exactly what will be erased and asks to type the disk's name.
+      Standard layout, LUKS2 encryption on by default. Options for the common
+      changes: `--no-encrypt`, partition sizes, a swapfile for hibernation,
+      `/home` on a second disk. Refuses to touch a disk that's mounted or in
+      use. **(VM)**
+- [ ] **`bunny install`, part 2 (the config):** writes a starter
+      `bunny.toml` from your answers (user name, password, time zone,
+      keyboard, host name), with comments pointing to the Guide. Disk details
+      (partition IDs, encryption) go in a separate host file,
+      `hosts/<host name>.toml`, so the main config works on any machine.
+      `--edit` stops so you can edit the config before installing;
+      `--config <file>` installs from your own (written by hand or from a git
+      repo). Then runs the first `bunny switch` and `bunny lock` inside the
+      new system and turns on boot-menu undo. **(VM)**
+- [ ] **`bunny install`, part 3 (manual partitioning):** `bunny install
+      --mounted /mnt` for people who partition and mount everything
+      themselves. bunny doesn't touch the disks: it reads what's mounted,
+      writes the host file from it, and explains anything that limits it
+      (ext4: no undo; btrfs without subvolumes: offers to add them). Allowed
+      and checked, but not every layout is tested. **(VM)**
 - [ ] **The live USB image:** a script that builds a small bootable image
       (UEFI, GRUB) with bunny, `bunny install` and the tools it needs. It
       boots to a terminal welcome: what this is, `bunny install` to start,
@@ -246,7 +280,13 @@ to-do list. Appearance work comes last and a little at a time.
       setups still work; they just aren't tested by us.
 
 ### Phase 7: installing Bunny Linux
-- [ ] `bunny install` (from `tools/vm-install-gentoo.sh`), encryption by default
+- [ ] **`[disk]` section:** describe the disk layout in the config (like
+      NixOS's disko), and `bunny install` partitions to match. Used only at
+      install, never on a running system.
+- [ ] **One-step install from a config:** `bunny install --config
+      github:you/my-system` partitions from `[disk]`, writes the Baseline
+      image and switches to your config and lock in one command, compiling
+      only what isn't prebuilt (in the build container). Needs phase 6.
 - [ ] Baseline system image built on the server
 - [ ] Slint installer (straight to the installer, no desktop): centered, one
       decision per screen, Utilities menu. Working and plainly styled first;

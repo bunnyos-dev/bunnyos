@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Ctrl+C is safe everywhere. At a question it counts as "no" and the config
+  is put back; during an install, bunny says how far it got and how to undo
+  (`bunny rollback`) or finish (`bunny switch`) it. Before, it stopped with
+  no explanation, and could leave a package in `bunny.toml` that was never
+  installed.
+
 - The install progress line keeps moving: a spinner, how long the current
   package has taken, a percentage when the build reports one, and otherwise
   how long it took last time. It never wraps in a narrow terminal.

@@ -175,6 +175,8 @@ fn record(args: &[String], subcommand: &str, dev: &Dev) -> Result<ExitCode> {
         .collect::<Vec<_>>()
         .join(" ");
     let started = std::time::Instant::now();
+    // The recorded bunny handles Ctrl+C; this one just waits for it.
+    let _careful = crate::interrupt::Careful::start();
     let status = Command::new("script")
         .args(["--quiet", "--return", "--flush", "--command", &line])
         .arg(&log)

@@ -253,6 +253,6 @@ to-do list. Appearance work comes last and a little at a time.
 - [x] The install progress line (`[2/2] Compiling …`) wasn't cleared before
       "✓ Installed 2 packages", and stood still during long builds. Now a
       spinner, times and a percentage; the list fits narrow terminals.
-- Pressing Ctrl+C during an install ends bunny with no explanation. It
-  should say what got installed, what didn't, and that `bunny rollback`
-  undoes the whole attempt.
+- [~] Pressing Ctrl+C during an install ended bunny with no explanation, and
+      at a question it could leave the package in `bunny.toml`. Now Ctrl+C
+      at a question means no, and during an install bunny explains.

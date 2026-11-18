@@ -13,6 +13,7 @@ mod glsa;
 mod helper;
 mod import;
 mod init;
+mod interrupt;
 mod lock;
 mod notes;
 mod plan;
@@ -242,6 +243,7 @@ enum Command {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    interrupt::install();
     VERBOSE.store(cli.verbose, std::sync::atomic::Ordering::Relaxed);
     if let Some(code) = dev::record_if_on(Path::new(DEFAULT_CONFIG), cli.in_session) {
         return code;
@@ -691,6 +693,9 @@ fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
         return Ok(None);
     }
     let admin = security::admin();
+    // The admin tool and bunny under it get Ctrl+C themselves; this copy
+    // only waits for them, so it mustn't stop first and leave them talking.
+    let _careful = interrupt::Careful::start();
     let status = std::process::Command::new(admin)
         .arg(std::env::current_exe()?)
         .args(std::env::args_os().skip(1))
@@ -1349,10 +1354,12 @@ fn confirm(question: &str, default: Default) -> anyhow::Result<bool> {
     print!("{question} {hint} ");
     loop {
         std::io::stdout().flush()?;
-        let mut answer = String::new();
-        if std::io::stdin().read_line(&mut answer)? == 0 {
-            return Ok(false); // no more input: never assume yes
-        }
+        let Some(answer) = interrupt::read_line()? else {
+            if interrupt::happened() {
+                println!("\n(Ctrl+C: taken as no.)");
+            }
+            return Ok(false); // no more input, or Ctrl+C: never assume yes
+        };
         match parse_answer(&answer, default) {
             Some(false) if default == Default::No && answer.trim().is_empty() => {
                 println!(

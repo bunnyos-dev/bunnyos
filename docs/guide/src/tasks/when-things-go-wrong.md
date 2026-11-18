@@ -22,6 +22,25 @@ The system before this change is saved in /.snapshots/… (see `bunny rollback l
 
 Do what the **Fix** says and run the same command again.
 
+## If you press Ctrl+C
+
+It's safe to stop bunny at any point:
+
+- **At a question** ("Apply these changes?", "Install these?"), Ctrl+C
+  counts as **no**: nothing is installed, and `bunny.toml` is put back as it
+  was.
+- **While it's installing**, emerge stops, and bunny says how far it got:
+
+  ```
+  ✗ Stopped with Ctrl+C while installing.
+    101 of 102 packages finished installing; www-client/firefox was in progress and didn't.
+    Your config still lists www-client/firefox, so `bunny status` will show it as not applied yet.
+
+  Two ways on from here:
+    • Undo the whole attempt: `bunny rollback`, then restart. …
+    • Finish it later: `bunny switch` picks up where this stopped.
+  ```
+
 ## Messages from outside bunny
 
 If you ran `emerge` yourself and got something confusing, paste it into

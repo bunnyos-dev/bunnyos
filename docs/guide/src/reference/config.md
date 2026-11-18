@@ -169,7 +169,11 @@ On a switch, bunny:
 1. installs the tool (it's added to your packages automatically)
 2. writes `/etc/sudoers.d/bunny` (sudo) or `/etc/doas.conf` (doas) giving the
    `wheel` group admin rights, **after checking it with the tool's own
-   checker** (`visudo -c` or `doas -C`)
+   checker** (`visudo -c` or `doas -C`). doas keeps all its settings in that
+   one file, so bunny writes its rule first and keeps every other line you
+   had after it (the plan says how many); doas uses the last rule that
+   matches, so your own rules, like `nopass` for one command, still apply.
+   The old file is also saved in the backup folder.
 3. adds `admins` to the `wheel` group
 
 Safety:

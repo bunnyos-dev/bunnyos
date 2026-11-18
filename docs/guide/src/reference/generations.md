@@ -21,8 +21,10 @@ saying what came right after it: a switch (with a summary like
 1. mounts the top level of the btrfs filesystem
 2. saves the current system as `bunny-<time>-before-rollback` (so the rollback
    can be undone)
-3. moves the current root subvolume `@` aside to `@replaced-<time>`
-4. makes a **writable copy** of generation N the new `@`
+3. makes a **writable copy** of generation N, under a temporary name
+   (`@restoring-<time>`)
+4. moves the current root subvolume `@` aside to `@replaced-<time>`, and
+   renames the copy to `@`
 5. moves any **nested subvolumes** (subvolumes inside `@`, such as `/srv` on
    some systems) over to the new `@`, so their contents aren't lost
 
@@ -30,7 +32,18 @@ On the next boot, the system starts from the new `@`. `/boot` is inside `@`,
 so the kernel goes back too. (If `/boot` is its own partition, bunny puts the
 kernel back itself; see [below](#when-boot-is-its-own-partition).)
 
-If step 4 fails, the old `@` is moved back and nothing changes.
+If the copy can't be made, nothing changes. If the rename to `@` fails, the
+old `@` is moved back (and bunny checks that worked; if it didn't, it says
+exactly how to put it back before restarting). Ctrl+C is held off during
+the two renames. The boot-menu undo works the same way.
+
+While a rollback is waiting for a restart, `switch`, `add`, `remove`,
+`update` and another `rollback` refuse to run: their changes would go into
+the system that's about to be replaced. `bunny clean` still works.
+
+If the config is a link (say `/etc/bunny/bunny.toml` pointing into
+`/home`), it's treated like a config in `/home`: it lives outside the
+system, so undo leaves it alone rather than writing through the link.
 
 ## The config goes back too
 

@@ -30,6 +30,20 @@ sudo git add bunny.toml bunny.lock hosts
 sudo git commit -m "My system"
 ```
 
+**Push every commit somewhere else** (a private GitHub repository, your
+NAS): `/etc/bunny` is part of the system, so undoing a change takes the
+repository back too, and commits made after that point would only survive
+in the old system that `bunny clean` later deletes. With a remote, they're
+always there:
+
+```sh
+sudo git remote add origin <your repository's address>
+sudo git push -u origin HEAD
+```
+
+After a rollback, `sudo git fetch` and `git log origin/HEAD` show everything
+you'd committed.
+
 ## Things to know
 
 - **Old versions disappear from Gentoo.** Gentoo removes old versions from its

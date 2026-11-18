@@ -58,6 +58,13 @@ pub fn restore_into(system: &Path) -> Result<Option<PathBuf>> {
         return Ok(None);
     }
     let target = system.join("etc").join(inside);
+    // A config that's a link (say into /home) lives outside the system:
+    // writing through the link would change the real file, which a rollback
+    // shouldn't touch. Left alone, like a config in /home.
+    let is_link = |p: &Path| std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink());
+    if is_link(&target) || is_link(&crate::lock::path_for(&target)) {
+        return Ok(None);
+    }
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -138,5 +145,22 @@ mod tests {
             std::fs::read_to_string(dir.join(PATH_FILE)).unwrap().trim(),
             config.display().to_string()
         );
+    }
+
+    #[test]
+    fn leaves_a_linked_config_alone() {
+        let system = tempfile::tempdir().unwrap();
+        let s = system.path();
+        std::fs::create_dir_all(s.join(DIR)).unwrap();
+        std::fs::write(s.join(DIR).join(CONFIG), "old\n").unwrap();
+        std::fs::write(s.join(DIR).join(PATH_FILE), "/etc/bunny/bunny.toml\n").unwrap();
+        // /etc/bunny/bunny.toml links to the real file elsewhere (in /home).
+        let real = s.join("home-config.toml");
+        std::fs::write(&real, "new\n").unwrap();
+        std::fs::create_dir_all(s.join("etc/bunny")).unwrap();
+        std::os::unix::fs::symlink(&real, s.join("etc/bunny/bunny.toml")).unwrap();
+
+        assert_eq!(restore_into(s).unwrap(), None);
+        assert_eq!(std::fs::read_to_string(&real).unwrap(), "new\n");
     }
 }

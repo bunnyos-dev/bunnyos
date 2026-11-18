@@ -37,13 +37,14 @@ pub(crate) fn switch_inner(
     removal_requested: bool,
 ) -> anyhow::Result<Switched> {
     let real_system = root == Path::new("/");
+    let _changing = super::changing(real_system, false)?;
 
-    let cfg = Config::load(config)?;
+    let cfg = Config::load(config).map_err(apply::nothing_changed)?;
     if report_problems(&cfg, config) != ExitCode::SUCCESS {
         eprintln!("Fix these first, then run `bunny switch` again.");
         return Ok(Switched::NotApplied(ExitCode::FAILURE));
     }
-    let mut plan = plan::make(&cfg, root)?;
+    let mut plan = plan::make(&cfg, root).map_err(apply::nothing_changed)?;
     plan.removal_requested = removal_requested;
     print!("{}", plan.render());
     if !plan.unknown_packages.is_empty() {
@@ -256,6 +257,7 @@ pub(crate) fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Resul
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, false)?;
     let cfg = Config::load(config)?;
     if report_problems(&cfg, config) != ExitCode::SUCCESS {
         eprintln!("Fix these first, then run `bunny update` again.");

@@ -17,7 +17,10 @@ a minor version can change how things work).
   needs", folded after 15, so it stays readable in a narrow terminal.
 - Before a big compile, bunny says when a prebuilt version exists
   (`www-client/firefox-bin` for `www-client/firefox`).
-
+- Developer mode (`[dev] report`): bunny records every command as it looked
+  in the terminal, and `bunny report` sends the recordings to a private
+  GitHub repository as an issue, with personal details swapped out. With
+  `report = "auto"`, problems are sent by themselves.
 - bunny installs with emerge from the BunnyOS overlay (`app-admin/bunny-bin`
   for releases, `app-admin/bunny` for the newest code). A switch keeps
   bunny's own package installed even if it's not in `bunny.toml`.

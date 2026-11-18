@@ -126,6 +126,10 @@ Agreed with the maintainer: version 1 reads emerge's screen text, which breaks
 whenever emerge changes its wording. The design always said bunny should ask
 Portage for structured answers instead.
 
+- [x] **Developer mode:** `[dev] report` records every command as it looked
+      in the terminal; `bunny report` files them as an issue in a private
+      repo (personal details swapped out); `"auto"` sends problems by
+      themselves. Daily sessions read the reports and turn bugs into PRs.
 - [ ] **Portage helper:** (part 1, the install list, done in #18; next: depclean,
       then error explanations) a small Python script shipped with bunny that uses
       Portage's own library (the code emerge uses) and prints JSON: what a
@@ -249,3 +253,6 @@ to-do list. Appearance work comes last and a little at a time.
 - [~] The install progress line (`[2/2] Compiling …`) wasn't cleared before
       "✓ Installed 2 packages", and stood still during long builds. Now a
       spinner, times and a percentage; the list fits narrow terminals.
+- Pressing Ctrl+C during an install ends bunny with no explanation. It
+  should say what got installed, what didn't, and that `bunny rollback`
+  undoes the whole attempt.

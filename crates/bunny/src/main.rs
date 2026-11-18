@@ -4,6 +4,7 @@ mod applied;
 mod apply;
 mod boot;
 mod config;
+mod dev;
 mod diff;
 mod edit;
 mod emerge;
@@ -42,7 +43,14 @@ struct Cli {
     /// Show emerge's full output as it runs (instead of a summary and progress line)
     #[arg(short, long, global = true)]
     verbose: bool,
+    /// Set by bunny itself when it re-runs a command that's already being
+    /// recorded (developer mode), so it isn't recorded twice.
+    #[arg(long, global = true, hide = true)]
+    in_session: bool,
 }
+
+/// Where bunny looks for its config unless told otherwise.
+const DEFAULT_CONFIG: &str = "/etc/bunny/bunny.toml";
 
 /// `--verbose`, for every command that runs emerge.
 static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -208,6 +216,17 @@ enum Command {
         root: PathBuf,
     },
     /// Write a bunny.toml that describes this system as it is now (changes nothing)
+    /// Send recorded commands to the reports repository (developer mode)
+    Report {
+        /// Show what would be sent, without sending it
+        #[arg(long)]
+        dry_run: bool,
+        /// Don't ask before sending
+        #[arg(short, long)]
+        yes: bool,
+        #[arg(default_value = DEFAULT_CONFIG)]
+        config: PathBuf,
+    },
     Import {
         /// Save to this file instead of printing it
         #[arg(short, long)]
@@ -224,6 +243,9 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     VERBOSE.store(cli.verbose, std::sync::atomic::Ordering::Relaxed);
+    if let Some(code) = dev::record_if_on(Path::new(DEFAULT_CONFIG), cli.in_session) {
+        return code;
+    }
     match run(cli) {
         Ok(code) => code,
         Err(err) => {
@@ -238,6 +260,11 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     match cli.command {
+        Command::Report {
+            dry_run,
+            yes,
+            config,
+        } => report(&config, dry_run, yes),
         Command::Check { config } => {
             let cfg = Config::load(&config)?;
             Ok(report_problems(&cfg, &config))
@@ -667,6 +694,11 @@ fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     let status = std::process::Command::new(admin)
         .arg(std::env::current_exe()?)
         .args(std::env::args_os().skip(1))
+        .args(
+            std::env::var_os(dev::SESSION_ENV)
+                .is_some()
+                .then_some("--in-session"),
+        )
         .status()
         .with_context(|| {
             format!("bunny needs to run as root to change the system, and couldn't start {admin}")
@@ -676,6 +708,49 @@ fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     } else {
         ExitCode::FAILURE
     }))
+}
+
+/// `bunny report`: sends the recorded commands that haven't been sent yet.
+fn report(config: &Path, dry_run: bool, yes: bool) -> anyhow::Result<ExitCode> {
+    let dev = dev::settings(config);
+    let dir = dev::sessions_dir();
+    let unsent = dev::unsent(&dir);
+    if unsent.is_empty() {
+        if dev.report == dev::ReportMode::Off {
+            println!(
+                "Developer mode is off, so nothing is recorded. To turn it on, add this to {}:\n\n  \
+                 [dev]\n  report = \"auto\"\n\nThen every bunny command is recorded, and problems are \
+                 sent by themselves.",
+                config.display()
+            );
+        } else {
+            println!("✓ Nothing to send: every recorded command has been sent.");
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let (title, body) = dev::prepare(&dev, &unsent, false)?;
+    if dry_run {
+        println!(
+            "Would send to {} (nothing is sent):\n\n# {title}\n\n{body}",
+            dev.repo()
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    println!(
+        "Ready to send {} recorded command{} to {} ({} KB), with personal details swapped out.",
+        unsent.len(),
+        if unsent.len() == 1 { "" } else { "s" },
+        dev.repo(),
+        body.len().div_ceil(1024)
+    );
+    println!("  `bunny report --dry-run` shows exactly what's sent.");
+    if !yes && !confirm("Send it?", Default::Yes)? {
+        println!("Nothing sent.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let url = dev::send_sessions(&dev, &unsent, false)?;
+    println!("✓ Sent: {url}");
+    Ok(ExitCode::SUCCESS)
 }
 
 fn generations(root: &Path) -> anyhow::Result<ExitCode> {
@@ -1307,7 +1382,7 @@ fn parse_answer(answer: &str, default: Default) -> Option<bool> {
 }
 
 /// `YYYYMMDD-HHMMSS` in UTC, for naming snapshots and backups.
-fn timestamp() -> String {
+pub(crate) fn timestamp() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)

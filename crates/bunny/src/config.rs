@@ -28,6 +28,9 @@ pub struct Config {
     /// Boot menu settings.
     #[serde(default)]
     pub boot: crate::boot::Boot,
+    /// Developer mode: recording commands and sending reports.
+    #[serde(default)]
+    pub dev: crate::dev::Dev,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

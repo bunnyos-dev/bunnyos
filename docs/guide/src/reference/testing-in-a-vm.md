@@ -74,6 +74,45 @@ tools/bunny-vm.sh snap clean-install
 To test a build of bunny: `cargo build --release`,
 `tools/bunny-vm.sh put target/release/bunny`, then run `./bunny …` in the VM.
 
+## A second VM shaped like a hand-made install
+
+Many people already run Gentoo with an encrypted disk, the boot partition at
+`/boot`, and btrfs without Bunny Linux's subvolumes. To test moving such a
+system to the Bunny Linux layout, there's a second, separate VM for it. It has
+its own disk and snapshots, and SSH on port 2223, so both VMs can exist side
+by side.
+
+```sh
+VM=laptop tools/bunny-vm.sh run ~/Downloads/install-amd64-minimal-*.iso
+```
+
+With the web server running as above, in the **VM window**:
+
+```sh
+wget http://10.0.2.2:8000/tools/vm-install-gentoo.sh
+LAYOUT=laptop sh vm-install-gentoo.sh
+```
+
+What it makes:
+
+| | |
+|---|---|
+| `/dev/vda1`, 1 GB | the EFI partition, mounted at **`/boot`** (kernels live here) |
+| `/dev/vda2` | **LUKS2 encrypted**, unlocked with the same password at boot |
+| inside it | btrfs with the root at the top of the volume (no `@`), `/srv` as a subvolume, a 2 GB `/swapfile` |
+
+Then, as before: `poweroff`, start it without the ISO, **type the password
+in the VM window** to unlock the disk, log in, `doas poweroff`, and save a
+starting point:
+
+```sh
+VM=laptop tools/bunny-vm.sh run
+VM=laptop tools/bunny-vm.sh snap laptop-before
+```
+
+Every command takes `VM=laptop` the same way: `VM=laptop tools/bunny-vm.sh ssh`,
+`VM=laptop tools/bunny-vm.sh put target/release/bunny`, and so on.
+
 ## Tips
 
 - **Keyboard stuck in the VM window?** Press **Ctrl+Alt+G** to release it.

@@ -250,7 +250,7 @@ to-do list. Appearance work comes last and a little at a time.
 Getting Bunny Linux onto a real, encrypted Gentoo laptop safely. Everything
 is tested first in a VM with the same layout.
 
-- [~] **A second VM shaped like the laptop** (`VM=laptop`, `LAYOUT=laptop`):
+- [x] **A second VM shaped like the laptop** (`VM=laptop`, `LAYOUT=laptop`):
       LUKS2, the EFI partition at `/boot`, btrfs without subvolumes, `/srv`
       as a subvolume, a swapfile.
 - [ ] **A kernel per generation on the EFI partition**, so undo works across

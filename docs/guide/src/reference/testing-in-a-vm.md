@@ -1,4 +1,4 @@
-# Testing BunnyOS in a virtual machine
+# Testing Bunny Linux in a virtual machine
 
 The repository has two scripts that give you a safe place to try bunny:
 
@@ -6,7 +6,7 @@ The repository has two scripts that give you a safe place to try bunny:
   setup mode), a TPM 2.0 chip and 3D graphics, with snapshots so you can
   start fresh any time.
 - `tools/vm-install-gentoo.sh` runs *inside* the VM and installs Gentoo with
-  [the BunnyOS disk layout](disk-layout.md), OpenRC, doas and Rust, mostly from
+  [the Bunny Linux disk layout](disk-layout.md), OpenRC, doas and Rust, mostly from
   prebuilt packages.
 
 ## 1. Install QEMU (on your computer)

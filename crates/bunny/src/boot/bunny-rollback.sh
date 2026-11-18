@@ -1,5 +1,5 @@
 #!/bin/sh
-# BunnyOS: undo a change from the boot menu.
+# Bunny Linux: undo a change from the boot menu.
 #
 # Runs before the system is mounted. Does nothing unless the kernel command
 # line has bunny.rollback=<generation> (only the boot menu's "undo" entry

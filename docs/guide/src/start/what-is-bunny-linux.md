@@ -1,6 +1,6 @@
-# What BunnyOS is
+# What Bunny Linux is
 
-BunnyOS is a Linux system built on **Gentoo**, with a tool called **bunny**
+Bunny Linux is a Linux system built on **Gentoo**, with a tool called **bunny**
 that makes it easier and safer to use.
 
 ## What it keeps from Gentoo
@@ -26,7 +26,7 @@ that makes it easier and safer to use.
 
 ## How it compares
 
-|  | Gentoo | NixOS | BunnyOS |
+|  | Gentoo | NixOS | Bunny Linux |
 |---|---|---|---|
 | Choose features per program | ✅ USE flags | ✅ (in the Nix language) | ✅ USE flags |
 | Whole system in one file | ❌ | ✅ | ✅ (TOML) |

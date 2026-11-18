@@ -1,6 +1,6 @@
 # Welcome
 
-This is the guide to **BunnyOS** and its tool, **bunny**.
+This is the guide to **Bunny Linux** and its tool, **bunny**.
 
 It has two parts:
 
@@ -12,11 +12,11 @@ It has two parts:
 
 Words that might be new are explained in the [Glossary](glossary.md).
 
-> **sudo or doas?** Commands in this guide use `sudo`, the BunnyOS default. If
+> **sudo or doas?** Commands in this guide use `sudo`, the Bunny Linux default. If
 > your system uses `doas`, type `doas` instead. bunny's own messages always
 > use whichever one you have.
 
-> **BunnyOS is in early development.** The `bunny` tool works on an existing
+> **Bunny Linux is in early development.** The `bunny` tool works on an existing
 > Gentoo install today. The installer, the boot experience and the rest come
 > later. Try it in a [virtual machine](reference/testing-in-a-vm.md) before
 > using it on a computer you care about.

@@ -4,7 +4,7 @@
 
 # Start here
 
-- [What BunnyOS is](start/what-is-bunnyos.md)
+- [What Bunny Linux is](start/what-is-bunny-linux.md)
 - [The big idea: one file describes your computer](start/the-big-idea.md)
 - [Getting bunny](start/getting-bunny.md)
 - [Your first five minutes](start/first-five-minutes.md)
@@ -28,7 +28,7 @@
 - [Generations and rollback, in detail](reference/generations.md)
 - [What bunny changes on your system](reference/what-bunny-changes.md)
 - [The disk layout](reference/disk-layout.md)
-- [Testing BunnyOS in a virtual machine](reference/testing-in-a-vm.md)
+- [Testing Bunny Linux in a virtual machine](reference/testing-in-a-vm.md)
 - [Developer mode: sending reports](reference/developer-mode.md)
 
 ---

@@ -13,7 +13,7 @@ use anyhow::{bail, Context, Result};
 use crate::apply::Runner;
 use crate::notes::{self, Kind, Note, State};
 
-/// The root subvolume name from the BunnyOS disk layout.
+/// The root subvolume name from the Bunny Linux disk layout.
 const ROOT_SUBVOL: &str = "@";
 /// The subvolume mounted at `/.snapshots`.
 const SNAPSHOTS_SUBVOL: &str = "@snapshots";

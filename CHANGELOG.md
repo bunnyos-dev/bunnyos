@@ -10,12 +10,15 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- BunnyOS is now called **Bunny Linux**. The boot menu entry reads
+  "Bunny Linux: undo the last change". The `bunny` command is unchanged.
+
 - Developer mode (`[dev] report`): bunny records every command as it looked
   in the terminal, and `bunny report` sends the recordings to a private
   GitHub repository as an issue, with personal details swapped out. With
   `report = "auto"`, problems are sent by themselves.
 
-- bunny installs with emerge from the BunnyOS overlay (`app-admin/bunny-bin`
+- bunny installs with emerge from the Bunny Linux overlay (`app-admin/bunny-bin`
   for releases, `app-admin/bunny` for the newest code). A switch keeps
   bunny's own package installed even if it's not in `bunny.toml`.
 - A switch with nothing else to do records packages installed outside bunny
@@ -77,5 +80,5 @@ The first release: version 1 of bunny.
   failures, typos, and flag rules emerge can't satisfy.
 
 ### Docs and checks
-- The BunnyOS Guide, at https://bunnyos-dev.github.io/bunnyos/.
+- The Bunny Linux Guide, at https://bunnyos-dev.github.io/bunnyos/.
 - Tests on every pull request.

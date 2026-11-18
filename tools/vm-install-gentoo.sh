@@ -1,5 +1,5 @@
 #!/bin/sh
-# vm-install-gentoo.sh: install a Gentoo test system inside the BunnyOS VM.
+# vm-install-gentoo.sh: install a Gentoo test system inside the Bunny Linux VM.
 #
 # Run this INSIDE the VM, from the Gentoo minimal install ISO, as root.
 # It ERASES /dev/vda and refuses to run anywhere but a QEMU virtual machine.
@@ -29,7 +29,7 @@ case "$vendor" in
     *QEMU*|*"Standard PC"*) ;;
     *) fail "This doesn't look like the QEMU VM ($vendor). Refusing to erase anything." ;;
 esac
-[ -b "$DISK" ] || fail "$DISK not found. Is this the BunnyOS VM?"
+[ -b "$DISK" ] || fail "$DISK not found. Is this the Bunny Linux VM?"
 [ -d /sys/firmware/efi ] || fail "The VM didn't boot in UEFI mode. Start it with tools/bunny-vm.sh."
 ping -c1 -W3 distfiles.gentoo.org >/dev/null 2>&1 || fail "No internet in the VM. Check the network, then try again."
 
@@ -52,7 +52,7 @@ wipefs -af "$DISK" >/dev/null
 sfdisk --quiet "$DISK" <<EOF
 label: gpt
 size=2GiB, type=U, name=EFI
-type=L, name=BunnyOS
+type=L, name=Bunny Linux
 EOF
 sleep 1
 

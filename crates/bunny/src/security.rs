@@ -52,7 +52,7 @@ impl Privilege {
         }
     }
 
-    /// USE flags BunnyOS sets for the tool unless the config has its own
+    /// USE flags Bunny Linux sets for the tool unless the config has its own
     /// `[pkg]` entry for it. sudo's `sendmail` flag pulls in a mail server
     /// (nullmailer) just to email root about failed attempts; desktops don't
     /// need that.

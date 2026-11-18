@@ -57,7 +57,7 @@ packages that are broken or about to be removed. bunny uses masks as
 
 ## OpenRC
 
-The init system BunnyOS uses: it starts services at boot. Its services live in
+The init system Bunny Linux uses: it starts services at boot. Its services live in
 `/etc/init.d/`, and which ones start is set by **runlevels**.
 
 ## Overlay
@@ -95,13 +95,13 @@ See **btrfs**.
 ## sudo / doas
 
 Commands that run another command as root (the administrator), after asking
-for your password. **sudo** is the common one and the BunnyOS default;
+for your password. **sudo** is the common one and the Bunny Linux default;
 **doas** is a smaller, simpler alternative. Pick one in
 [`[security]`](reference/config.md#security).
 
 ## Subvolume
 
-A btrfs folder that can be snapshotted and mounted on its own. The BunnyOS
+A btrfs folder that can be snapshotted and mounted on its own. The Bunny Linux
 layout uses several, so rollback restores the system without touching
 `/home`. See [The disk layout](reference/disk-layout.md).
 

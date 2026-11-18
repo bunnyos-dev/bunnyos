@@ -17,6 +17,7 @@ mod lock;
 mod notes;
 mod plan;
 mod portage;
+mod progress;
 mod repo;
 mod rollback;
 mod security;

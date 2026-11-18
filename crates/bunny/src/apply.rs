@@ -638,40 +638,6 @@ fn discard(root: &Path, runner: &mut dyn Runner, outcome: &mut Outcome) -> Resul
     Ok(())
 }
 
-/// One line that updates in place on a terminal ("[3/9] Installing …"),
-/// or one line per step when the output is a file or pipe.
-struct ProgressLine {
-    terminal: bool,
-    shown: bool,
-}
-
-impl ProgressLine {
-    fn new() -> Self {
-        Self {
-            terminal: std::io::IsTerminal::is_terminal(&std::io::stdout()),
-            shown: false,
-        }
-    }
-
-    fn show(&mut self, text: &str) {
-        use std::io::Write;
-        if self.terminal {
-            print!("\r\x1b[2K  {text}");
-            let _ = std::io::stdout().flush();
-        } else {
-            println!("  {text}");
-        }
-        self.shown = true;
-    }
-
-    fn clear(&mut self) {
-        if self.terminal && self.shown {
-            print!("\r\x1b[2K");
-        }
-        self.shown = false;
-    }
-}
-
 /// Saves emerge's full output, so nothing is lost by not showing it.
 fn save_log(root: &Path, stamp: &str, what: &str, text: &str) -> Option<PathBuf> {
     let dir = root.join("var/log/bunny");
@@ -757,13 +723,27 @@ fn install_quietly(
         "\n{}",
         crate::emerge::render_merge_list(&list, &plan.add_packages)
     );
+    // A big compile when a prebuilt version exists: say so before it starts.
+    let available: std::collections::BTreeSet<String> =
+        crate::repo::all(root).into_iter().map(|p| p.name).collect();
+    let alternatives = crate::emerge::prebuilt_alternatives(&list, &plan.add_packages, &available);
+    for (package, bin) in &alternatives {
+        println!(
+            "  Tip: {bin} is a prebuilt version of {package}.\n  \
+             It installs in a minute instead of compiling. To use it,\n  \
+             answer n here, then: bunny add {bin}"
+        );
+    }
     // Only ask again if emerge wants more than the plan showed (dependencies,
     // rebuilds, updates). Same packages as the plan: the user already said yes.
     let planned = |name: &String| {
         plan.add_packages.contains(name) || plan.use_changes.iter().any(|c| &c.atom == name)
     };
     let more_than_planned = list.iter().any(|m| !planned(&m.name));
-    if !opts.yes && more_than_planned && !(opts.confirm)("\nInstall these?", true)? {
+    if !opts.yes
+        && (more_than_planned || !alternatives.is_empty())
+        && !(opts.confirm)("\nInstall these?", true)?
+    {
         discard(root, runner, outcome)?;
         return Err(Cancelled.into());
     }
@@ -771,17 +751,26 @@ fn install_quietly(
     let mut install = cmd(&update);
     install.push("--quiet-build=y".into());
     install.push("@world".into());
-    let mut progress = ProgressLine::new();
+    // How long each package took last time, for the progress line.
+    let usually = std::fs::read_to_string(root.join("var/log/emerge.log"))
+        .map(|log| crate::emerge::build_times(&log))
+        .unwrap_or_default();
+    let mut progress = crate::progress::Ticker::new();
     let mut on_line = |line: &str| {
         if let Some((n, total, name, version, binary)) = crate::emerge::parse_progress(line) {
             let verb = if binary { "Installing" } else { "Compiling" };
-            progress.show(&format!("[{n}/{total}] {verb} {name} {version}…"));
+            let build_log = (!binary).then(|| crate::progress::build_log(root, &name, &version));
+            progress.step(
+                &format!("[{n}/{total}] {verb} {name} {version}"),
+                build_log,
+                (!binary).then(|| usually.get(&name).copied()).flatten(),
+            );
         }
     };
     println!();
     let (ok, install_output) = runner.run_quiet(&install, &mut on_line)?;
     let install_output = explain::strip_ansi(&install_output);
-    progress.clear();
+    progress.finish();
     let log_text = format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" "));
     outcome.log = save_log(root, &opts.stamp, "emerge", &log_text);
 
@@ -849,14 +838,14 @@ fn remove_quietly(runner: &mut dyn Runner, opts: &Options, outcome: &Outcome) ->
     if !(opts.confirm)("Remove them?", undoable)? {
         return Ok(false);
     }
-    let mut progress = ProgressLine::new();
+    let mut progress = crate::progress::Ticker::new();
     let mut on_line = |line: &str| {
         if let Some((n, total, name)) = crate::emerge::parse_unmerge_progress(line) {
-            progress.show(&format!("[{n}/{total}] Removing {name}…"));
+            progress.step(&format!("[{n}/{total}] Removing {name}"), None, None);
         }
     };
     let (ok, _) = runner.run_quiet(&cmd(&["emerge", "--depclean", "--color=n"]), &mut on_line)?;
-    progress.clear();
+    progress.finish();
     if ok {
         println!(
             "  ✓ Removed {} package{}.",

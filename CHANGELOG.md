@@ -13,14 +13,19 @@ a minor version can change how things work).
 - BunnyOS is now called **Bunny Linux**. The boot menu entry reads
   "Bunny Linux: undo the last change". The `bunny` command is unchanged.
 
+- The install progress line keeps moving: a spinner, how long the current
+  package has taken, a percentage when the build reports one, and otherwise
+  how long it took last time. It never wraps in a narrow terminal.
+- The install list shows what you asked for first, then "And N packages it
+  needs", folded after 15, so it stays readable in a narrow terminal.
+- Before a big compile, bunny says when a prebuilt version exists
+  (`www-client/firefox-bin` for `www-client/firefox`).
 - Developer mode (`[dev] report`): bunny records every command as it looked
   in the terminal, and `bunny report` sends the recordings to a private
   GitHub repository as an issue, with personal details swapped out. With
   `report = "auto"`, problems are sent by themselves.
 
 - bunny installs with emerge from the Bunny Linux overlay (`app-admin/bunny-bin`
-  for releases, `app-admin/bunny` for the newest code). A switch keeps
-  bunny's own package installed even if it's not in `bunny.toml`.
 - A switch with nothing else to do records packages installed outside bunny
   in `bunny.lock`, and `bunny status` says so instead of suggesting a fix
   that didn't apply.

@@ -93,6 +93,19 @@ undo_entry = true   # add "undo the last change" to the boot menu
 It's off by default for now, while it's new, because it changes the startup
 image. The BunnyOS installer will turn it on.
 
+## `[dev]`
+
+Developer mode, for people testing BunnyOS: records every command and sends
+reports to the developers. Off unless you add it.
+
+```toml
+[dev]
+report = "auto"   # false | true | "auto"
+name = "laptop"
+```
+
+Every setting is explained in [Developer mode](developer-mode.md).
+
 ## `[security]`
 
 Which tool gives admin rights, and who gets them. bunny only manages this if

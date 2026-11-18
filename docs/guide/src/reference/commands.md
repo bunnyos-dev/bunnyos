@@ -39,6 +39,12 @@ That's useful for testing.
 - `-v` / `--verbose`: show emerge's full output as it runs, and let emerge ask
   its own questions, instead of bunny's list and progress line.
 
+## Developer mode
+
+| Command | What it does |
+|---|---|
+| `bunny report [--dry-run] [--yes]` | Sends recorded commands that haven't been sent yet as one GitHub issue. `--dry-run` shows what would be sent. Needs `[dev] report` on; see [Developer mode](developer-mode.md). |
+
 ## How questions work
 
 - **`[Y/n]`**: Enter means yes. Used when the change can be undone (a snapshot

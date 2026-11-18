@@ -217,6 +217,17 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       stage3's default runlevel, and the starter config doesn't list them.
       Fix: list them in the starter config, or have bunny treat OpenRC's own
       default services as part of the base system.
+- [ ] **Bug: `bunny report` swaps every "bunny" when your user name is
+      `bunny`.** The report read `/etc/you/you.toml`, `you update`, `you
+      rollback list`. Replace the user name only where it's a user name
+      (`/home/<name>`, `<name>@`, a login line), never inside bunny's own
+      name, paths and commands. Add a test with the user name `bunny`.
+- [ ] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
+      reinstalled curl, gettext, iputils, libb2 and portage-utils, shown as
+      "(rebuild)". Say why (a USE flag changed, a library they use changed).
+- [ ] **26 unread Gentoo announcements on a fresh install.** They're all
+      older than the system. `bunny install` should mark them read
+      (`eselect news read --quiet all`), so only new ones are mentioned.
 - [ ] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1

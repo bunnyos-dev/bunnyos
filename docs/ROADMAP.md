@@ -240,13 +240,13 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       install's answers), and a later `bunny git`/`bunny publish` connects it
       to GitHub with your own sign-in. Then the Guide's git section is one
       command.
-- [ ] **Guide, What to do first: Hyprland isn't in Gentoo's tree any more.**
+- [~] **Guide, What to do first: Hyprland isn't in Gentoo's tree any more** (#56, now Mango).
       It was masked in February 2026 and removed in March; it now lives in
       the community `hyproverlay` repository (testing versions only). The
       page's `bunny add gui-wm/hyprland` fails with "There's no package
       called". Change the example to a desktop in Gentoo's tree, and say how
       to get Hyprland once repositories are in `bunny.toml` (below).
-- [ ] **Repositories (overlays) in `bunny.toml`.** Maintainer's idea: when a
+- [~] **Repositories (overlays) in `bunny.toml`** (#56). Maintainer's idea: when a
       package isn't found, say which overlay has it. Plan: a `repositories`
       list in `bunny.toml` (enabled with eselect repository, synced, and
       pinned in `bunny.lock` like `::gentoo`), so overlays are part of the

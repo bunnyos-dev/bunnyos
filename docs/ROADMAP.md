@@ -253,7 +253,7 @@ is tested first in a VM with the same layout.
 - [x] **A second VM shaped like the laptop** (`VM=laptop`, `LAYOUT=laptop`):
       LUKS2, the EFI partition at `/boot`, btrfs without subvolumes, `/srv`
       as a subvolume, a swapfile.
-- [~] **Conversion script** to the Bunny Linux layout (`@`, `@home`,
+- [x] **Conversion script** to the Bunny Linux layout (`@`, `@home`,
       `@snapshots`, …, swap in its own subvolume), dry run first, tested in
       the laptop VM until it's boring.
 - [ ] **A kernel per generation on the EFI partition**, so undo works across

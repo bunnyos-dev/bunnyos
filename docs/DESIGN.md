@@ -610,6 +610,26 @@ GPT
   from your own. For people who want to leave the Baseline and set up
   everything themselves. Also: Reset an installed Bunny Linux, Disks, logs.
 - "Restore from config" rebuilds a machine from a git repo or USB.
+- **Partitioning, three ways** (decided November 2026):
+  1. **Guided** (default, fully supported): pick a disk; the standard layout
+     with encryption. Common changes as options: no encryption, sizes,
+     hibernation swapfile, `/home` on a second disk, alongside another OS.
+  2. **From the config:** a `[disk]` section describes the layout (like
+     NixOS's disko) and `bunny install` partitions to match.
+  3. **Manual:** partition and mount at `/mnt` yourself, then `bunny install
+     --mounted /mnt`. bunny never touches the disks, reads what's mounted,
+     and explains anything that limits it (ext4: no undo; btrfs without
+     subvolumes: offers to add them). Allowed and checked, not every layout
+     tested.
+- **The config is written for you, but it's yours.** Every mode writes a
+  starter `bunny.toml` (like `nixos-generate-config`). `--edit` stops to edit
+  it before installing; `--config <file or repo>` installs from your own.
+  Disk details go in the host file (`hosts/<host>.toml`), like NixOS's
+  `hardware-configuration.nix`, so the main config works on any machine.
+- **One step from the config (later, needs phase 6):** `bunny install
+  --config github:you/my-system` partitions, writes the Baseline image and
+  applies the config and lock in one command. Same recipe, not bit-for-bit
+  (see "Lockfile").
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 
@@ -673,11 +693,15 @@ boot handling, boot theme, musl/BusyBox, systemd, sandboxes and dev shells.
 3. Lockfile and `bunny update`.
 4. `bunny switch` with generations and GRUB entries.
 5. Error translation.
-6. Binary cache and `bunny serve`.
-7. Boot experience (Plymouth, GRUB theme, greetd).
-8. Secure Boot + gaming kernel.
-9. Installer + ISO.
-10. Polish.
+6. A first, minimal ISO: terminal installer (`bunny install`), no desktop,
+   so Bunny Linux can be installed from scratch and learned from the Guide.
+7. Binary cache and `bunny serve`.
+8. Graphical installer, Baseline image, Bunny Desktop, full ISO.
+9. Secure Boot + gaming kernel.
+10. The look: boot experience (Plymouth, GRUB theme, greetd), polish.
+
+(Reordered November 2026: function first, and a minimal ISO early so the
+maintainer can learn Bunny Linux as a new user would.)
 
 ## Upkeep
 

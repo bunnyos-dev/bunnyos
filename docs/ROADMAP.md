@@ -204,6 +204,25 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Filled in from the maintainer's notes and developer-mode reports.)
 
+- [ ] **Live USB welcome says "Not online yet" when it is online.** The
+      welcome checks once, 3 seconds after login, by pinging
+      `distfiles.gentoo.org` (needs DNS too). In the VM, `ping 1.1.1.1`
+      worked right after. Likely the network or DNS wasn't up yet at that
+      moment. Fix: wait up to ~15 s ("Checking the connection…"), check the
+      address and DNS separately (so "online, but names don't work" is its
+      own message), and say "type welcome to check again".
+- [ ] **The live USB console can't draw ✗** (it shows `x`). Check which
+      symbols the console font has (✓ ✗ ⚠ ·) and use plain ones on the USB,
+      or load a font that has them.
+- [ ] **"Welcome to your new account!"** appears above the welcome on the
+      live USB, which is confusing there (it isn't a new account). Find what
+      prints it at the first login and turn it off on the USB.
+- [ ] **Developer mode can't record `bunny install`.** It's set in
+      `bunny.toml`, and the live USB has none, so the install itself (the
+      part being tested most) isn't recorded. Idea: preview ISOs record by
+      default, and the recording is copied into the new system so
+      `bunny report` sends it after the first start.
+
 ## Talk to Portage directly (after the dry run and the laptop)
 
 Agreed with the maintainer: version 1 reads emerge's screen text, which breaks

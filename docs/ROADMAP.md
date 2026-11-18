@@ -183,7 +183,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       writes the host file from it, and explains anything that limits it
       (ext4: no undo; btrfs without subvolumes: offers to add them). Allowed
       and checked, but not every layout is tested. **(VM)**
-- [ ] **The live USB image:** a script that builds a small bootable image
+- [~] **The live USB image:** a script that builds a small bootable image
       (UEFI, GRUB) with bunny, `bunny install` and the tools it needs. It
       boots to a terminal welcome: what this is, `bunny install` to start,
       the Guide's URL, and how to get online (Ethernet works by itself;

@@ -681,6 +681,15 @@ Needs the Baseline image (phases 6 and 7).
 - **Bunny Linux Net** (target ~300–400 MB) and **Bunny Linux Offline** (target ~1.5 GB).
 - No desktop, no Wayland, no Mesa, no Portage or Python on the USB. BusyBox
   userland is fine there.
+- **Current behaviour (the first, minimal image):** `tools/build-iso.sh`
+  builds it from Gentoo's stage3 with prebuilt packages: gentoo-kernel-bin,
+  linux-firmware, the disk tools, dhcpcd + iwd, chrony, git and bunny.
+  dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
+  overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
+  USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  Portage and Python are still in it (removing them is later work), so it's
+  bigger than the target; the package tree, docs and kernel sources are
+  removed.
 - Without a Microsoft-signed shim, Secure Boot must be off to boot the USB.
 
 ### Hosting

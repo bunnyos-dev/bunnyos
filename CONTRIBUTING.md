@@ -38,6 +38,7 @@ and why is in [docs/DESIGN.md](docs/DESIGN.md); what's next is in
 | `tools/vm-install-gentoo.sh` | Installs Gentoo in the VM with the Bunny Linux disk layout. |
 | `tools/convert-layout.sh` | Moves an existing Gentoo on btrfs to the Bunny Linux layout. |
 | `tools/canary.sh` | The weekly check against the latest Gentoo tree (run by CI). |
+| `tools/build-iso.sh`, `tools/iso/` | Builds the live USB image (the welcome, boot menu, and what runs inside it). |
 | `examples/bunny.toml` | A config to try things against. |
 
 The ebuilds live in a separate repository,

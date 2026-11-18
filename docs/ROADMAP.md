@@ -188,7 +188,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       boots to a terminal welcome: what this is, `bunny install` to start,
       the Guide's URL, and how to get online (Ethernet works by itself;
       Wi-Fi with `iwctl`). **(VM)**
-- [ ] **ISO in CI:** a GitHub Actions workflow builds the ISO on a tag (and
+- [~] **ISO in CI:** a GitHub Actions workflow builds the ISO on a tag (and
       by hand), with SHA256 sums, attached to the GitHub Release.
       `tools/bunny-vm.sh` can boot it (`ISO=…`).
 - [ ] **Guide: "Install Bunny Linux":** writing the USB, booting it,

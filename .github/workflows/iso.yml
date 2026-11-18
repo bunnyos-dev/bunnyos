@@ -1,0 +1,115 @@
+name: ISO
+
+# Builds the Bunny Linux live USB image (tools/build-iso.sh) and checks that
+# it starts. Pushing a tag like v0.2.0 attaches the ISO and its SHA256 to
+# that GitHub Release. On pull requests that change the image, and when run
+# by hand, the ISO is kept as a download on the run's page instead.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/iso.yml"
+      - "tools/build-iso.sh"
+      - "tools/iso/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  iso:
+    name: Build and check the live USB image
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install the tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools squashfs-tools xorriso mtools \
+            grub-common grub-efi-amd64-bin qemu-system-x86 ovmf
+      - name: Build bunny (static, runs on the USB)
+        run: cargo build --release --locked --target x86_64-unknown-linux-musl
+      - name: Name the ISO
+        id: name
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "iso=bunny-linux-live-${GITHUB_REF_NAME#v}.iso" >> "$GITHUB_OUTPUT"
+          else
+            echo "iso=bunny-linux-live-preview.iso" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the image
+        env:
+          WORK: ${{ runner.temp }}/iso-work
+        run: |
+          mkdir -p dist
+          sudo --preserve-env=WORK tools/build-iso.sh \
+            target/x86_64-unknown-linux-musl/release/bunny \
+            "dist/${{ steps.name.outputs.iso }}"
+          sudo chown -R "$(id -u):$(id -g)" dist
+          ls -lh dist
+      - name: Check that it starts
+        env:
+          WORK: ${{ runner.temp }}/iso-work
+        run: |
+          # Boots the ISO's own kernel and startup image with the console on
+          # the serial port, and waits for OpenRC to start services: that
+          # means the startup image found the USB and switched to it.
+          accel="-accel tcg"
+          [ -w /dev/kvm ] || sudo chmod 666 /dev/kvm 2>/dev/null || true
+          [ -w /dev/kvm ] && accel="-accel kvm"
+          sudo cp "$WORK/iso/boot/vmlinuz" "$WORK/iso/boot/initramfs.img" "$RUNNER_TEMP/"
+          sudo chmod a+r "$RUNNER_TEMP/vmlinuz" "$RUNNER_TEMP/initramfs.img"
+          timeout 600 qemu-system-x86_64 $accel -m 2048 -nographic -no-reboot \
+            -cdrom "dist/${{ steps.name.outputs.iso }}" \
+            -kernel "$RUNNER_TEMP/vmlinuz" -initrd "$RUNNER_TEMP/initramfs.img" \
+            -append "root=live:CDLABEL=BUNNY rd.live.image rd.live.overlay.overlayfs=1 console=ttyS0" \
+            > boot.log 2>&1 &
+          qemu=$!
+          for _ in $(seq 1 120); do
+            if grep -q "Starting dhcpcd" boot.log; then
+              echo "✓ The live system started (OpenRC is starting services)."
+              kill "$qemu" 2>/dev/null || true
+              exit 0
+            fi
+            if grep -qiE "dracut Warning: (Could not boot|Unable to process)|Kernel panic|emergency shell" boot.log; then
+              break
+            fi
+            sleep 5
+          done
+          kill "$qemu" 2>/dev/null || true
+          echo "✗ The live system didn't start. The last of its messages:"
+          tail -60 boot.log
+          exit 1
+      - name: Keep the boot messages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-boot-log
+          path: boot.log
+          if-no-files-found: ignore
+      - name: Keep the ISO (when not releasing)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunny-linux-live-preview
+          path: dist/
+          retention-days: 7
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # release.yml creates the release; wait for it if it isn't there yet.
+          for _ in $(seq 1 60); do
+            gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break
+            sleep 10
+          done
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            "dist/${{ steps.name.outputs.iso }}" \
+            "dist/${{ steps.name.outputs.iso }}.sha256"

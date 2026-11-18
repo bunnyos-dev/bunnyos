@@ -69,6 +69,7 @@ impl Plan {
             && self.keyword_changes.is_empty()
             && self.add_repositories.is_empty()
             && self.remove_repositories.is_empty()
+            && !self.check_after_sync
             && self.enable_services.is_empty()
             && self.security.is_empty()
             && self.boot.is_empty()
@@ -156,7 +157,8 @@ impl Plan {
         }
         if self.check_after_sync {
             out.push_str(
-                "Packages are checked once the new repositories are downloaded (during the switch).\n\n",
+                "Repositories in your config still to be downloaded; packages are checked once\n\
+                 they are (during the switch).\n\n",
             );
         }
 

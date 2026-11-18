@@ -58,6 +58,16 @@ pub(crate) fn search_cmd(query: &str, root: &Path) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// The answer to "add this repository?": yes, no, or None to ask again
+/// (Enter, or anything unclear). Never assumed either way.
+fn repository_answer(answer: &str) -> Option<bool> {
+    match answer.trim().to_lowercase().as_str() {
+        "y" | "yes" => Some(true),
+        "n" | "no" => Some(false),
+        _ => None,
+    }
+}
+
 /// What `bunny add` resolved: full names, plus repositories (and testing
 /// versions) to add for packages that live outside Gentoo's own tree.
 #[derive(Debug, Default, PartialEq)]
@@ -118,7 +128,7 @@ pub(crate) fn resolve_all(
                     );
                 }
                 let question = format!(
-                    "Add the {} repository to your config, and install {} from it? [y/N]",
+                    "Add the {} repository to your config, and install {} from it? [y/n]",
                     home.repository, home.package
                 );
                 if ask(&question)? {
@@ -158,9 +168,20 @@ pub(crate) fn add_cmd(
     let mut ask = |q: &str| -> anyhow::Result<bool> {
         use std::io::Write;
         print!("{q} ");
-        std::io::stdout().flush()?;
-        let answer = crate::interrupt::read_line()?.unwrap_or_default();
-        Ok(matches!(answer.trim().to_lowercase().as_str(), "y" | "yes"))
+        loop {
+            std::io::stdout().flush()?;
+            let Some(answer) = crate::interrupt::read_line()? else {
+                println!("\n(No answer, so the repository wasn't added.)");
+                return Ok(false);
+            };
+            match repository_answer(&answer) {
+                Some(yes) => return Ok(yes),
+                None => print!(
+                    "Adding a repository is your call, so Enter doesn't pick for you.\n\
+                     Type y to add it, or n to skip: "
+                ),
+            }
+        }
     };
     let Some(found) = resolve_all(root, names, &listed, &mut ask)? else {
         eprintln!("Nothing was changed.");
@@ -266,6 +287,16 @@ mod tests {
         std::fs::create_dir_all(&cache).unwrap();
         std::fs::write(cache.join("tmux-3.5"), "DESCRIPTION=Terminal multiplexer\n").unwrap();
         root
+    }
+
+    #[test]
+    fn enter_doesnt_answer_the_repository_question() {
+        assert_eq!(repository_answer("y\n"), Some(true));
+        assert_eq!(repository_answer(" Yes "), Some(true));
+        assert_eq!(repository_answer("n"), Some(false));
+        assert_eq!(repository_answer(""), None);
+        assert_eq!(repository_answer("\n"), None);
+        assert_eq!(repository_answer("bunny status"), None);
     }
 
     #[test]

@@ -152,6 +152,20 @@ isolated = false       # compile inside a clean container
   writable copy of the chosen snapshot the new `@`. It takes effect on reboot.
   If restoring fails, the current system is moved back unchanged.
 - `/boot` lives inside `@`, so the kernel rolls back together with the system.
+- **When `/boot` is its own filesystem** (encrypted installs, where it's the
+  EFI partition): right after each generation's snapshot, bunny copies
+  `/boot`'s kernel files into `/boot/bunny/files/` (identical files stored
+  once; a rebuilt one with the same name becomes `<name>~2`) and lists the
+  generation's set in `/boot/bunny/generations/<gen>`. Skipped with a note if
+  it wouldn't leave 64 MB free. `bunny rollback` saves the current set first
+  (refusing to change anything if it can't), then after the swap makes
+  `/boot`'s kernel files exactly that generation's set (copy in, then remove)
+  and runs `grub-mkconfig`. The undo entry boots the copies from `/boot`
+  (`search --fs-uuid` on that partition). The boot-time undo can't touch
+  `/boot`, so `bunny status` warns about kernels in `/boot` with no
+  `/lib/modules` in the running system; restoring `/boot` after a boot-menu
+  undo is a follow-up. `clean` drops lists of deleted generations and unused
+  copies.
 - **Nested subvolumes** (subvolumes inside `@`, e.g. `/srv` when tmpfiles
   creates it as a subvolume on btrfs) aren't part of snapshots. Rollback moves
   them over to the restored system, like `/home`, and `clean` deletes them

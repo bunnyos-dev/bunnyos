@@ -14,6 +14,7 @@ mod helper;
 mod import;
 mod init;
 mod interrupt;
+mod kernels;
 mod lock;
 mod notes;
 mod plan;
@@ -216,7 +217,6 @@ enum Command {
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
-    /// Write a bunny.toml that describes this system as it is now (changes nothing)
     /// Send recorded commands to the reports repository (developer mode)
     Report {
         /// Show what would be sent, without sending it
@@ -228,6 +228,7 @@ enum Command {
         #[arg(default_value = DEFAULT_CONFIG)]
         config: PathBuf,
     },
+    /// Write a bunny.toml that describes this system as it is now (changes nothing)
     Import {
         /// Save to this file instead of printing it
         #[arg(short, long)]
@@ -924,6 +925,12 @@ fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
             return Ok(ExitCode::SUCCESS);
         }
         let failed = rollback::clean(root, &top, &plan, runner.as_mut())?;
+        // Kernel copies on /boot that no remaining generation uses.
+        if real_system {
+            if let Err(e) = kernels::tidy(root) {
+                println!("Note: couldn't remove old kernel copies from /boot ({e:#}).");
+            }
+        }
         if failed.is_empty() {
             println!("✓ Removed.");
         } else {
@@ -985,6 +992,23 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
     println!("This will put your system back the way it was at {when} ({name}).");
     println!("Your files in /home, logs and caches are not touched.");
     println!("The system as it is now will be saved first, so you can undo this.");
+    if kernels::separate_boot(&mountinfo) {
+        match kernels::restore_plan(root, &name) {
+            Some(plan) if plan.versions_now != plan.versions_then => println!(
+                "The kernel goes back too: {} → {}.",
+                plan.versions_now.join(", "),
+                plan.versions_then.join(", ")
+            ),
+            Some(plan) if !plan.is_empty() => {
+                println!("The kernel's startup image in /boot goes back too.")
+            }
+            Some(_) => {}
+            None => println!(
+                "/boot keeps the kernel it has now (this version was saved before bunny\n\
+                 kept a copy of each kernel)."
+            ),
+        }
+    }
     if !real_system {
         println!("\nThis is a test root, so commands are only printed, not run.");
     }
@@ -1016,6 +1040,19 @@ fn rollback_cmd(name: Option<String>, yes: bool, root: &Path) -> anyhow::Result<
             "  {} is put back as it was then, so it matches the restored system.",
             config.display()
         );
+    }
+    if let Some(done) = &outcome.kernel_restored {
+        if done.versions_now != done.versions_then {
+            println!(
+                "  /boot has kernel {} again, as it did then.",
+                done.versions_then.join(", ")
+            );
+        } else {
+            println!("  /boot's kernel files are back as they were then.");
+        }
+    }
+    if let Some(note) = &outcome.kernel_note {
+        println!("  Note: {note}");
     }
     if outcome.undo_entry_dropped {
         println!(

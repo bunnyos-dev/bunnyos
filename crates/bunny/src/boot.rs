@@ -173,10 +173,18 @@ pub fn generation_kernel(generation_dir: &Path, running: &str) -> Option<String>
 /// Whether the generation's startup image has the undo step: the module was
 /// in that system, and the image was built after it.
 pub fn generation_has_module(generation_dir: &Path, version: &str) -> bool {
+    image_has_module(
+        generation_dir,
+        &generation_dir.join(format!("boot/initramfs-{version}.img")),
+    )
+}
+
+/// Whether the startup image `image` has the undo step: it was built after
+/// the generation's copy of the module.
+pub fn image_has_module(generation_dir: &Path, image: &Path) -> bool {
     let module = generation_dir.join(MODULE_DIR).join("bunny-rollback.sh");
-    let image = generation_dir.join(format!("boot/initramfs-{version}.img"));
     let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-    match (modified(&module), modified(&image)) {
+    match (modified(&module), modified(image)) {
         (Some(m), Some(i)) => i >= m,
         _ => false,
     }
@@ -191,17 +199,49 @@ pub fn render_entry(
     cmdline: &str,
 ) -> String {
     let dir = format!("/@snapshots/{generation}/boot");
+    render(
+        when,
+        "btrfs",
+        uuid,
+        &format!("{dir}/vmlinuz-{version}"),
+        &[format!("{dir}/initramfs-{version}.img")],
+        cmdline,
+    )
+}
+
+/// The undo entry when `/boot` is its own filesystem (usually the EFI
+/// partition, with the system encrypted): the generation's kernel files are
+/// the copies bunny keeps on `/boot` (see `kernels`). `initrds` lists
+/// microcode images first, then the startup image, as GRUB expects.
+pub fn render_entry_on_boot(
+    when: &str,
+    boot_uuid: &str,
+    kernel: &str,
+    initrds: &[String],
+    cmdline: &str,
+) -> String {
+    render(when, "fat", boot_uuid, kernel, initrds, cmdline)
+}
+
+fn render(
+    when: &str,
+    fs_module: &str,
+    uuid: &str,
+    kernel: &str,
+    initrds: &[String],
+    cmdline: &str,
+) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{BEGIN}");
     let _ = writeln!(
         out,
         "menuentry 'Bunny Linux: undo the last change (back to {when})' --class bunny {{"
     );
-    let _ = writeln!(out, "    insmod btrfs");
+    let _ = writeln!(out, "    insmod {fs_module}");
     let _ = writeln!(out, "    search --no-floppy --fs-uuid --set=root {uuid}");
     let _ = writeln!(out, "    echo 'Undoing the last change…'");
-    let _ = writeln!(out, "    linux {dir}/vmlinuz-{version} {cmdline}");
-    let _ = writeln!(out, "    initrd {dir}/initramfs-{version}.img");
+    let _ = writeln!(out, "    linux {kernel} {cmdline}");
+    let _ = writeln!(out, "    initrd {}", initrds.join(" "));
     let _ = writeln!(out, "}}");
     let _ = writeln!(out, "{END}");
     out

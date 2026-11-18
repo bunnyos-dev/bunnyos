@@ -154,15 +154,22 @@ pub(crate) fn timestamp() -> String {
 /// Prints any problems in the config. Returns failure if there were some.
 pub(crate) fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode {
     let problems = cfg.problems();
+    let shown = match &cfg.host {
+        Some(host) => format!(
+            "{} (with {}, for this computer)",
+            path.display(),
+            host.path.display()
+        ),
+        None => path.display().to_string(),
+    };
     if problems.is_empty() {
-        println!("✓ {} looks good.", path.display());
+        println!("✓ {shown} looks good.");
         return ExitCode::SUCCESS;
     }
     let count = problems.len();
     eprintln!(
-        "✗ Found {count} problem{} in {}:\n",
+        "✗ Found {count} problem{} in {shown}:\n",
         if count == 1 { "" } else { "s" },
-        path.display()
     );
     for problem in problems {
         eprintln!("  • {problem}\n");

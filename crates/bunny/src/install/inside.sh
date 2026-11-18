@@ -1,7 +1,7 @@
 #!/bin/bash
 # Bunny Linux: the part of `bunny install` that runs inside the new system
 # (chroot). bunny writes /root/bunny-install.env next to it, with:
-#   HOST, USERNAME, CMDLINE, PACKAGES, SERVICES, BOOT_SERVICES
+#   HOST, USERNAME, TIMEZONE, KEYMAP, CMDLINE, PACKAGES, SERVICES, BOOT_SERVICES
 # Packages come from Gentoo's binary host, so very little is compiled.
 set -eu
 . /etc/profile
@@ -14,13 +14,14 @@ emerge-webrsync -q
 # The keys that check prebuilt packages are signed by Gentoo.
 command -v getuto >/dev/null && getuto
 
-say "Language and time zone"
-echo "UTC" > /etc/timezone
+say "Language, time zone and keyboard"
+echo "$TIMEZONE" > /etc/timezone
 emerge -q --config sys-libs/timezone-data
 echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen -q
 eselect locale set en_US.utf8 >/dev/null
 . /etc/profile
+sed -i "s/^keymap=.*/keymap=\"$KEYMAP\"/" /etc/conf.d/keymaps
 
 say "Installing the system (prebuilt packages; this takes a while)"
 # shellcheck disable=SC2086  # a list of package names

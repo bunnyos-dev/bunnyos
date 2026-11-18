@@ -168,7 +168,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       changes: `--no-encrypt`, partition sizes, a swapfile for hibernation,
       `/home` on a second disk. Refuses to touch a disk that's mounted or in
       use. **(VM)**
-- [ ] **`bunny install`, part 2 (the config):** writes a starter
+- [~] **`bunny install`, part 2 (the config):** writes a starter
       `bunny.toml` from your answers (user name, password, time zone,
       keyboard, host name), with comments pointing to the Guide. Disk details
       (partition IDs, encryption) go in a separate host file,
@@ -354,6 +354,8 @@ is tested first in a VM with the same layout.
 - [ ] **The laptop itself**, after a backup of `/home`.
 
 ## Known issues / small fixes
+
+- Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
 
 
 - The boot menu's main entry says "Gentoo GNU/Linux", not Bunny Linux (set

@@ -83,6 +83,14 @@ Bunny Linux Baseline   tested defaults, fully prebuilt
      └ host layer  per-machine (hosts/desktop.toml, hosts/laptop.toml)
 ```
 
+**Current behaviour (host layer):** `hosts/<host name>.toml` next to the
+config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
+kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
+plus a `[machine]` record from `bunny install` that's read but never acted on
+(the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
+main file. Rollback restores the main config and lock, not host files (known
+limit). The Baseline layer is still planned.
+
 Modules expand one line into packages + services + config files, for example
 `[desktop] wm = "hyprland"` or `[security] encryption = true`.
 

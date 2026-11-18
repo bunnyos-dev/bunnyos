@@ -240,6 +240,21 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       install's answers), and a later `bunny git`/`bunny publish` connects it
       to GitHub with your own sign-in. Then the Guide's git section is one
       command.
+- [ ] **Guide, What to do first: Hyprland isn't in Gentoo's tree any more.**
+      It was masked in February 2026 and removed in March; it now lives in
+      the community `hyproverlay` repository (testing versions only). The
+      page's `bunny add gui-wm/hyprland` fails with "There's no package
+      called". Change the example to a desktop in Gentoo's tree, and say how
+      to get Hyprland once repositories are in `bunny.toml` (below).
+- [ ] **Repositories (overlays) in `bunny.toml`.** Maintainer's idea: when a
+      package isn't found, say which overlay has it. Plan: a `repositories`
+      list in `bunny.toml` (enabled with eselect repository, synced, and
+      pinned in `bunny.lock` like `::gentoo`), so overlays are part of the
+      one file instead of a step done by hand. When `bunny add` can't find a
+      package, it checks a short list of known overlays and Gentoo's
+      registered ones, and offers to add the repository, with a plain
+      warning that Gentoo doesn't check community overlays. Testing-only
+      packages need `[pkg] keywords` too (not in `bunny.toml` yet).
 - [ ] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
@@ -261,9 +276,9 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       live USB, which is confusing there (it isn't a new account). Find what
       prints it at the first login and turn it off on the USB.
 - [ ] **`bunny install --dry-run` is a wall of commands.** Every
-      `(would run)` line is shown, and long ones wrap. For someone learning,
-      the steps in plain words would be clearer: each step's name and what
-      it does, with the exact commands behind `--dry-run --verbose`.
+      `(would run)` line is shown, and long ones wrap. Decided with the
+      maintainer: by default, the steps in plain words (each step's name and
+      what it does); the exact commands only with `--dry-run --verbose`.
 - [ ] **The installed system's boot menu looks like Gentoo's.** It has the
       Gentoo logo behind it, calls the system "Bunny Linux GNU/Linux", and
       lists every firmware entry (UiApp, DVD-ROM, PXE and HTTP boot, a second

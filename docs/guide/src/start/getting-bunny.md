@@ -1,7 +1,7 @@
 # Getting bunny
 
-> Today, bunny is installed on an existing Gentoo system, from the Bunny Linux
-> overlay. A ready-made Bunny Linux installer is planned.
+> This page is for adding bunny to a Gentoo system you already have. To
+> install Bunny Linux from scratch, see [Install Bunny Linux](installing.md).
 
 ## What you need
 

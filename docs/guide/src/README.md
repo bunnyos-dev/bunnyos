@@ -16,9 +16,10 @@ Words that might be new are explained in the [Glossary](glossary.md).
 > your system uses `doas`, type `doas` instead. bunny's own messages always
 > use whichever one you have.
 
-> **Bunny Linux is in early development.** The `bunny` tool works on an existing
-> Gentoo install today. The installer, the boot experience and the rest come
-> later. Try it in a [virtual machine](reference/testing-in-a-vm.md) before
+> **Bunny Linux is in early development.** It installs from a live USB to a
+> minimal system with a terminal ([Install Bunny Linux](start/installing.md)),
+> and the `bunny` tool also works on an existing Gentoo install. The
+> graphical installer, Bunny Desktop and the boot experience come later. Try it in a [virtual machine](reference/testing-in-a-vm.md) before
 > using it on a computer you care about.
 
 ## The short version

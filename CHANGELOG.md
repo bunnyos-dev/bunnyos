@@ -29,6 +29,9 @@ a minor version can change how things work).
 - New: the Bunny Linux live USB image. `tools/build-iso.sh` builds it; it
   starts to a terminal with a welcome that explains `bunny install`, links
   the Guide and says how to get online.
+- Guide: a new "Install Bunny Linux" chapter (the USB, `bunny install` step
+  by step, first start), "What to do first" (git, a desktop) and "Helping
+  test" (developer mode).
 - New: host files. `hosts/<computer name>.toml` next to `bunny.toml` adds
   packages, services and USE flags for one computer only, so the main config
   works everywhere. `bunny install` writes one with what the computer needs

@@ -1,6 +1,6 @@
 # Developer mode: sending reports
 
-For people testing BunnyOS. With developer mode on, bunny records every
+For people testing Bunny Linux. With developer mode on, bunny records every
 command exactly as it looked in your terminal (questions, answers, progress,
 warnings), and `bunny report` sends the recordings to the developers as a
 GitHub issue. Nobody has to copy and paste output, and problems you didn't

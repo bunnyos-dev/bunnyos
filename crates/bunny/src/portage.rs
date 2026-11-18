@@ -22,7 +22,7 @@ pub fn package_use_dir(root: &Path) -> PathBuf {
     root.join(PACKAGE_USE_DIR)
 }
 
-/// bunny's own packages, from the BunnyOS overlay: the prebuilt release and
+/// bunny's own packages, from the Bunny Linux overlay: the prebuilt release and
 /// the one built from git.
 pub const BUNNY_PACKAGES: [&str; 2] = ["app-admin/bunny-bin", "app-admin/bunny"];
 

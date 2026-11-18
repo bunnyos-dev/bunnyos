@@ -77,7 +77,7 @@ and run `bunny switch`. From then on, every change adds an entry to the boot
 menu:
 
 ```
-BunnyOS: undo the last change (back to 2026-11-17 09:15:00 UTC)
+Bunny Linux: undo the last change (back to 2026-11-17 09:15:00 UTC)
 ```
 
 If a change leaves the system unable to start, restart, pick that entry, and

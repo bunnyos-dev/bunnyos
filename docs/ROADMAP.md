@@ -1,4 +1,4 @@
-# BunnyOS Roadmap
+# Bunny Linux Roadmap
 
 The working to-do list. The daily work session takes the **first unchecked
 item that isn't blocked**, does it on its own branch, and opens a pull request
@@ -19,7 +19,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
 | 7. The look | boot animation, GRUB theme, login screen | ⬜ |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
-| 9. Installing BunnyOS | installer, ISO, hosting | ⬜ |
+| 9. Installing Bunny Linux | installer, ISO, hosting | ⬜ |
 
 **Version 1** (phases 1–5, running on an existing Gentoo install) is roughly
 **two-thirds done**. The **whole vision** (all 9 phases) is roughly **a fifth done**.
@@ -51,7 +51,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 - [x] Boot-menu undo can't walk further back: the entry is removed after
       any rollback, and picking it twice does nothing
 - [x] VM tools: `tools/bunny-vm.sh` (UEFI, Secure Boot, TPM, snapshots) and
-      `tools/vm-install-gentoo.sh` (the BunnyOS disk layout)
+      `tools/vm-install-gentoo.sh` (the Bunny Linux disk layout)
 
 ## Version 1 — still to do
 
@@ -105,9 +105,9 @@ feature PRs now update it as they go.)
       dracut step (the same swap as `bunny rollback`, before mounting) and,
       after each switch, a GRUB entry that boots the generation's own kernel
       with `bunny.rollback=<generation>`. **(VM)**
-- [x] **The BunnyOS Guide, part 1:** an mdBook site in `docs/guide/`,
+- [x] **The Bunny Linux Guide, part 1:** an mdBook site in `docs/guide/`,
       published to GitHub Pages by a GitHub Actions workflow. Two tracks:
-      "Start here" (dummy-proof, task-based: what BunnyOS is, first steps,
+      "Start here" (dummy-proof, task-based: what Bunny Linux is, first steps,
       install/remove a program, update, undo a mistake, what the lock is) and
       "Going further" (full `bunny.toml` reference, pins, generations, how bunny
       drives Portage). Plus a glossary of Gentoo/NixOS terms. Written for an
@@ -161,7 +161,7 @@ so the maintainer's time goes to testing and decisions.
 - [x] **Security advisories in `bunny status`:** a line saying whether any
       Gentoo security advisory (GLSA, via `glsa-check`) affects installed
       packages, and to run `bunny update` if so.
-- [x] **`bunny` ebuild in a BunnyOS overlay** (`bunny-overlay` repo, GPL-2):
+- [x] **`bunny` ebuild in a Bunny Linux overlay** (`bunny-overlay` repo, GPL-2):
       a release ebuild and a `-9999` one, so bunny installs with `emerge`.
       Moved up from the installing phase.
 
@@ -176,7 +176,7 @@ so the maintainer's time goes to testing and decisions.
 Rough order. These get split into PR-sized items when we reach them.
 
 **Function first (decided November 2026):** each thing is made to work well,
-plainly styled, before it gets its finished look. The mockups ("BunnyOS:
+plainly styled, before it gets its finished look. The mockups ("Bunny Linux:
 boot, installer and desktop mockups") are the reference for later, not the
 to-do list. Appearance work comes last and a little at a time.
 
@@ -195,7 +195,7 @@ to-do list. Appearance work comes last and a little at a time.
       baseline instead of whatever the tree had that morning. Off-baseline
       setups still work; they just aren't tested by us.
 
-### Phase 7: installing BunnyOS
+### Phase 7: installing Bunny Linux
 - [ ] `bunny install` (from `tools/vm-install-gentoo.sh`), encryption by default
 - [ ] Baseline system image built on the server
 - [ ] Slint installer (straight to the installer, no desktop): centered, one
@@ -207,7 +207,7 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] Guide: "Installing by hand" chapter (what terminal mode points to)
 - [ ] **Reset:** `bunny reset` (keep files; undoable, saves the system first)
       and "Erase everything" from the USB
-- [ ] **BunnyOS Desktop:** Hyprland + BunnyOS's own Quickshell shell that works
+- [ ] **Bunny Desktop:** Hyprland + Bunny Linux's own Quickshell shell that works
       like a full desktop (settings, launcher, notifications, panels); the
       selling point. Function first: Settings that edit `bunny.toml` and
       Apply / Undo, a launcher that can get apps, notifications with Undo. Plus KDE Plasma, Xfce, bare Hyprland, bare MangoWM and
@@ -226,8 +226,8 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] TPM disk unlock
 
 ### Phase 9: the look (design work, done together, a little at a time)
-- [ ] BunnyOS logo (hired designer) and the palette from DESIGN.md "Look and feel"
-- [ ] Installer and BunnyOS Desktop styled to match the mockups, one screen
+- [ ] Bunny Linux logo (hired designer) and the palette from DESIGN.md "Look and feel"
+- [ ] Installer and Bunny Desktop styled to match the mockups, one screen
       per PR
 - [ ] Plymouth boot animation, Esc shows the kernel log
 - [ ] GRUB theme, hidden menu, flicker-free handoff to Plymouth
@@ -242,13 +242,13 @@ to-do list. Appearance work comes last and a little at a time.
       doing the building.
 
 ### Outside our control
-- Epic accepting BunnyOS's signing key (anti-cheat games)
+- Epic accepting Bunny Linux's signing key (anti-cheat games)
 - A Microsoft-signed shim (Secure Boot on the install USB)
 
 ## Known issues / small fixes
 
 
-- The boot menu's main entry says "Gentoo GNU/Linux", not BunnyOS (set
+- The boot menu's main entry says "Gentoo GNU/Linux", not Bunny Linux (set
   `GRUB_DISTRIBUTOR`; part of the boot menu work).
 - [x] The install progress line (`[2/2] Compiling …`) wasn't cleared before
       "✓ Installed 2 packages", and stood still during long builds. Now a

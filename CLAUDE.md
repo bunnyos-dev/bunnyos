@@ -1,4 +1,4 @@
-# Working on BunnyOS
+# Working on Bunny Linux
 
 Read `docs/DESIGN.md` first. It is the source of truth; update it when a
 decision changes. `docs/ROADMAP.md` is the to-do list.

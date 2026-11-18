@@ -1,5 +1,5 @@
 #!/bin/sh
-# bunny-vm.sh: BunnyOS test VM (UEFI + Secure Boot + TPM 2.0 + KVM + 3D)
+# bunny-vm.sh: Bunny Linux test VM (UEFI + Secure Boot + TPM 2.0 + KVM + 3D)
 #
 # Usage:
 #   ./bunny-vm.sh run [file.iso]   start the VM (boots the ISO if given)
@@ -86,7 +86,7 @@ run() {
         CDROM="-cdrom $1"
     fi
 
-    echo "→ Starting BunnyOS test VM ($CPUS CPUs, $MEM RAM)"
+    echo "→ Starting Bunny Linux test VM ($CPUS CPUs, $MEM RAM)"
     # shellcheck disable=SC2086
     exec qemu-system-x86_64 -name bunnyos-test \
         -enable-kvm -cpu host -smp "$CPUS" -m "$MEM" \

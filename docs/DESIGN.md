@@ -1,11 +1,20 @@
-# BunnyOS Design
+# Bunny Linux Design
 
-> Status: draft, November 2026. This is the source of truth for what BunnyOS is
+> Status: draft, November 2026. This is the source of truth for what Bunny Linux is
 > and what gets built in which order. Change it when a decision changes.
+
+## The name
+
+**Bunny Linux** (decided November 2026; it was called BunnyOS before). It
+says what it is, and "BunnyOS" was already used by an unrelated AI and
+crypto-token site that ranks first in search results, plus several hobby
+projects. The command stays `bunny`, the shell is **Bunny Desktop**, and the
+GitHub organisation and repositories keep their `bunnyos` names for now, so
+links and the overlay's sync address don't break.
 
 ## The idea
 
-BunnyOS is a Linux distribution built **on top of Gentoo**, not from scratch.
+Bunny Linux is a Linux distribution built **on top of Gentoo**, not from scratch.
 It keeps what makes Gentoo great (OpenRC, USE flags, compiling for your own
 hardware) and adds what Gentoo is missing:
 
@@ -69,7 +78,7 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
 `bunny.toml` is TOML. Layers stack, each overriding the one below:
 
 ```
-BunnyOS Baseline   tested defaults, fully prebuilt
+Bunny Linux Baseline   tested defaults, fully prebuilt
   └ your layer     personal tweaks (USE, CFLAGS, extra packages)
      └ host layer  per-machine (hosts/desktop.toml, hosts/laptop.toml)
 ```
@@ -236,7 +245,7 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   many packages finished, which one didn't, and offers `bunny rollback` or
   `bunny switch`). A parent bunny waiting on sudo, doas or the developer-mode
   recorder ignores it, so the child can finish explaining.
-- **BunnyOS default USE flags:** packages bunny installs itself can get
+- **Bunny Linux default USE flags:** packages bunny installs itself can get
   default flags (applied unless the config has its own `[pkg]` entry):
   sudo is built with `-sendmail`, so it doesn't pull in a mail server.
 
@@ -394,7 +403,7 @@ admins = ["you"]
   tool and wheel members. bunny's own elevation and every command it suggests
   use the configured tool if installed, otherwise whichever of sudo/doas is.
 - On doas systems an optional `sudo` shim covers scripts that hardcode `sudo`.
-- GUI permission prompts use polkit with a BunnyOS-styled agent.
+- GUI permission prompts use polkit with a Bunny Linux-styled agent.
 
 ### Init systems
 
@@ -417,8 +426,8 @@ admins = ["you"]
 
 Decided November 2026. The installer offers, in this order:
 
-1. **BunnyOS Desktop** (the selling point, recommended): Hyprland with
-   BunnyOS's own Quickshell shell that works like a full desktop (settings,
+1. **Bunny Desktop** (the selling point, recommended): Hyprland with
+   Bunny Linux's own Quickshell shell that works like a full desktop (settings,
    app launcher, notifications, file and Wi-Fi panels), so someone who never
    wants to open a terminal doesn't have to.
 2. **KDE Plasma**: a full, familiar desktop (works on OpenRC with elogind).
@@ -428,17 +437,17 @@ Decided November 2026. The installer offers, in this order:
 6. **No desktop**: terminal only.
 
 GNOME leans heavily on systemd, so it isn't offered while OpenRC is the only
-init system. BunnyOS Desktop is the one that gets the polish and testing;
+init system. Bunny Desktop is the one that gets the polish and testing;
 the others are packaged and supported, the "set it up yourself" ones on
 purpose bare. Config: `[desktop] name = "bunny" | "plasma" | "xfce" |
 "hyprland" | "mango" | "none"`, `accent = "#…"`.
 
 ## Look and feel
 
-Decided November 2026. Mockups: "BunnyOS: boot and installer mockups"
+Decided November 2026. Mockups: "Bunny Linux: boot and installer mockups"
 (claude.ai artifact), which covers the boot screens, installer and desktop.
 
-The idea: Apple hides the system; BunnyOS shows it calmly, and only when you
+The idea: Apple hides the system; Bunny Linux shows it calmly, and only when you
 ask. The calm, centered, one-thing-at-a-time feel is kept. What's ours is
 that your system is a readable file, every change is saved, and anything can
 be undone, and the design says so.
@@ -473,7 +482,7 @@ be undone, and the design says so.
 
 The look must not cost speed. Targets (not yet measured):
 
-- BunnyOS Desktop idle memory under 600 MB; Settings opens in under 300 ms.
+- Bunny Desktop idle memory under 600 MB; Settings opens in under 300 ms.
 - Power button to login screen under 10 seconds on an NVMe disk.
 - Boot screens are static images plus one progress bar: no video, no blur.
 - The shell is one Quickshell process; no background services that only
@@ -484,7 +493,7 @@ The look must not cost speed. Targets (not yet measured):
 ## Boot experience
 
 ```
-power on → hidden GRUB (hold Esc for the BunnyOS-themed menu)
+power on → hidden GRUB (hold Esc for the Bunny Linux-themed menu)
          → Plymouth boot animation (Esc shows the kernel log)
          → password prompt inside Plymouth (if encrypted)
          → greetd + Quickshell greeter
@@ -492,8 +501,8 @@ power on → hidden GRUB (hold Esc for the BunnyOS-themed menu)
 
 - `quiet splash loglevel=3`, early KMS, and `GRUB_GFXPAYLOAD_LINUX=keep` for a
   flicker-free handoff.
-- GRUB is the default loader with a real BunnyOS theme, hidden by default.
-- **The menu is grouped:** *Start* (BunnyOS, BunnyOS Gaming, other systems
+- GRUB is the default loader with a real Bunny Linux theme, hidden by default.
+- **The menu is grouped:** *Start* (Bunny Linux, Bunny Linux Gaming, other systems
   found), *Go back to* (recent generations named by what changed, e.g.
   "Before you added mpv · today 09:15", then "Earlier versions"), *Other*
   (firmware settings). A *History* timeline beside it shows each saved
@@ -512,7 +521,7 @@ kernel_args = ["quiet", "splash"]
 ```
 
 - **aarambh** (graphical UEFI menu) can become an option if it stays
-  maintained or is forked. A BunnyOS bootloader in Rust (`uefi` crate) is a
+  maintained or is forked. A Bunny Linux bootloader in Rust (`uefi` crate) is a
   long-term idea.
 
 ### Dual boot
@@ -522,7 +531,7 @@ kernel_args = ["quiet", "splash"]
   trigger BitLocker recovery).
 - Always keeps Microsoft's keys when Windows is present.
 - Clock fix: `[dualboot] clock = "windows-compatible"`.
-- `keep_first = true` keeps BunnyOS first in the boot order after Windows updates.
+- `keep_first = true` keeps Bunny Linux first in the boot order after Windows updates.
 - Installer offers "Install alongside <the system it found>" (Windows, macOS
   on Intel Macs, another Linux, etc.), with safety checks for that system
   (for Windows: hibernation, Fast Startup, BitLocker).
@@ -548,13 +557,13 @@ GPT
   keys with `sbctl` (keeping Microsoft's keys), and signs kernels and modules on
   every update.
 - Disk unlock can later use the TPM.
-- **Gaming kernel from the start:** two boot entries, "BunnyOS" (your own
-  kernel and keys) and "BunnyOS Gaming" (prebuilt, centrally signed, with
+- **Gaming kernel from the start:** two boot entries, "Bunny Linux" (your own
+  kernel and keys) and "Bunny Linux Gaming" (prebuilt, centrally signed, with
   lockdown, IOMMU and BPF LSM). Same system and home.
 - Epic's EAC Linux v2 (announced October 2026) requires a kernel signed with
   well-known keys, TPM 2.0, Secure Boot, measured boot, IOMMU, lockdown
   (integrity), kexec disabled and BPF LSM. Being trusted needs Epic to accept
-  BunnyOS's key and likely a Microsoft-signed shim. Long-term, outside our
+  Bunny Linux's key and likely a Microsoft-signed shim. Long-term, outside our
   control. `bunny doctor gaming` checks the requirements meanwhile.
 
 ## Installer
@@ -581,11 +590,11 @@ GPT
   cities; dragging moves the map. Choosing a country or time zone from the
   lists below moves the pin there. Shows the local time and coordinates.
 - **Utilities menu:** "Use the terminal instead" switches to a text console
-  that says: welcome to the BunnyOS installer (terminal mode), how to get back
+  that says: welcome to the Bunny Linux installer (terminal mode), how to get back
   (`bunny-install --gui`, or Ctrl+Alt+F1), the install guide's URL ("Installing
   by hand"), and the commands to start from the Baseline config or install
   from your own. For people who want to leave the Baseline and set up
-  everything themselves. Also: Reset an installed BunnyOS, Disks, logs.
+  everything themselves. Also: Reset an installed Bunny Linux, Disks, logs.
 - "Restore from config" rebuilds a machine from a git repo or USB.
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
@@ -608,7 +617,7 @@ Needs the Baseline image (phases 6 and 7).
 
 ### ISO
 
-- **BunnyOS Net** (target ~300–400 MB) and **BunnyOS Offline** (target ~1.5 GB).
+- **Bunny Linux Net** (target ~300–400 MB) and **Bunny Linux Offline** (target ~1.5 GB).
 - No desktop, no Wayland, no Mesa, no Portage or Python on the USB. BusyBox
   userland is fine there.
 - Without a Microsoft-signed shim, Secure Boot must be off to boot the USB.
@@ -674,7 +683,7 @@ testing and decisions.
   so only tested combinations are supported.
 - **Security:** `bunny status` reports Gentoo security advisories (GLSAs)
   that affect the system.
-- **Dogfooding:** the maintainer runs BunnyOS on a real machine as early as
+- **Dogfooding:** the maintainer runs Bunny Linux on a real machine as early as
   it's safe, with their `bunny.toml` in git.
 - **Developer mode (`[dev] report`):** testers' machines record every bunny
   command with util-linux `script` (terminal output exactly as seen, without

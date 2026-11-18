@@ -630,6 +630,25 @@ GPT
   --config github:you/my-system` partitions, writes the Baseline image and
   applies the config and lock in one command. Same recipe, not bit-for-bit
   (see "Lockfile").
+- **Current behaviour (part 1, guided):** `bunny install` lists whole disks
+  from `lsblk --json` and leaves out any in use (anything mounted, swap, or
+  something opened on it like LUKS or LVM), read-only or under 20 GB. The
+  preview lists every partition that will be erased and the layout you get;
+  you confirm by typing the disk's name. Layout: GPT, EFI (2 GB, FAT32) at
+  `/boot`, the rest LUKS2 (opened as `bunny-root`) with btrfs subvolumes
+  `@ @home @log @cache @build @snapshots` (+ `@swap` with a swapfile).
+  `/boot` on the EFI partition means kernels sit outside `@`, so undo relies
+  on the kernel copies in `/boot/bunny/`. Then: the newest OpenRC stage3
+  (SHA512-checked), fstab, Portage settings with signed binary packages, a
+  dracut config, the sudo file from `security::render`, and an embedded
+  `inside.sh` run in a chroot (packages from the binhost, GRUB named
+  "Bunny Linux" plus the fallback path, the kernel's startup image, the
+  user). One password unlocks the disk and logs in; root stays locked.
+  `--home-disk` encrypts a second disk with the same password plus a random
+  key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
+  only to the tools' standard input, never to files or the screen. On a
+  failure everything is unmounted and closed, so a second run starts clean.
+  `--dry-run` prints every command and file (PrintRunner).
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 

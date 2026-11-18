@@ -30,6 +30,14 @@ pub trait Runner {
         Ok((self.run(cmd)?, String::new()))
     }
 
+    /// Runs a command with `input` on its standard input (a partition
+    /// table, a password), showing its output. `secret` input is never
+    /// printed or logged. Returns whether it succeeded.
+    fn run_with_input(&mut self, cmd: &[String], input: &str, secret: bool) -> Result<bool> {
+        let _ = (input, secret);
+        self.run(cmd)
+    }
+
     /// True if commands are only printed, not run (a test root).
     fn dry(&self) -> bool {
         false
@@ -152,6 +160,21 @@ impl Runner for SystemRunner {
         Ok((status.success(), all))
     }
 
+    fn run_with_input(&mut self, cmd: &[String], input: &str, _secret: bool) -> Result<bool> {
+        use std::io::Write;
+        let mut child = std::process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            // A command that exits early closes its input; its exit status
+            // says what went wrong, not the write.
+            let _ = stdin.write_all(input.as_bytes());
+        }
+        Ok(child.wait()?.success())
+    }
+
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
         let out = std::process::Command::new(&cmd[0])
             .args(&cmd[1..])
@@ -170,6 +193,18 @@ pub struct PrintRunner;
 impl Runner for PrintRunner {
     fn run(&mut self, cmd: &[String]) -> Result<bool> {
         println!("  (would run) {}", cmd.join(" "));
+        Ok(true)
+    }
+
+    fn run_with_input(&mut self, cmd: &[String], input: &str, secret: bool) -> Result<bool> {
+        println!("  (would run) {}", cmd.join(" "));
+        if secret {
+            println!("      with a password on its input");
+        } else {
+            for line in input.lines() {
+                println!("      | {line}");
+            }
+        }
         Ok(true)
     }
 

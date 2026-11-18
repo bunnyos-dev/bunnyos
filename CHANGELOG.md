@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- New: `bunny install` puts Bunny Linux on a computer from a live USB. It
+  lists the disks (leaving out ones in use), shows exactly what will be
+  erased, asks you to type the disk's name, and installs a minimal encrypted
+  system with the Bunny Linux layout. Options for no encryption, a swapfile,
+  hibernation, a second disk for `/home`, and SSH; `--dry-run` shows every
+  step without changing anything.
 - Undo now puts the kernel back on systems where `/boot` is its own partition
   (usually encrypted ones). Each generation keeps a copy of its kernel on
   `/boot`, shared when nothing changed; `bunny rollback` restores it and says

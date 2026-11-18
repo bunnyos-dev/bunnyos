@@ -46,6 +46,9 @@ passwd -d root >/dev/null
 sed -i 's|^c1:12345:respawn:/sbin/agetty .*|c1:12345:respawn:/sbin/agetty --autologin root --noclear 38400 tty1 linux|' /etc/inittab
 grep -q -- '--autologin root' /etc/inittab || { echo "Couldn't set up the automatic login." >&2; exit 1; }
 echo 'hostname="bunny-live"' > /etc/conf.d/hostname
+# The live system's root is in memory; an fstab with something in it keeps
+# OpenRC from warning about an empty one at start-up.
+echo 'tmpfs  /tmp  tmpfs  defaults,nosuid,nodev  0 0' >> /etc/fstab
 echo "UTC" > /etc/timezone
 emerge -q --config sys-libs/timezone-data
 rc-update add dhcpcd default

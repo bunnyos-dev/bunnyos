@@ -72,7 +72,8 @@ jobs:
             > boot.log 2>&1 &
           qemu=$!
           for _ in $(seq 1 120); do
-            if grep -q "Starting dhcpcd" boot.log; then
+            # "Starting local" is the last service of the default runlevel.
+            if grep -qE "Starting (local|DHCP Client Daemon)" boot.log; then
               echo "✓ The live system started (OpenRC is starting services)."
               kill "$qemu" 2>/dev/null || true
               exit 0

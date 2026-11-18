@@ -47,6 +47,10 @@ def plan(atoms):
     from _emerge.Package import Package
     from _emerge.stdout_spinner import stdout_spinner
 
+    # Portage's configuration as emerge sees it: make.conf, profiles,
+    # package.use and friends (`settings`), and the package databases
+    # (`trees`): the repositories, what's installed (vartree) and prebuilt
+    # packages (bintree), for each root.
     config = load_emerge_config()
     settings = config.target_config.settings
     trees = config.trees
@@ -54,12 +58,19 @@ def plan(atoms):
     # The same options a plain `emerge` run would get.
     args = shlex.split(settings.get("EMERGE_DEFAULT_OPTS", ""))
     args += ["--pretend", "--update", "--deep", "--newuse"] + (atoms or ["@world"])
+    # emerge's own command-line parser, so options mean exactly what they
+    # mean to emerge (including anything from EMERGE_DEFAULT_OPTS).
     _action, opts, files = parse_opts(args, silent=True)
+    # emerge turns FEATURES=getbinpkg into --getbinpkg, and --getbinpkg into
+    # --usepkg, before planning; parse_opts alone doesn't. Same here, so a
+    # system set up for prebuilt packages gets the same plan as emerge.
     if "getbinpkg" in settings.features:
         opts["--getbinpkg"] = True
     if "--getbinpkg" in opts:
         opts["--usepkg"] = True
     if "--usepkg" in opts:
+        # Read the list of prebuilt packages (downloading the binhost's index
+        # with --getbinpkg), as emerge does before planning.
         for root_trees in trees.values():
             try:
                 root_trees["bintree"].populate(getbinpkgs="--getbinpkg" in opts)
@@ -70,16 +81,25 @@ def plan(atoms):
     # method names; they change between Portage versions.)
     spinner = stdout_spinner()
     spinner.update = lambda *args, **kwargs: True
+    # The dependency calculation itself, the same call emerge makes: it
+    # resolves `files` (the atoms) and retries with backtracking when it
+    # hits a conflict. `ok` is false when no plan works; emerge would print
+    # why, so bunny then runs emerge to explain it.
     params = create_depgraph_params(opts, "")
     ok, graph, _favorites = backtrack_depgraph(settings, trees, opts, params, "", files, spinner)
     if not ok:
         return {"ok": False, "reason": "portage couldn't work out a plan"}
 
+    # What's installed, to tell new packages from updates and rebuilds.
     vardb = trees[settings["EROOT"]]["vartree"].dbapi
     merges = []
+    # The merge list in install order, as `emerge --pretend` would print it.
+    # It also holds other kinds of tasks (uninstalls, blockers); only
+    # packages being merged are kept.
     for task in graph.altlist():
         if not isinstance(task, Package) or task.operation != "merge":
             continue
+        # The installed version in the same slot, if any (`cat/pkg:slot`).
         installed = vardb.match(task.slot_atom)
         if not installed:
             action, old = "new", None

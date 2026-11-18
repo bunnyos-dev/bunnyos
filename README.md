@@ -22,13 +22,13 @@ polished, quiet experience from power button to desktop.
 | 4. Same system everywhere (lockfile) | ✅ Done |
 | 5. Understandable errors | ✅ Done |
 | 6. Fast installs (package cache) | ⬜ |
-| 7. The look (boot animation, GRUB, login) | ⬜ |
+| 7. Installing Bunny Linux (installer, ISO) | ⬜ |
 | 8. Security + gaming | ⬜ |
-| 9. Installer + ISO | ⬜ |
+| 9. The look (boot animation, GRUB, login) | ⬜ |
 
-Version 1 (phases 1–5) is done and tested in the VM. Next: one known issue
-(the config after an undo), then testing on real machines and phase 6. Details
-and the full to-do list are in the [roadmap](docs/ROADMAP.md).
+Version 1 (phases 1–5) is done and tested in the VM. Next: making the code
+easy for others to review, then a first, minimal ISO. Details and the full
+to-do list are in the [roadmap](docs/ROADMAP.md).
 
 ## Documentation
 
@@ -39,6 +39,8 @@ and the full to-do list are in the [roadmap](docs/ROADMAP.md).
 - [Design](docs/DESIGN.md): what Bunny Linux is, every decision so far, and the
   version 1 scope.
 - [Roadmap](docs/ROADMAP.md): what's done and what's next.
+- [Contributing](CONTRIBUTING.md): a map of the code, how to run the tests
+  and the VM, and the rules.
 
 ## Building `bunny`
 

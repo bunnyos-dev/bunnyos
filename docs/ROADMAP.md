@@ -204,6 +204,23 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Filled in from the maintainer's notes and developer-mode reports.)
 
+- [ ] **Bug: the time zone from `bunny install` isn't set.** After the
+      install, `/etc/timezone` is missing and `/etc/localtime` still points
+      to `zoneinfo/Factory` (from the stage3), so `date` shows `-00`.
+      `inside.sh` writes `/etc/timezone` and runs `emerge --config
+      sys-libs/timezone-data`, which no longer sets the zone on current
+      Gentoo. Fix: make the link the way Gentoo's handbook now says for
+      OpenRC (`ln -sf ../usr/share/zoneinfo/<zone> /etc/localtime`), and
+      check it with a test.
+- [ ] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
+      at boot, not in your config: local, netmount". Those two are in the
+      stage3's default runlevel, and the starter config doesn't list them.
+      Fix: list them in the starter config, or have bunny treat OpenRC's own
+      default services as part of the base system.
+- [ ] **Guide, Helping test: sign in to GitHub before turning on
+      `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
+      "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
+      and 2.
 - [ ] **Live USB welcome says "Not online yet" when it is online.** The
       welcome checks once, 3 seconds after login, by pinging
       `distfiles.gentoo.org` (needs DNS too). In the VM, `ping 1.1.1.1`

@@ -141,7 +141,7 @@ review before the installer adds a lot more of it.
       takeover, admin rights), and the command handlers out of `main.rs`
       into their own modules. Long functions (`switch`, `install_quietly`)
       broken into named steps. No change in behaviour; all tests still pass.
-- [ ] **`CONTRIBUTING.md`:** a code map for human contributors: where to
+- [~] **`CONTRIBUTING.md`:** a code map for human contributors: where to
       start, what each module does, how a `bunny switch` flows through the
       files, how to run the tests and the VM, and the rules from
       `CLAUDE.md` that apply to everyone. Comments on each Portage call in

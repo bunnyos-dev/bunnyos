@@ -43,7 +43,7 @@ config, nothing is lost:
 | Step | Command |
 |---|---|
 | Snapshot | `btrfs subvolume snapshot -r / /.snapshots/bunny-<time>` |
-| See what would be installed | `emerge --pretend --update --deep --newuse @world` |
+| See what would be installed | bunny's Portage helper, or `emerge --pretend --update --deep --newuse --verbose @world` |
 | Install / update | `emerge --update --deep --newuse --quiet-build=y @world` |
 | See what's unused | `emerge --depclean --pretend` |
 | Remove unused | `emerge --depclean` (after bunny asks, always) |

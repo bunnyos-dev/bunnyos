@@ -222,7 +222,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       rollback list`. Replace the user name only where it's a user name
       (`/home/<name>`, `<name>@`, a login line), never inside bunny's own
       name, paths and commands. Add a test with the user name `bunny`.
-- [ ] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
+- [~] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
       reinstalled curl, gettext, iputils, libb2 and portage-utils, shown as
       "(rebuild)". Say why (a USE flag changed, a library they use changed).
 - [ ] **26 unread Gentoo announcements on a fresh install.** They're all

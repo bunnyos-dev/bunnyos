@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- A package installed again at the same version now says why in the list
+  before a switch: "(rebuild: USE +adns)" for a USE flag change, or
+  "(rebuild: libunistring changed)" when a library it uses changed.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

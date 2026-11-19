@@ -8,7 +8,7 @@
 use serde::Deserialize;
 
 use crate::apply::Runner;
-use crate::emerge::{Action, Merge};
+use crate::emerge::{Action, Merge, Why};
 
 pub const SCRIPT: &str = include_str!("helper/bunny-portage.py");
 
@@ -33,6 +33,17 @@ struct HelperMerge {
     from: Option<String>,
     action: String,
     binary: bool,
+    /// Why a rebuild happens (helper version 2 and later).
+    #[serde(default)]
+    why: HelperWhy,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct HelperWhy {
+    #[serde(default, rename = "use")]
+    use_flags: Vec<String>,
+    #[serde(default)]
+    libraries: Vec<String>,
 }
 
 /// Parses the helper's answer to `plan`. `None` if it didn't work out a plan.
@@ -57,6 +68,11 @@ pub fn parse_plan(json: &str) -> Option<Vec<Merge>> {
                     _ => return None,
                 },
                 binary: m.binary,
+                why: Why {
+                    use_flags: m.why.use_flags,
+                    library_changed: !m.why.libraries.is_empty(),
+                    libraries: m.why.libraries,
+                },
             })
         })
         .collect()
@@ -89,6 +105,22 @@ mod tests {
         assert_eq!(list[1].action, Action::Rebuild);
         assert!(!list[1].binary);
         assert_eq!(list[2].from.as_deref(), Some("2.42-r1"));
+        // Helper version 1 doesn't say why; that's fine.
+        assert_eq!(list[1].why, Why::default());
+    }
+
+    #[test]
+    fn reads_why_a_package_is_rebuilt() {
+        let json = r#"{"ok": true, "merges": [
+            {"name": "net-misc/curl", "version": "8.16.0", "from": "8.16.0", "action": "rebuild", "binary": true, "slot": "0",
+             "why": {"use": ["+adns"], "libraries": []}},
+            {"name": "sys-devel/gettext", "version": "0.23.1", "from": "0.23.1", "action": "rebuild", "binary": false, "slot": "0",
+             "why": {"use": [], "libraries": ["dev-libs/libunistring"]}}
+        ], "helper": 2}"#
+            .replace('\n', " ");
+        let list = parse_plan(&json).unwrap();
+        assert_eq!(list[0].why.short(), "USE +adns");
+        assert_eq!(list[1].why.short(), "libunistring changed");
     }
 
     #[test]

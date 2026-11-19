@@ -15,6 +15,80 @@ pub struct Merge {
     pub action: Action,
     /// A prebuilt package (no compiling).
     pub binary: bool,
+    /// Why a package is built again at the same version (rebuilds only).
+    pub why: Why,
+}
+
+/// Why emerge installs the same version again.
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct Why {
+    /// USE flags that changed, as `+flag` (turned on) or `-flag` (off).
+    pub use_flags: Vec<String>,
+    /// Libraries it uses that changed in a way that needs it rebuilt
+    /// (Gentoo's "sub-slot" changes), by `category/name`, when known.
+    pub libraries: Vec<String>,
+    /// emerge marked it as a forced reinstall (`r`), which is what a
+    /// library change looks like in its screen text (it doesn't say which).
+    pub library_changed: bool,
+}
+
+impl Why {
+    /// Short enough for the plan table: `USE +adns -http2`,
+    /// `libunistring changed`, `a library it uses changed`. Empty when the
+    /// reason isn't known.
+    pub fn short(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.use_flags.is_empty() {
+            const MAX: usize = 3;
+            let mut flags = self.use_flags[..self.use_flags.len().min(MAX)].join(" ");
+            if self.use_flags.len() > MAX {
+                flags.push_str(" …");
+            }
+            parts.push(format!("USE {flags}"));
+        }
+        if let Some(first) = self.libraries.first() {
+            let name = first.rsplit('/').next().unwrap_or(first);
+            parts.push(match self.libraries.len() {
+                1 => format!("{name} changed"),
+                n => format!("{name} and {} more changed", n - 1),
+            });
+        } else if self.library_changed {
+            parts.push("a library it uses changed".into());
+        }
+        parts.join(", ")
+    }
+}
+
+/// The USE flags emerge marks as changed in a `--verbose` merge-list line:
+/// `USE="adns* -http2% ssl" CURL_SSL="openssl -gnutls*"` gives
+/// `+adns`, `-http2`, `-curl_ssl_gnutls`. `*` means the flag's setting
+/// changed since the installed version, `%` that it's new or gone.
+fn changed_use(tail: &str) -> Vec<String> {
+    let mut changed = Vec::new();
+    let mut rest = tail;
+    while let Some(eq) = rest.find("=\"") {
+        let key = rest[..eq].rsplit(' ').next().unwrap_or("");
+        let after = &rest[eq + 2..];
+        let Some(end) = after.find('"') else { break };
+        for token in after[..end].split_whitespace() {
+            if !token.contains(['*', '%']) {
+                continue;
+            }
+            let off = token.starts_with('-') || token.starts_with("(-");
+            let flag = token.trim_matches(|c: char| "-*%(){}".contains(c));
+            if flag.is_empty() {
+                continue;
+            }
+            let flag = if key == "USE" || key.is_empty() {
+                flag.to_string()
+            } else {
+                format!("{}_{flag}", key.to_lowercase())
+            };
+            changed.push(format!("{}{flag}", if off { '-' } else { '+' }));
+        }
+        rest = &after[end + 1..];
+    }
+    changed
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -64,6 +138,7 @@ pub fn parse_merge_list(output: &str) -> Vec<Merge> {
                 _ => return None, // blockers, uninstalls, nomerge
             };
             let flags: String = words.collect();
+            let forced = flags.contains('r');
             let action = if flags.contains('N') {
                 Action::New
             } else if flags.contains('D') {
@@ -82,12 +157,21 @@ pub fn parse_merge_list(output: &str) -> Vec<Merge> {
                 .filter(|old| {
                     !old.is_empty() && old.chars().next().is_some_and(|c| c.is_ascii_digit())
                 });
+            let why = match action {
+                Action::Rebuild => Why {
+                    use_flags: changed_use(tail),
+                    libraries: Vec::new(),
+                    library_changed: forced,
+                },
+                _ => Why::default(),
+            };
             Some(Merge {
                 name,
                 version,
                 from,
                 action,
                 binary,
+                why,
             })
         })
         .collect()
@@ -126,7 +210,10 @@ pub fn render_merge_list(list: &[Merge], asked: &[String]) -> String {
         (Action::Update, Some(from)) | (Action::Downgrade, Some(from)) => {
             format!("{from} → {}", m.version)
         }
-        (Action::Rebuild, _) => format!("{} (rebuild)", m.version),
+        (Action::Rebuild, _) => match m.why.short() {
+            why if why.is_empty() => format!("{} (rebuild)", m.version),
+            why => format!("{} (rebuild: {why})", m.version),
+        },
         (_, None) => m.version.clone(),
     };
     let shown_deps: Vec<&Merge> = if deps.len() > SHOWN_NEEDED + 3 {
@@ -441,6 +528,7 @@ Dependency resolution took 2.31 s (backtrack: 0/20).
                 from: None,
                 action: Action::New,
                 binary: true,
+                why: Why::default(),
             }
         );
         assert!(!list[1].binary);
@@ -471,7 +559,10 @@ Dependency resolution took 2.31 s (backtrack: 0/20).
         assert!(text.contains("2.41-r6 → 2.42-r1"));
         assert!(text.contains("↓ dev-lang/python"));
         assert!(text.contains("~ app-admin/sudo"));
-        assert!(text.contains("1.9.17_p2 (rebuild)"), "{text}");
+        assert!(
+            text.contains("1.9.17_p2 (rebuild: USE -sendmail)"),
+            "{text}"
+        );
         assert!(text.contains("Compiling can take a while"));
         // What was asked for (and updates) first; new dependencies after.
         let sudo = text.find("app-admin/sudo").unwrap();
@@ -498,6 +589,68 @@ Dependency resolution took 2.31 s (backtrack: 0/20).
         assert!(
             longest <= 80,
             "a line would wrap in an 80-column terminal: {text}"
+        );
+    }
+
+    #[test]
+    fn says_why_a_package_is_rebuilt() {
+        // From `bunny add dev-util/github-cli` in the dry run: rebuilds
+        // shown as "(rebuild)" with no reason.
+        let list = parse_merge_list(
+            "[binary   R    ] net-misc/curl-8.16.0-1::gentoo  USE=\"adns* http2 -ldap ssl\" CURL_SSL=\"openssl -gnutls*\" 0 KiB\n\
+             [ebuild  rR    ] sys-devel/gettext-0.23.1::gentoo  USE=\"acl nls -static-libs\" 0 KiB\n\
+             [ebuild   R    ] net-misc/iputils-20250605::gentoo  USE=\"(-caps%) filecaps\" 0 KiB\n\
+             [binary   R    ] app-arch/libb2-0.98.1-r3-2::gentoo  0 KiB\n",
+        );
+        assert_eq!(list[0].why.use_flags, ["+adns", "-curl_ssl_gnutls"]);
+        assert!(!list[0].why.library_changed);
+        assert!(list[1].why.use_flags.is_empty());
+        assert!(list[1].why.library_changed, "rR: a forced reinstall");
+        assert_eq!(list[2].why.use_flags, ["-caps"]);
+        assert_eq!(list[3].why, Why::default());
+
+        let text = render_merge_list(&list, &[]);
+        assert!(
+            text.contains("8.16.0 (rebuild: USE +adns -curl_ssl_gnutls)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("0.23.1 (rebuild: a library it uses changed)"),
+            "{text}"
+        );
+        assert!(text.contains("20250605 (rebuild: USE -caps)"), "{text}");
+        // No reason emerge gave: just "(rebuild)", never an invented one.
+        assert!(text.contains("0.98.1-r3 (rebuild)"), "{text}");
+        let longest = text.lines().map(|l| l.chars().count()).max().unwrap();
+        assert!(longest <= 80, "a line would wrap: {text}");
+    }
+
+    #[test]
+    fn short_reasons_stay_short() {
+        let why = Why {
+            use_flags: vec!["+a".into(), "+b".into(), "-c".into(), "+d".into()],
+            libraries: vec!["dev-libs/libunistring".into(), "dev-libs/icu".into()],
+            library_changed: true,
+        };
+        assert_eq!(
+            why.short(),
+            "USE +a +b -c …, libunistring and 1 more changed"
+        );
+        let one = Why {
+            libraries: vec!["dev-libs/openssl".into()],
+            ..Why::default()
+        };
+        assert_eq!(one.short(), "openssl changed");
+        assert_eq!(Why::default().short(), "");
+    }
+
+    #[test]
+    fn unchanged_flags_arent_reasons() {
+        assert!(changed_use(" USE=\"acl nls -static-libs\" 1,234 KiB").is_empty());
+        assert_eq!(changed_use(" USE=\"-sendmail*\""), ["-sendmail"]);
+        assert_eq!(
+            changed_use(" PYTHON_TARGETS=\"python3_13% -python3_12%\""),
+            ["+python_targets_python3_13", "-python_targets_python3_12"]
         );
     }
 

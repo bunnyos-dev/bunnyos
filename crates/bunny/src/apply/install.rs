@@ -382,6 +382,12 @@ pub(super) fn is_tip(e: &explain::Explanation) -> bool {
 /// doesn't show up as a generation that changed nothing.
 pub(super) fn discard(root: &Path, runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
     restore_files(root, &outcome.backup_dir)?;
+    drop_snapshot(runner, outcome)
+}
+
+/// Deletes the snapshot taken for this switch (and its note), for a switch
+/// that stopped before changing anything.
+pub(super) fn drop_snapshot(runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
     if let Some(snapshot) = outcome.snapshot.take() {
         let (ok, _) = runner.run_quiet(
             &cmd(&["btrfs", "subvolume", "delete", &snapshot.to_string_lossy()]),

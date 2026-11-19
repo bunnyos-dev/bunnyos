@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Undo (`bunny rollback` and the boot menu) now puts this computer's host
+  file, `hosts/<computer name>.toml`, back too, not only `bunny.toml` and
+  `bunny.lock`.
+
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

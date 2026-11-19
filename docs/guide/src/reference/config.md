@@ -226,8 +226,8 @@ firmware, GRUB, filesystem tools, `cryptsetup` for an encrypted disk) and the
 `[machine]` record. `bunny add` and `bunny remove` change `bunny.toml`, not
 the host file; edit the host file by hand.
 
-> **Known limit:** undo puts back `bunny.toml` and `bunny.lock`, but not the
-> host file. It rarely changes; if you edit it and then undo, check it.
+Undo puts this computer's host file back too, along with `bunny.toml` and
+`bunny.lock` (see [The config goes back too](generations.md#the-config-goes-back-too)).
 
 ## The TOML section trap
 

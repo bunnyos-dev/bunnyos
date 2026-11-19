@@ -5,6 +5,7 @@ mod apply;
 mod boot;
 mod commands;
 mod config;
+mod config_repo;
 mod dev;
 mod diff;
 mod edit;
@@ -223,6 +224,23 @@ enum Command {
         #[arg(default_value = DEFAULT_CONFIG)]
         config: PathBuf,
     },
+    /// Send your config folder (/etc/bunny) to a private GitHub repository, with your own GitHub sign-in (shows what it will do and asks first)
+    Publish {
+        /// The GitHub repository: a name (my-system, the default) or you/my-system
+        repo: Option<String>,
+        /// Don't ask first
+        #[arg(short, long)]
+        yes: bool,
+        /// Show what it would do, without changing or sending anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Path to the config (its folder is what's sent)
+        #[arg(long, default_value = DEFAULT_CONFIG)]
+        config: PathBuf,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Install Bunny Linux on this computer, from the live USB (erases a disk; shows exactly what first)
     Install {
         /// The disk to install on, e.g. /dev/nvme0n1 (asks if not given)
@@ -306,6 +324,13 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             yes,
             config,
         } => report(&config, dry_run, yes),
+        Command::Publish {
+            repo,
+            yes,
+            dry_run,
+            config,
+            root,
+        } => commands::publish(&config, repo.as_deref(), yes, dry_run, &root),
         Command::Check { config } => {
             let cfg = Config::load(&config)?;
             Ok(report_problems(&cfg, &config))

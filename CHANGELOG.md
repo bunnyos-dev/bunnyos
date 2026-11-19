@@ -10,6 +10,13 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny install` makes `/etc/bunny` a git repository, with a first commit
+  "As installed", so your config has a history from the start (the `/home`
+  disk's key is kept out of it).
+- New: `bunny publish` sends `/etc/bunny` to a private GitHub repository
+  with your own GitHub sign-in (no need to sign root in), and sends new
+  changes each time you run it again. The Guide's git steps are now just
+  this command.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

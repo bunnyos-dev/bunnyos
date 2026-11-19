@@ -36,26 +36,44 @@ Two more files sit next to `bunny.toml`:
 
 ## Keep your config in git
 
-Then you have the history of every change, and you can install the same
+`/etc/bunny` is already a git repository: `bunny install` made one, with a
+first commit called "As installed". So you have the history of every change
+from the start (`cd /etc/bunny && git log`), and you can install the same
 system on another computer with one command.
 
-```sh
-cd /etc/bunny
-sudo git init
-sudo git add bunny.toml bunny.lock hosts
-sudo git commit -m "My system, as installed"
-```
-
-To keep it on GitHub, make a new **private** repository there (empty, no
-README), then, with its address:
+To keep it on GitHub, sign in to GitHub once, as yourself:
 
 ```sh
-sudo git remote add origin https://github.com/you/my-system.git
-sudo git push -u origin main
+bunny add dev-util/github-cli
+gh auth login
 ```
 
-From then on, after a change: `sudo git commit -am "Added tmux"` and
-`sudo git push`.
+Pick GitHub.com, HTTPS, and "Login with a web browser". Without a desktop,
+it then says it can't copy the code or open a browser: that's expected.
+Open `github.com/login/device` on another device (your phone works) and
+type the code it shows. Then:
+
+```sh
+bunny publish
+```
+
+It shows what it will do and asks first. It makes a **private** repository
+called `my-system` on your GitHub account (or give another name:
+`bunny publish laptop-config`), connects `/etc/bunny` to it, and sends
+the history. `/etc/bunny` belongs to root, but bunny uses your own GitHub
+sign-in to send it, so you don't have to sign root in to GitHub.
+
+After a change (like `bunny add app-misc/tmux`), run `bunny publish` again:
+it saves what changed in a new commit and sends it. To write your own
+message instead, commit first: `cd /etc/bunny && sudo git commit -am "Added tmux"`.
+
+Commits are made with your user name and a placeholder email
+(`you@<computer name>.local`). To have GitHub show them as yours, use your
+GitHub "noreply" address (from GitHub's Settings → Emails):
+
+```sh
+sudo git -C /etc/bunny config user.email "you@users.noreply.github.com"
+```
 
 To install the same system on another computer, start it from the USB and run:
 

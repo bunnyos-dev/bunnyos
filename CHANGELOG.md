@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Guide: "Helping test" now has you sign in to GitHub before turning on
+  developer mode, and explains the "can't open a browser" message from
+  `gh auth login` on a computer without a desktop.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

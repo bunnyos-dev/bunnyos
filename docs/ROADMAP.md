@@ -288,7 +288,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       mode.** Its ⚠ made `report = "auto"` send a report for a switch that
       worked. Use a symbol that isn't a problem marker (or skip plan
       warnings when deciding to auto-report).
-- [ ] **Guide, Helping test: sign in to GitHub before turning on
+- [~] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
       and 2. Also say that without a desktop, `gh auth login` warns it can't

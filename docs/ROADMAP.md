@@ -260,7 +260,11 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       elogind (`sys-auth/pambase` without `USE=elogind`), so no
       `/run/user/<id>` is made. Fix in the Guide now (add
       `[pkg."sys-auth/pambase"] use = ["elogind"]`, the elogind service, log
-      in again), and have the future `[desktop]` section do it.
+      in again), and have the future `[desktop]` section do it. Next layer,
+      same cause: "libseat: No backend was able to open a seat", because
+      libseat is built without elogind (`[pkg."sys-auth/seatd"] use =
+      ["elogind"]`). The fix should turn elogind on everywhere a desktop
+      needs it at once (likely a desktop profile, or a set of USE flags).
 - [ ] **Downloading a repository prints emaint's raw output** (git clone
       lines, "Performing Global Updates", every `profiles/updates` file,
       "Action: sync … returned code = 0"). Show one line per repository

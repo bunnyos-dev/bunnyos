@@ -204,6 +204,145 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Filled in from the maintainer's notes and developer-mode reports.)
 
+- [ ] **Bug: the time zone from `bunny install` isn't set.** After the
+      install, `/etc/timezone` is missing and `/etc/localtime` still points
+      to `zoneinfo/Factory` (from the stage3), so `date` shows `-00`.
+      `inside.sh` writes `/etc/timezone` and runs `emerge --config
+      sys-libs/timezone-data`, which no longer sets the zone on current
+      Gentoo. Fix: make the link the way Gentoo's handbook now says for
+      OpenRC (`ln -sf ../usr/share/zoneinfo/<zone> /etc/localtime`), and
+      check it with a test.
+- [ ] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
+      at boot, not in your config: local, netmount". Those two are in the
+      stage3's default runlevel, and the starter config doesn't list them.
+      Fix: list them in the starter config, or have bunny treat OpenRC's own
+      default services as part of the base system.
+- [ ] **Bug: `bunny report` swaps every "bunny" when your user name is
+      `bunny`.** The report read `/etc/you/you.toml`, `you update`, `you
+      rollback list`. Replace the user name only where it's a user name
+      (`/home/<name>`, `<name>@`, a login line), never inside bunny's own
+      name, paths and commands. Add a test with the user name `bunny`.
+- [ ] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
+      reinstalled curl, gettext, iputils, libb2 and portage-utils, shown as
+      "(rebuild)". Say why (a USE flag changed, a library they use changed).
+- [ ] **26 unread Gentoo announcements on a fresh install.** They're all
+      older than the system. `bunny install` should mark them read
+      (`eselect news read --quiet all`), so only new ones are mentioned.
+- [ ] **Guide, What to do first: the git steps don't work as written.**
+      `git init` makes a `master` branch (the page later pushes `main`), and
+      the commit fails with "Author identity unknown" because root has no
+      git name or email. Then `sudo git push` would fail too: the GitHub
+      sign-in belongs to your user, not root. Fix the page (`git init -b
+      main`, set a name and email for the repository, sign root in with
+      `sudo gh auth login` + `sudo gh auth setup-git`), or better:
+- [ ] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
+      (branch `main`, a first commit "As installed", identity from the
+      install's answers), and a later `bunny git`/`bunny publish` connects it
+      to GitHub with your own sign-in. Then the Guide's git section is one
+      command.
+- [~] **Guide, What to do first: Hyprland isn't in Gentoo's tree any more** (#56, now Mango).
+      It was masked in February 2026 and removed in March; it now lives in
+      the community `hyproverlay` repository (testing versions only). The
+      page's `bunny add gui-wm/hyprland` fails with "There's no package
+      called". Change the example to a desktop in Gentoo's tree, and say how
+      to get Hyprland once repositories are in `bunny.toml` (below).
+- [~] **Repositories (overlays) in `bunny.toml`** (#56). Maintainer's idea: when a
+      package isn't found, say which overlay has it. Plan: a `repositories`
+      list in `bunny.toml` (enabled with eselect repository, synced, and
+      pinned in `bunny.lock` like `::gentoo`), so overlays are part of the
+      one file instead of a step done by hand. When `bunny add` can't find a
+      package, it checks a short list of known overlays and Gentoo's
+      registered ones, and offers to add the repository, with a plain
+      warning that Gentoo doesn't check community overlays. Testing-only
+      packages need `[pkg] keywords` too (not in `bunny.toml` yet).
+- [ ] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
+      The install uses Gentoo's base profile, where logins don't go through
+      elogind (`sys-auth/pambase` without `USE=elogind`), so no
+      `/run/user/<id>` is made. Fix in the Guide now (add
+      `[pkg."sys-auth/pambase"] use = ["elogind"]`, the elogind service, log
+      in again), and have the future `[desktop]` section do it. Next layer,
+      same cause: "libseat: No backend was able to open a seat", because
+      libseat is built without elogind (`[pkg."sys-auth/seatd"] use =
+      ["elogind"]`). The fix should turn elogind on everywhere a desktop
+      needs it at once (likely a desktop profile, or a set of USE flags).
+- [ ] **A switch that failed early leaves a generation behind.** The
+      switch that stopped at Gentoo's list (before changing anything) kept
+      its snapshot, so `bunny generations` shows #6 and #7 with the same
+      description, and #6 is a copy of the system before nothing happened.
+      Delete the snapshot when a switch fails before changing anything (a
+      cancelled one already does), or mark it "(stopped early)".
+- [ ] **Downloading a repository prints emaint's raw output** (git clone
+      lines, "Performing Global Updates", every `profiles/updates` file,
+      "Action: sync … returned code = 0"). Show one line per repository
+      ("Downloading guru… ✓ 17.5 MB") and keep the rest in the log, like
+      emerge's output.
+- [ ] **The repository trust warning counts as a problem in developer
+      mode.** Its ⚠ made `report = "auto"` send a report for a switch that
+      worked. Use a symbol that isn't a problem marker (or skip plan
+      warnings when deciding to auto-report).
+- [ ] **Guide, Helping test: sign in to GitHub before turning on
+      `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
+      "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
+      and 2. Also say that without a desktop, `gh auth login` warns it can't
+      copy the code or open a browser, which is expected: open
+      github.com/login/device on another device and type the code.
+- [ ] **Live USB welcome says "Not online yet" when it is online.** The
+      welcome checks once, 3 seconds after login, by pinging
+      `distfiles.gentoo.org` (needs DNS too). In the VM, `ping 1.1.1.1`
+      worked right after. Likely the network or DNS wasn't up yet at that
+      moment. Fix: wait up to ~15 s ("Checking the connection…"), check the
+      address and DNS separately (so "online, but names don't work" is its
+      own message), and say "type welcome to check again".
+- [ ] **The live USB console can't draw ✓ or ✗** (they show as `v` and
+      `x`, e.g. "v Dry run finished"). Check which symbols the console font
+      has (✓ ✗ ⚠ ·) and load a font that has them on the USB (or fall back
+      to plain text when the terminal is the Linux console).
+- [ ] **"Welcome to your new account!"** appears above the welcome on the
+      live USB, which is confusing there (it isn't a new account). Find what
+      prints it at the first login and turn it off on the USB.
+- [ ] **`bunny install --dry-run` is a wall of commands.** Every
+      `(would run)` line is shown, and long ones wrap. Decided with the
+      maintainer: by default, the steps in plain words (each step's name and
+      what it does); the exact commands only with `--dry-run --verbose`.
+- [ ] **A clean boot menu, soon (not waiting for phase 9).** The maintainer
+      found the menu overwhelming: the Gentoo logo behind it, "Bunny Linux
+      GNU/Linux", and every firmware entry (UiApp, DVD-ROM, PXE and HTTP
+      boot, a second "Bunny Linux (EFI BootNext)"), with the Undo entry last
+      under all of them, so it's easy to miss before the countdown. Agreed
+      design (mockup shown in the dry run):
+      - **Main page:** Bunny Linux · Undo the last change ("back to before
+        7:59 PM") · Earlier versions ("11 saved") · Advanced options ·
+        Firmware settings. Nothing else; no Gentoo theme (plain dark until
+        the real look).
+      - **Earlier versions** (a GRUB submenu that bunny writes): the newest
+        ~10 generations, newest first, in local time with the generation's
+        summary ("Today, 7:03 PM · Mango from GURU", "As installed").
+      - **One version** (a submenu): what that change did, one line each
+        (`+ mangowm 0.18.6`, `~ pambase: now uses elogind`), then "Go back
+        to this version" (the existing boot-menu rollback) and later "Just
+        look around" (start that copy read-only, nothing kept; new work).
+      - Named "Earlier versions", not "backups": they don't include your
+        files in /home.
+      - GRUB can't show plain text lines, so the change lines are entries
+        that do nothing when picked. Hidden menu (Esc to show) and the
+        real theme stay in phase 9.
+- [ ] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
+      (once from GRUB's settings, once added by bunny). Harmless; add it
+      only when it isn't already there.
+- [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
+      even though the install asked for a time zone. Show local time, and for
+      the first generation say "as installed".
+- [ ] **`tools/bunny-vm.sh ssh` warns "REMOTE HOST IDENTIFICATION HAS
+      CHANGED" for a new VM.** Every named VM (`VM=laptop`, `VM=fresh`, …)
+      uses port 2223, so SSH remembers the last VM's key and refuses the new
+      one. Fix: keep each VM's key in its own known_hosts file
+      (`$VM_DIR/known_hosts`), or give each VM its own port.
+- [ ] **Developer mode can't record `bunny install`.** It's set in
+      `bunny.toml`, and the live USB has none, so the install itself (the
+      part being tested most) isn't recorded. Idea: preview ISOs record by
+      default, and the recording is copied into the new system so
+      `bunny report` sends it after the first start.
+
 ## Talk to Portage directly (after the dry run and the laptop)
 
 Agreed with the maintainer: version 1 reads emerge's screen text, which breaks

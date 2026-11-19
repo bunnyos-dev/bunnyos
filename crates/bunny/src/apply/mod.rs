@@ -126,7 +126,7 @@ pub fn switch(
     std::fs::create_dir_all(&outcome.backup_dir)
         .with_context(|| format!("Couldn't create {}", outcome.backup_dir.display()))?;
     // 1b. Repositories, so packages from new ones can be checked and installed.
-    set_up_repositories(config, root, plan, runner, &mut outcome)?;
+    set_up_repositories(config, root, plan, runner, opts, &mut outcome)?;
     // 2–3. package.use, package.accept_keywords and the world file, each
     //      backed up first.
     write_package_files(config, root, &outcome)?;

@@ -827,6 +827,8 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
 struct WithRepos {
     root: PathBuf,
     commands: Vec<String>,
+    /// What `emaint sync` says when run quietly, and whether it works.
+    emaint_says: Option<(bool, &'static str)>,
 }
 
 const REPO_LIST: &str = r#"<repositories version="1.0">
@@ -847,6 +849,13 @@ impl Runner for WithRepos {
         }
         self.commands.push(line);
         Ok(true)
+    }
+    fn run_quiet(&mut self, cmd: &[String], _: &mut dyn FnMut(&str)) -> Result<(bool, String)> {
+        let ok = self.run(cmd)?;
+        Ok(match (cmd[0].as_str(), self.emaint_says) {
+            ("emaint", Some((ok, said))) => (ok, said.to_string()),
+            _ => (ok, String::new()),
+        })
     }
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
         self.commands.push(cmd.join(" "));
@@ -904,6 +913,7 @@ fn adds_a_repository_and_testing_versions() {
     let mut runner = WithRepos {
         root: r.to_path_buf(),
         commands: Vec::new(),
+        emaint_says: None,
     };
     switch(&config, r, &plan, &mut runner, &opts()).unwrap();
     let c = &runner.commands;
@@ -952,6 +962,74 @@ fn adds_a_repository_and_testing_versions() {
         .any(|n| n.contains("stopped using the guru repository")));
 }
 
+/// What `emaint sync --repo guru` prints for a first download.
+const EMAINT_GURU: &str = "Cloning into '/var/db/repos/guru'...\n\
+     Performing Global Updates\n\
+     (Could take a couple of minutes if you have a lot of binary packages.)\n\
+     /var/db/repos/gentoo/profiles/updates/1Q-2026\n\
+     Action: sync for repo: guru, returned code = 0\n";
+
+#[test]
+fn downloading_a_repository_keeps_emaints_output_in_the_log() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse(WITH_GURU).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+        emaint_says: Some((true, EMAINT_GURU)),
+    };
+    let opts = quiet(true, true);
+    // The rest of the switch (emerge) isn't what this test is about.
+    let _ = switch(&config, r, &plan, &mut runner, &opts);
+    assert!(runner
+        .commands
+        .iter()
+        .any(|l| l == "emaint sync --repo guru"));
+    let log = r.join(format!("var/log/bunny/{}-download-guru.log", opts.stamp));
+    let kept = std::fs::read_to_string(&log).expect("emaint's output is in the log");
+    assert!(kept.starts_with("$ emaint sync --repo guru\n"), "{kept}");
+    assert!(kept.contains("Performing Global Updates"), "{kept}");
+    assert!(kept.contains("returned code = 0"), "{kept}");
+}
+
+#[test]
+fn a_failed_repository_download_shows_the_end_and_where_the_log_is() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse(WITH_GURU).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    // emaint exits 0 here, but its summary line says the sync failed.
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+        emaint_says: Some((
+            true,
+            "fatal: unable to access 'https://anongit.gentoo.org/git/repo/proj/guru.git/': \
+             Could not resolve host: anongit.gentoo.org\n\
+             Action: sync for repo: guru, returned code = 128\n",
+        )),
+    };
+    let opts = quiet(true, true);
+    let err = switch(&config, r, &plan, &mut runner, &opts)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("Couldn't download the guru repository"),
+        "{err}"
+    );
+    assert!(err.contains("Could not resolve host"), "{err}");
+    assert!(err.contains("Check that this computer is online"), "{err}");
+    assert!(
+        err.contains(&format!("{}-download-guru.log", opts.stamp)),
+        "{err}"
+    );
+    assert!(!runner.commands.iter().any(|l| l.starts_with("emerge")));
+}
+
 #[test]
 fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
     let root = fake_system();
@@ -963,6 +1041,7 @@ fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
     let mut runner = WithRepos {
         root: r.to_path_buf(),
         commands: Vec::new(),
+        emaint_says: None,
     };
     let err = switch(&config, r, &plan, &mut runner, &opts())
         .unwrap_err()
@@ -982,6 +1061,7 @@ fn says_so_when_a_repository_isnt_in_gentoos_list() {
     let mut runner = WithRepos {
         root: r.to_path_buf(),
         commands: Vec::new(),
+        emaint_says: None,
     };
     let err = switch(&config, r, &plan, &mut runner, &opts())
         .unwrap_err()

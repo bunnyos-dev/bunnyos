@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Downloading a new repository shows one line ("✓ Downloaded guru · 17.5
+  MB") instead of the download tool's whole output, which is kept in
+  `/var/log/bunny/` (`--verbose` still shows it all).
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

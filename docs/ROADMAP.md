@@ -255,6 +255,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       registered ones, and offers to add the repository, with a plain
       warning that Gentoo doesn't check community overlays. Testing-only
       packages need `[pkg] keywords` too (not in `bunny.toml` yet).
+- [ ] **Downloading a repository prints emaint's raw output** (git clone
+      lines, "Performing Global Updates", every `profiles/updates` file,
+      "Action: sync … returned code = 0"). Show one line per repository
+      ("Downloading guru… ✓ 17.5 MB") and keep the rest in the log, like
+      emerge's output.
+- [ ] **The repository trust warning counts as a problem in developer
+      mode.** Its ⚠ made `report = "auto"` send a report for a switch that
+      worked. Use a symbol that isn't a problem marker (or skip plan
+      warnings when deciding to auto-report).
 - [ ] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1

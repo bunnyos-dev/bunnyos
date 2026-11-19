@@ -271,6 +271,14 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       description, and #6 is a copy of the system before nothing happened.
       Delete the snapshot when a switch fails before changing anything (a
       cancelled one already does), or mark it "(stopped early)".
+- [ ] **Idea: Bunny Linux's own name and logo (fastfetch and friends).**
+      Tools like fastfetch read `/etc/os-release` to know which system they're
+      on, and Gentoo's says Gentoo, so they show Gentoo's logo. Plan: a small
+      `bunny-release` package in `::bunny` with Bunny Linux's os-release
+      (`NAME="Bunny Linux"`, `ID=bunny`, `ID_LIKE=gentoo`) and a logo file,
+      plus a system-wide fastfetch setting that uses it; later, offer the
+      logo to fastfetch itself. It replaces a file from Gentoo's baselayout,
+      so it's the first entry in OVERRIDES.md. Needs the logo (design work).
 - [ ] **Downloading a repository prints emaint's raw output** (git clone
       lines, "Performing Global Updates", every `profiles/updates` file,
       "Action: sync … returned code = 0"). Show one line per repository

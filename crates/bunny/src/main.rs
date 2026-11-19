@@ -14,6 +14,7 @@ mod glsa;
 mod helper;
 mod import;
 mod init;
+mod install;
 mod interrupt;
 mod kernels;
 mod lock;
@@ -221,6 +222,36 @@ enum Command {
         #[arg(default_value = DEFAULT_CONFIG)]
         config: PathBuf,
     },
+    /// Install Bunny Linux on this computer, from the live USB (erases a disk; shows exactly what first)
+    Install {
+        /// The disk to install on, e.g. /dev/nvme0n1 (asks if not given)
+        #[arg(long)]
+        disk: Option<String>,
+        /// Don't encrypt the disk
+        #[arg(long)]
+        no_encrypt: bool,
+        /// Size of the EFI partition (default 2G)
+        #[arg(long, value_name = "SIZE")]
+        efi_size: Option<String>,
+        /// Make a swapfile of this size, e.g. 8G (default: none)
+        #[arg(long, value_name = "SIZE")]
+        swap: Option<String>,
+        /// Set up hibernation (a swapfile as big as your memory, unless --swap says otherwise)
+        #[arg(long)]
+        hibernate: bool,
+        /// Use a second disk, all of it, for /home
+        #[arg(long, value_name = "DISK")]
+        home_disk: Option<String>,
+        /// Start the SSH server at boot
+        #[arg(long)]
+        ssh: bool,
+        /// Show everything it would do, without erasing or changing anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Read the list of disks from this file (lsblk --json output) instead of lsblk
+        #[arg(long, hide = true)]
+        lsblk: Option<PathBuf>,
+    },
     /// Write a bunny.toml that describes this system as it is now (changes nothing)
     Import {
         /// Save to this file instead of printing it
@@ -324,6 +355,27 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             root,
         } => remove_cmd(&names, &config, yes, &root),
         Command::Update { config, yes, root } => update_cmd(&config, yes, &root),
+        Command::Install {
+            disk,
+            no_encrypt,
+            efi_size,
+            swap,
+            hibernate,
+            home_disk,
+            ssh,
+            dry_run,
+            lsblk,
+        } => commands::install_cmd(commands::InstallArgs {
+            disk,
+            no_encrypt,
+            efi_size,
+            swap,
+            hibernate,
+            home_disk,
+            ssh,
+            dry_run,
+            lsblk,
+        }),
         Command::Import {
             output,
             force,

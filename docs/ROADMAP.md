@@ -161,7 +161,7 @@ sudo and bunny. No desktop: adding one with bunny is the first thing a new
 user learns. Packages come from Gentoo's binary host, one by one (the
 prebuilt Baseline image comes with phase 6). Not styled yet.
 
-- [ ] **`bunny install`, part 1 (guided):** turn `tools/vm-install-gentoo.sh`
+- [~] **`bunny install`, part 1 (guided):** turn `tools/vm-install-gentoo.sh`
       into a real installer for any disk: lists the disks, asks which one,
       shows exactly what will be erased and asks to type the disk's name.
       Standard layout, LUKS2 encryption on by default. Options for the common

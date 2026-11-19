@@ -29,6 +29,7 @@
 - [What bunny changes on your system](reference/what-bunny-changes.md)
 - [The disk layout](reference/disk-layout.md)
 - [Moving an existing install to the layout](reference/converting.md)
+- [bunny install, in detail](reference/install.md)
 - [Testing Bunny Linux in a virtual machine](reference/testing-in-a-vm.md)
 - [Developer mode: sending reports](reference/developer-mode.md)
 

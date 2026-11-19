@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# Added by Bunny Linux. Turns on swapfiles that live on their own subvolume
+# (/swap/swapfile): OpenRC's own swap service runs before those are mounted.
+
+description="Turn on swapfiles once all filesystems are mounted"
+
+depend() {
+	need localmount
+	after swap
+	keyword -docker -podman -jail -lxc -openvz -prefix -systemd-nspawn -vserver -wsl
+}
+
+start() {
+	ebegin "Activating swapfiles"
+	swapon -a >/dev/null 2>&1
+	eend 0
+}

@@ -308,11 +308,24 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       found the menu overwhelming: the Gentoo logo behind it, "Bunny Linux
       GNU/Linux", and every firmware entry (UiApp, DVD-ROM, PXE and HTTP
       boot, a second "Bunny Linux (EFI BootNext)"), with the Undo entry last
-      under all of them, so it's easy to miss before the countdown starts
-      the default. Fix: four entries only (Bunny Linux, **Undo the last
-      change second**, Advanced options, Firmware settings), no Gentoo
-      theme (plain dark until the real look), and later hidden by default
-      with Esc to show it. The full look stays in phase 9.
+      under all of them, so it's easy to miss before the countdown. Agreed
+      design (mockup shown in the dry run):
+      - **Main page:** Bunny Linux · Undo the last change ("back to before
+        7:59 PM") · Earlier versions ("11 saved") · Advanced options ·
+        Firmware settings. Nothing else; no Gentoo theme (plain dark until
+        the real look).
+      - **Earlier versions** (a GRUB submenu that bunny writes): the newest
+        ~10 generations, newest first, in local time with the generation's
+        summary ("Today, 7:03 PM · Mango from GURU", "As installed").
+      - **One version** (a submenu): what that change did, one line each
+        (`+ mangowm 0.18.6`, `~ pambase: now uses elogind`), then "Go back
+        to this version" (the existing boot-menu rollback) and later "Just
+        look around" (start that copy read-only, nothing kept; new work).
+      - Named "Earlier versions", not "backups": they don't include your
+        files in /home.
+      - GRUB can't show plain text lines, so the change lines are entries
+        that do nothing when picked. Hidden menu (Esc to show) and the
+        real theme stay in phase 9.
 - [ ] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
       (once from GRUB's settings, once added by bunny). Harmless; add it
       only when it isn't already there.

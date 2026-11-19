@@ -81,6 +81,9 @@ a minor version can change how things work).
 - A switch with nothing else to do records packages installed outside bunny
   in `bunny.lock`, and `bunny status` says so instead of suggesting a fix
   that didn't apply.
+- Preview USBs (the test builds, not releases) record `bunny install`, and
+  copy the recording into the new system, so `bunny report` can send it
+  after the first start. The welcome says so; nothing is sent from the USB.
 
 ## [0.1.0] - 2026-11-17
 

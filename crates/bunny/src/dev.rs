@@ -22,6 +22,11 @@ pub const DEFAULT_REPORTS: &str = "bunnyos-dev/bunny-reports";
 /// Set while a command is being recorded, so it isn't recorded twice.
 pub const SESSION_ENV: &str = "BUNNY_SESSION";
 
+/// On a preview live USB (one built for testing), this file turns recording
+/// on for every bunny command, since the USB has no `bunny.toml`. Release
+/// images don't have it.
+pub const PREVIEW: &str = "/etc/bunny-preview.toml";
+
 /// The `[dev]` section.
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
@@ -98,6 +103,75 @@ pub fn settings(config: &Path) -> Dev {
         .unwrap_or_default()
 }
 
+/// `[dev]` from the config, or from `preview` (a preview live USB's file)
+/// when the config doesn't turn recording on.
+pub fn settings_or_preview(config: &Path, preview: &Path) -> Dev {
+    let dev = settings(config);
+    if dev.report != ReportMode::Off {
+        return dev;
+    }
+    let preview = settings(preview);
+    if preview.report != ReportMode::Off {
+        preview
+    } else {
+        dev
+    }
+}
+
+/// The recording of the command running now, if it's being recorded.
+pub fn current_recording() -> Option<PathBuf> {
+    std::env::var_os(SESSION_ENV)
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+}
+
+/// Copies the recording of a command still running (as far as it got) into
+/// `to` (another system's sessions folder), with its notes, so `bunny
+/// report` there sends it. `bunny install` uses it just before it
+/// unmounts the new system, so the last few lines aren't in the copy.
+/// Returns the copied log.
+pub fn copy_recording(log: &Path, to: &Path, args: &[String]) -> Result<PathBuf> {
+    let name = log
+        .file_name()
+        .context("The recording has no file name")?
+        .to_owned();
+    std::fs::create_dir_all(to).with_context(|| format!("Couldn't create {}", to.display()))?;
+    let copied = to.join(name);
+    std::fs::copy(log, &copied).with_context(|| format!("Couldn't copy {}", log.display()))?;
+    let args: Vec<String> = args
+        .iter()
+        .filter(|a| *a != "--in-session")
+        .cloned()
+        .collect();
+    let stem = log
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let started = args
+        .iter()
+        .find(|a| !a.starts_with('-'))
+        .and_then(|sub| stem.strip_suffix(&format!("-{sub}")))
+        .unwrap_or(&stem)
+        .to_string();
+    let seconds = std::fs::metadata(log)
+        .and_then(|m| m.created())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let meta = Meta {
+        args,
+        version: env!("CARGO_PKG_VERSION").into(),
+        started,
+        seconds,
+        // It got this far without failing.
+        exit_code: Some(0),
+        reported: None,
+    };
+    write_meta(&copied.with_extension("toml"), &meta)?;
+    Ok(copied)
+}
+
 /// Where recordings are kept: the user's own state folder, so no root needed.
 pub fn sessions_dir() -> PathBuf {
     let base = std::env::var_os("XDG_STATE_HOME")
@@ -148,7 +222,7 @@ pub fn record_if_on(config: &Path, in_session: bool) -> Option<ExitCode> {
     {
         return None;
     }
-    let dev = settings(config);
+    let dev = settings_or_preview(config, Path::new(PREVIEW));
     if dev.report == ReportMode::Off {
         return None;
     }
@@ -734,6 +808,52 @@ mod tests {
         assert_eq!(dev.repo(), DEFAULT_REPORTS);
         std::fs::write(&path, "this isn't toml [").unwrap();
         assert_eq!(settings(&path).report, ReportMode::Off);
+    }
+
+    #[test]
+    fn a_preview_usb_records_without_a_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("bunny.toml");
+        let preview = dir.path().join("bunny-preview.toml");
+        // No config, no preview file: off.
+        assert_eq!(
+            settings_or_preview(&config, &preview).report,
+            ReportMode::Off
+        );
+        std::fs::write(&preview, "[dev]\nreport = true\n").unwrap();
+        assert_eq!(
+            settings_or_preview(&config, &preview).report,
+            ReportMode::Record
+        );
+        // The config's own [dev] wins when it turns recording on.
+        std::fs::write(&config, "[dev]\nreport = \"auto\"\n").unwrap();
+        assert_eq!(
+            settings_or_preview(&config, &preview).report,
+            ReportMode::Auto
+        );
+    }
+
+    #[test]
+    fn copies_a_recording_into_another_system() {
+        let usb = tempfile::tempdir().unwrap();
+        let log = usb.path().join("20261119-201500-install.log");
+        std::fs::write(&log, "==> Starting\n").unwrap();
+        let to = tempfile::tempdir().unwrap();
+        let sessions = to.path().join("home/you/.local/state/bunny/sessions");
+        let args = vec!["install".to_string(), "--ssh".to_string()];
+        let copied = copy_recording(&log, &sessions, &args).unwrap();
+        assert_eq!(copied, sessions.join("20261119-201500-install.log"));
+        assert_eq!(std::fs::read_to_string(&copied).unwrap(), "==> Starting\n");
+        // `bunny report` in the new system finds it as not sent yet.
+        assert_eq!(
+            unsent(&sessions),
+            [sessions.join("20261119-201500-install")]
+        );
+        let meta = read_meta(&copied.with_extension("toml")).unwrap();
+        assert_eq!(meta.args, args);
+        assert_eq!(meta.started, "20261119-201500");
+        assert_eq!(meta.exit_code, Some(0));
+        assert_eq!(meta.reported, None);
     }
 
     #[test]

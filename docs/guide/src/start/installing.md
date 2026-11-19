@@ -73,8 +73,21 @@ seconds. A minute later you're at a terminal with a welcome:
   …
 ```
 
+Under it, "Checking the connection…" waits up to about 15 seconds for the
+network, then says one of:
+
+- **✓ You're online.** Skip to step 5.
+- **✗ Not online yet.** Connect first (step 4).
+- **✗ Connected to a network, but it doesn't reach the internet.** Often a
+  network that wants a sign-in page first; use another one.
+- **⚠ Online, but names don't work.** The internet answers, but names like
+  `distfiles.gentoo.org` can't be looked up (DNS), so downloads would fail.
+  It's often just a few seconds late; if it stays, the message shows a line
+  that uses a public name server.
+
 Nothing on the computer changes until you confirm the install in step 6.
-Type `welcome` any time to see the welcome again.
+Type `welcome` any time to see the welcome again and check the connection
+again.
 
 ## 4. Get online
 
@@ -94,10 +107,10 @@ shows your Wi-Fi's name.)
 Check:
 
 ```sh
-ping -c 1 gentoo.org
+welcome
 ```
 
-One line with `bytes from` means you're online.
+It ends with "✓ You're online." when you are.
 
 ## 5. See what will happen (optional)
 

@@ -78,6 +78,31 @@ pub fn run(
     result
 }
 
+/// Starts a step: `==> Partitioning /dev/vda`. On a plain-words dry run
+/// (`--dry-run` without `--verbose`) it's followed by what the step does,
+/// since its commands aren't shown.
+pub(crate) fn say(runner: &dyn Runner, title: &str, what: &str) {
+    print!("{}", heading(runner.describes_steps(), title, what));
+}
+
+fn heading(describe: bool, title: &str, what: &str) -> String {
+    let mut out = format!("\n==> {title}\n");
+    if describe {
+        for line in what.lines() {
+            out.push_str(&format!("    {line}\n"));
+        }
+    }
+    out
+}
+
+/// `  (would write) /etc/fstab` on a dry run that lists every command and
+/// file (`--dry-run --verbose`); nothing on a plain-words one.
+pub(crate) fn would(runner: &dyn Runner, verb: &str, what: &str) {
+    if !runner.describes_steps() {
+        println!("  (would {verb}) {what}");
+    }
+}
+
 /// How the install ended.
 pub struct Finished {
     /// The first `bunny switch` ran and the lock was written.
@@ -89,9 +114,10 @@ fn make_key(path: &std::path::Path, runner: &dyn Runner) -> Result<()> {
     use std::io::Read;
     use std::os::unix::fs::OpenOptionsExt;
     if runner.dry() {
-        println!(
-            "  (would make) a random key for the /home disk in {}",
-            path.display()
+        would(
+            runner,
+            "make",
+            &format!("a random key for the /home disk in {}", path.display()),
         );
         return Ok(());
     }
@@ -106,4 +132,61 @@ fn make_key(path: &std::path::Path, runner: &dyn Runner) -> Result<()> {
     use std::io::Write;
     file.write_all(&key)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_plain_dry_run_says_what_each_step_does() {
+        let text = heading(
+            true,
+            "Partitioning /dev/vda",
+            "Erases the old partition table.\nMakes two partitions.",
+        );
+        assert_eq!(
+            text,
+            "\n==> Partitioning /dev/vda\n    Erases the old partition table.\n    Makes two partitions.\n"
+        );
+        // A real install (and --verbose) shows only the step's name.
+        assert_eq!(
+            heading(false, "Partitioning /dev/vda", "Erases…"),
+            "\n==> Partitioning /dev/vda\n"
+        );
+    }
+
+    #[test]
+    fn a_plain_dry_run_goes_through_every_step() {
+        // The whole install against nothing: every step runs, no command
+        // does anything, and nothing on this computer is touched.
+        let choices = Choices {
+            disk: "/dev/vda".into(),
+            encrypt: true,
+            home_disk: Some("/dev/vdb".into()),
+            swap_mib: 1024,
+            hibernate: true,
+            mnt: "/nonexistent/bunny-test".into(),
+            ..Default::default()
+        };
+        let account = Account {
+            username: "you".into(),
+            hostname: "laptop".into(),
+            ssh: false,
+            timezone: "UTC".into(),
+            keymap: "us".into(),
+        };
+        let mut runner = crate::apply::StepsRunner;
+        let finished = run(
+            &choices,
+            &account,
+            "a password",
+            &first_config::Source::Starter,
+            false,
+            &mut runner,
+        )
+        .unwrap();
+        assert!(finished.switched);
+        assert!(!std::path::Path::new("/nonexistent/bunny-test").exists());
+    }
 }

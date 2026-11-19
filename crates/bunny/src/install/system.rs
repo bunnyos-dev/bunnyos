@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use super::layout::{Choices, Uuids, HOME_KEY};
+use super::say;
 use crate::apply::Runner;
 
 pub const MIRROR: &str = "https://distfiles.gentoo.org/releases/amd64/autobuilds";
@@ -68,14 +69,10 @@ fn s(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|p| p.to_string()).collect()
 }
 
-fn say(text: &str) {
-    println!("\n==> {text}");
-}
-
 /// Writes a file in the new system, or says it would on a dry run.
 fn put(runner: &dyn Runner, path: &Path, text: &str, mode: Option<u32>) -> Result<()> {
     if runner.dry() {
-        println!("  (would write) {}", path.display());
+        super::would(runner, "write", &path.display().to_string());
         return Ok(());
     }
     if let Some(parent) = path.parent() {
@@ -92,7 +89,7 @@ fn put(runner: &dyn Runner, path: &Path, text: &str, mode: Option<u32>) -> Resul
 
 fn append(runner: &dyn Runner, path: &Path, text: &str) -> Result<()> {
     if runner.dry() {
-        println!("  (would add to) {}", path.display());
+        super::would(runner, "add to", &path.display().to_string());
         return Ok(());
     }
     let mut old = std::fs::read_to_string(path).unwrap_or_default();
@@ -104,10 +101,20 @@ fn append(runner: &dyn Runner, path: &Path, text: &str) -> Result<()> {
 /// new system.
 pub fn unpack_stage3(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
     let mnt = &choices.mnt;
-    say("Setting the clock (downloads check it)");
+    say(
+        runner,
+        "Setting the clock (downloads check it)",
+        "Sets this computer's clock from the internet: secure downloads and\n\
+         the prebuilt packages' signatures can only be checked with the right time.",
+    );
     let _ = runner.run(&s(&["chronyd", "-q", "server pool.ntp.org iburst"]));
 
-    say("Downloading Gentoo's newest base system (stage3)");
+    say(
+        runner,
+        "Downloading Gentoo's newest base system (stage3)",
+        "Downloads the newest OpenRC stage3 (Gentoo's starting point: a small,\n\
+         working system) and its checksums from distfiles.gentoo.org.",
+    );
     let listing = runner.output(&s(&[
         "wget",
         "-qO-",
@@ -140,7 +147,12 @@ pub fn unpack_stage3(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
         }
     }
 
-    say("Checking the download");
+    say(
+        runner,
+        "Checking the download",
+        "Compares the download with Gentoo's SHA512 checksum, so a damaged\n\
+         file is never used.",
+    );
     if !runner.dry() {
         let text = std::fs::read_to_string(&digests).context("Couldn't read the checksum file")?;
         let Some(expected) = sha512_for(&text, &file) else {
@@ -155,7 +167,11 @@ pub fn unpack_stage3(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
         }
     }
 
-    say("Unpacking");
+    say(
+        runner,
+        "Unpacking",
+        &format!("Unpacks the base system into {}.", mnt.display()),
+    );
     if !runner.run(&s(&[
         "tar",
         "xpf",
@@ -184,7 +200,13 @@ pub fn configure(
     runner: &mut dyn Runner,
 ) -> Result<()> {
     let mnt = &choices.mnt;
-    say("Writing the new system's settings");
+    say(
+        runner,
+        "Writing the new system's settings",
+        "Writes Portage's settings (prebuilt packages from Gentoo, checked\n\
+         signatures), fstab (what to mount at startup), the startup image's\n\
+         settings, admin rights for your account with sudo, and copies bunny in.",
+    );
     append(
         runner,
         &mnt.join("etc/portage/make.conf"),
@@ -226,7 +248,11 @@ pub fn configure(
             Some(0o600),
         )?;
         if runner.dry() {
-            println!("  (would copy) the /home disk's key to /{HOME_KEY}");
+            super::would(
+                runner,
+                "copy",
+                &format!("the /home disk's key to /{HOME_KEY}"),
+            );
         } else {
             let to = mnt.join(HOME_KEY);
             if let Some(parent) = to.parent() {
@@ -295,7 +321,7 @@ pub fn configure(
 
     // bunny itself, so it's there on the first start.
     if runner.dry() {
-        println!("  (would copy) bunny to /usr/local/bin/bunny");
+        super::would(runner, "copy", "bunny to /usr/local/bin/bunny");
     } else {
         let exe = std::env::current_exe().context("Couldn't find bunny's own file to copy")?;
         let to = mnt.join("usr/local/bin/bunny");
@@ -336,7 +362,13 @@ pub fn install_inside(
             );
         }
     }
-    say("Installing inside the new system (prebuilt packages; this takes a while)");
+    say(
+        runner,
+        "Installing inside the new system (prebuilt packages; this takes a while)",
+        "Inside the new system: installs the kernel, GRUB (named Bunny Linux),\n\
+         networking and the other base packages, prebuilt from Gentoo; sets\n\
+         the time zone and keyboard; adds your account and sets its password.",
+    );
     if !runner.run(&s(&["chroot", &mnt, "/bin/bash", "/root/bunny-inside.sh"]))? {
         bail!(
             "Installing inside the new system failed (the message is above).\n  \
@@ -388,7 +420,11 @@ pub fn finish(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
     let mnt = choices.mnt.to_string_lossy().into_owned();
     if choices.mounted.is_some() {
         // Your own partitions stay mounted; only what bunny mounted goes.
-        say("Unmounting what bunny mounted (your partitions stay mounted)");
+        say(
+            runner,
+            "Unmounting what bunny mounted (your partitions stay mounted)",
+            "Unmounts /proc, /sys, /dev and /run from the new system.",
+        );
         for dir in ["run", "dev", "sys", "proc"] {
             let _ = runner.run(&s(&[
                 "umount",
@@ -399,7 +435,15 @@ pub fn finish(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
         }
         return Ok(());
     }
-    say("Unmounting");
+    say(
+        runner,
+        "Unmounting",
+        if choices.encrypt {
+            "Unmounts the new system and locks the encrypted disk again."
+        } else {
+            "Unmounts the new system."
+        },
+    );
     let _ = runner.run(&s(&["umount", "--recursive", "--lazy", &mnt]));
     if choices.encrypt {
         if choices.home_disk.is_some() {

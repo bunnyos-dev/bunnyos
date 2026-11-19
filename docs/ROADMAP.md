@@ -308,7 +308,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [ ] **"Welcome to your new account!"** appears above the welcome on the
       live USB, which is confusing there (it isn't a new account). Find what
       prints it at the first login and turn it off on the USB.
-- [ ] **`bunny install --dry-run` is a wall of commands.** Every
+- [~] **`bunny install --dry-run` is a wall of commands.** Every
       `(would run)` line is shown, and long ones wrap. Decided with the
       maintainer: by default, the steps in plain words (each step's name and
       what it does); the exact commands only with `--dry-run --verbose`.

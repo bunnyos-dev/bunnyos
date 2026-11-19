@@ -667,7 +667,9 @@ GPT
   key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
   only to the tools' standard input, never to files or the screen. On a
   failure everything is unmounted and closed, so a second run starts clean.
-  `--dry-run` prints every command and file (PrintRunner).
+  `--dry-run` shows each step's name and what it does in plain words
+  (StepsRunner); `--dry-run --verbose` prints every command and file
+  (PrintRunner).
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 

@@ -10,6 +10,8 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Live USB: "Welcome to your new account!" no longer appears above the
+  welcome each time it starts.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

@@ -95,14 +95,17 @@ changing anything.
 (foot is the terminal Mango opens, and DejaVu is a font, since a fresh
 system has none.)
 
-Mango needs two services running: `elogind` (it gives you access to the
-screen and keyboard) and `dbus`. Open `bunny.toml`:
+Mango gets the screen and keyboard through **elogind**, which Bunny
+Linux's minimal system doesn't use yet. Three changes turn it on: the
+`elogind` and `dbus` services, logins that go through elogind (`pambase`),
+and the small library Mango asks for the screen (`seatd`). Open
+`bunny.toml`:
 
 ```sh
 sudo nano /etc/bunny/bunny.toml
 ```
 
-and add them to `services`:
+Add the two services to `services`:
 
 ```toml
 services = [
@@ -113,14 +116,29 @@ services = [
 ]
 ```
 
+and these at the end of the file:
+
+```toml
+[pkg."sys-auth/pambase"]
+use = ["elogind"]
+
+[pkg."sys-auth/seatd"]
+use = ["elogind"]
+```
+
 Save (Ctrl+O, Enter), close (Ctrl+X), and apply:
 
 ```sh
 bunny switch
 ```
 
-Restart, log in, copy Mango's starting settings so you can change them, and
-start it:
+It may say a font is no longer needed (the one something else pulled in
+before DejaVu); that's fine to remove.
+
+**Log out and back in** (`exit`), so your login goes through elogind.
+`echo $XDG_RUNTIME_DIR` should now print `/run/user/1000`. Then, at the
+computer itself (not over SSH, which has no screen), copy Mango's starting
+settings so you can change them, and start it:
 
 ```sh
 mkdir -p ~/.config/mango
@@ -133,7 +151,12 @@ Everything else is in `~/.config/mango/config.conf`; Super+R reloads it.
 
 > **Prefer something in Gentoo's own tree?** Sway works the same way without
 > a second repository: `bunny add gui-wm/sway gui-apps/foot media-fonts/dejavu
-> sys-auth/elogind sys-apps/dbus`, the same two services, then `sway`
-> (Super+Enter for a terminal, Super+Shift+E to leave).
+> sys-auth/elogind sys-apps/dbus`, the same services and `[pkg]` lines, then
+> `sway` (Super+Enter for a terminal, Super+Shift+E to leave).
+
+If `mango` says "XDG_RUNTIME_DIR must be set", your login isn't going through
+elogind yet: check the `pambase` lines and log in again. "No backend was
+able to open a seat" means the `seatd` lines are missing, or you started it
+over SSH.
 
 Next: the rest of [Everyday tasks](../tasks/status.md).

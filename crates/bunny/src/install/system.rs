@@ -22,6 +22,10 @@ pub struct Account {
     pub hostname: String,
     /// Start the SSH server at boot (off unless asked for).
     pub ssh: bool,
+    /// e.g. `America/Toronto` (a name under /usr/share/zoneinfo).
+    pub timezone: String,
+    /// The console keyboard layout, e.g. `us`.
+    pub keymap: String,
 }
 
 /// The stage3 path from `latest-stage3-amd64-openrc.txt` (a signed text
@@ -51,25 +55,12 @@ pub fn sha512_for(digests: &str, file: &str) -> Option<String> {
     None
 }
 
-/// The packages for a minimal Bunny Linux system.
+/// The packages for a minimal Bunny Linux system: what the computer needs
+/// to start, then the rest (the same lists `bunny install` writes into the
+/// new system's config).
 pub fn packages(choices: &Choices) -> Vec<&'static str> {
-    let mut out = vec![
-        "sys-kernel/installkernel",
-        "sys-kernel/gentoo-kernel-bin",
-        "sys-kernel/linux-firmware",
-        "sys-boot/grub",
-        "sys-boot/efibootmgr",
-        "sys-fs/btrfs-progs",
-        "sys-fs/dosfstools",
-        "net-misc/dhcpcd",
-        "net-wireless/iwd",
-        "app-admin/sysklogd",
-        "app-admin/sudo",
-        "dev-vcs/git",
-    ];
-    if choices.encrypt {
-        out.push("sys-fs/cryptsetup");
-    }
+    let mut out = super::starter::boot_packages(choices);
+    out.extend(super::starter::BASE_PACKAGES);
     out
 }
 
@@ -266,10 +257,7 @@ pub fn configure(
         Some(0o440),
     )?;
 
-    let mut services = vec!["dhcpcd", "sysklogd"];
-    if account.ssh {
-        services.push("sshd");
-    }
+    let services = super::starter::services(account);
     let mut boot_services = Vec::new();
     if uuids.home_luks.is_some() {
         boot_services.push("dmcrypt");
@@ -288,9 +276,11 @@ pub fn configure(
         runner,
         &mnt.join("root/bunny-install.env"),
         &format!(
-            "HOST={}\nUSERNAME={}\nCMDLINE=\"{cmdline}\"\nPACKAGES=\"{}\"\nSERVICES=\"{}\"\nBOOT_SERVICES=\"{boot_services}\"\n",
+            "HOST={}\nUSERNAME={}\nTIMEZONE={}\nKEYMAP={}\nCMDLINE=\"{cmdline}\"\nPACKAGES=\"{}\"\nSERVICES=\"{}\"\nBOOT_SERVICES=\"{boot_services}\"\n",
             account.hostname,
             account.username,
+            account.timezone,
+            account.keymap,
             packages(choices).join(" "),
             services.join(" "),
         ),
@@ -464,6 +454,8 @@ mod tests {
             username: "you".into(),
             hostname: "laptop".into(),
             ssh: true,
+            timezone: "America/Toronto".into(),
+            keymap: "us".into(),
         };
         let uuids = Uuids {
             efi: "ABCD-1234".into(),
@@ -495,6 +487,10 @@ mod tests {
         assert!(read("etc/sudoers.d/bunny").contains("%wheel ALL=(ALL:ALL) ALL"));
         let env = read("root/bunny-install.env");
         assert!(env.contains("HOST=laptop\nUSERNAME=you\n"), "{env}");
+        assert!(
+            env.contains("TIMEZONE=America/Toronto\nKEYMAP=us\n"),
+            "{env}"
+        );
         assert!(env.contains("CMDLINE=\"rd.luks.uuid=luks\""), "{env}");
         assert!(env.contains("sys-fs/cryptsetup"), "{env}");
         assert!(env.contains("SERVICES=\"dhcpcd sysklogd sshd\""), "{env}");

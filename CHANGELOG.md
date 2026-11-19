@@ -16,6 +16,16 @@ a minor version can change how things work).
   system with the Bunny Linux layout. Options for no encryption, a swapfile,
   hibernation, a second disk for `/home`, and SSH; `--dry-run` shows every
   step without changing anything.
+- `bunny install` asks for your time zone and keyboard layout, writes a
+  starter `bunny.toml` for the new system, and applies it before you restart,
+  so the system starts matching its config (with the boot menu's Undo entry
+  on). `--config` installs from your own config (a file, or a git repository
+  like `github:you/my-system`), checked before anything is erased; `--edit`
+  lets you change it first.
+- New: host files. `hosts/<computer name>.toml` next to `bunny.toml` adds
+  packages, services and USE flags for one computer only, so the main config
+  works everywhere. `bunny install` writes one with what the computer needs
+  to start and a record of its disk.
 - Undo now puts the kernel back on systems where `/boot` is its own partition
   (usually encrypted ones). Each generation keeps a copy of its kernel on
   `/boot`, shared when nothing changed; `bunny rollback` restores it and says

@@ -154,6 +154,42 @@ With sudo, Bunny Linux also:
 `sudo-rs` (a memory-safe rewrite of sudo) is planned once Gentoo marks it
 stable.
 
+## Host files
+
+A file named after a computer, in a `hosts/` folder next to `bunny.toml`,
+holds what belongs to that computer only:
+
+```
+/etc/bunny/
+├── bunny.toml          everything you choose, the same on every computer
+├── bunny.lock
+└── hosts/
+    ├── laptop.toml     read only on the computer named laptop
+    └── desktop.toml
+```
+
+When bunny runs on `laptop`, it reads `bunny.toml`, then
+`hosts/laptop.toml` on top. `bunny check` says when it used one:
+`✓ /etc/bunny/bunny.toml (with /etc/bunny/hosts/laptop.toml, for this computer) looks good.`
+The computer's name comes from `/etc/conf.d/hostname`.
+
+A host file can have:
+
+| Setting | What it does |
+|---|---|
+| `packages` | Added to the main list. A package in both is fine. |
+| `services` | Added to the main list. |
+| `[pkg."category/name"]` | USE flags for this computer. For a package in both files, the host file's entry wins. |
+| `[machine]` | A record of how `bunny install` set up the disk: `disk`, `encrypted`, `efi_uuid`, `root_uuid`, `luks_uuid`, `home_disk`, `swap`, `hibernate`, `timezone`, `keymap`. bunny reads it but never changes disks from it. |
+
+`bunny install` writes one with what the computer needs to start (the kernel,
+firmware, GRUB, filesystem tools, `cryptsetup` for an encrypted disk) and the
+`[machine]` record. `bunny add` and `bunny remove` change `bunny.toml`, not
+the host file; edit the host file by hand.
+
+> **Known limit:** undo puts back `bunny.toml` and `bunny.lock`, but not the
+> host file. It rarely changes; if you edit it and then undo, check it.
+
 ## The TOML section trap
 
 In TOML, **everything below a `[section]` header belongs to that section**.

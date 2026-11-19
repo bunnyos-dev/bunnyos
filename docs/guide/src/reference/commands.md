@@ -43,7 +43,7 @@ That's useful for testing.
 
 | Command | What it does |
 |---|---|
-| `bunny install` | Erases a disk and installs Bunny Linux on it, from a live USB. Shows exactly what will be erased and asks you to type the disk's name. Options and every step: [bunny install, in detail](install.md). |
+| `bunny install` | Erases a disk and installs Bunny Linux on it, from a live USB. Shows exactly what will be erased and asks you to type the disk's name, then sets up your config (a starter one, or yours with `--config`) and applies it. Options and every step: [bunny install, in detail](install.md). |
 
 ## Developer mode
 

@@ -245,6 +245,12 @@ enum Command {
         /// Start the SSH server at boot
         #[arg(long)]
         ssh: bool,
+        /// Stop before the config is applied, so you can edit it first
+        #[arg(long)]
+        edit: bool,
+        /// Install from your own config: a bunny.toml, or a git repository (github:you/my-system)
+        #[arg(long, value_name = "FILE OR REPO")]
+        config: Option<String>,
         /// Show everything it would do, without erasing or changing anything
         #[arg(long)]
         dry_run: bool,
@@ -363,6 +369,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             hibernate,
             home_disk,
             ssh,
+            edit,
+            config,
             dry_run,
             lsblk,
         } => commands::install_cmd(commands::InstallArgs {
@@ -373,6 +381,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             hibernate,
             home_disk,
             ssh,
+            edit,
+            config,
             dry_run,
             lsblk,
         }),

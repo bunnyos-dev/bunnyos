@@ -10,6 +10,7 @@ use anyhow::{bail, Context};
 use super::is_root;
 use crate::apply::{self, Runner};
 use crate::install::disks::{self, Disk};
+use crate::install::first_config;
 use crate::install::layout::{self, Choices};
 use crate::install::system::Account;
 use crate::interrupt;
@@ -23,6 +24,10 @@ pub(crate) struct Args {
     pub hibernate: bool,
     pub home_disk: Option<String>,
     pub ssh: bool,
+    /// Stop so the config can be edited before it's applied.
+    pub edit: bool,
+    /// Your own config: a bunny.toml, or a git repository.
+    pub config: Option<String>,
     pub dry_run: bool,
     /// Read the list of disks from this file instead of lsblk (for testing).
     pub lsblk: Option<PathBuf>,
@@ -82,6 +87,29 @@ pub(crate) fn valid_hostname(name: &str) -> bool {
         && !name.starts_with('-')
         && !name.ends_with('-')
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// A time zone name like `America/Toronto`: a file under /usr/share/zoneinfo
+/// when that's there to check (it is on the USB).
+pub(crate) fn valid_timezone(name: &str, zoneinfo: &std::path::Path) -> bool {
+    let shaped = !name.is_empty()
+        && !name.starts_with('/')
+        && !name
+            .split('/')
+            .any(|p| p.is_empty() || p == "." || p == "..")
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/_-+".contains(c));
+    shaped && (!zoneinfo.is_dir() || zoneinfo.join(name).is_file())
+}
+
+/// A console keyboard layout like `us`, `uk` or `de-latin1`.
+pub(crate) fn valid_keymap(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 40
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
 }
 
 /// RAM size in MiB, from /proc/meminfo.
@@ -152,6 +180,14 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
             );
         }
     }
+
+    // Your own config is fetched and checked before anything is erased.
+    let mut check_runner: Box<dyn Runner> = if args.dry_run {
+        Box::new(apply::PrintRunner)
+    } else {
+        Box::new(apply::SystemRunner)
+    };
+    let source = first_config::prepare(args.config.as_deref(), check_runner.as_mut())?;
 
     let json = match &args.lsblk {
         Some(file) => std::fs::read_to_string(file)
@@ -239,6 +275,33 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         "  A minimal system: OpenRC, a kernel, networking, your account with sudo, and bunny.\n  \
          No desktop yet: adding one with bunny is the first thing the Guide shows."
     );
+    match &source {
+        first_config::Source::Starter => println!(
+            "  A starter config in /etc/bunny/bunny.toml, applied before you restart{}.",
+            if args.edit {
+                " (you edit it first)"
+            } else {
+                ""
+            }
+        ),
+        first_config::Source::File(path) => println!(
+            "  Your config from {}, applied before you restart{}.",
+            path.display(),
+            if args.edit {
+                " (you edit it first)"
+            } else {
+                ""
+            }
+        ),
+        first_config::Source::Repo { url, .. } => println!(
+            "  Your config from {url}, applied before you restart{}.",
+            if args.edit {
+                " (you edit it first)"
+            } else {
+                ""
+            }
+        ),
+    }
 
     if args.dry_run {
         println!("\nThis is a dry run: nothing will be erased, and commands are only printed.");
@@ -270,6 +333,31 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         }
         println!("Use letters, digits and -, like laptop or my-desktop.");
     };
+    let zoneinfo = std::path::Path::new("/usr/share/zoneinfo");
+    let timezone = loop {
+        let name = ask_line("Time zone (e.g. America/Toronto, Europe/London; Enter for UTC): ")?;
+        let name = if name.is_empty() {
+            "UTC".to_string()
+        } else {
+            name
+        };
+        if valid_timezone(&name, zoneinfo) {
+            break name;
+        }
+        println!("That isn't a time zone name. Use Region/City, like America/Toronto.");
+    };
+    let keymap = loop {
+        let name = ask_line("Keyboard layout (e.g. us, uk, de, fr; Enter for us): ")?;
+        let name = if name.is_empty() {
+            "us".to_string()
+        } else {
+            name
+        };
+        if valid_keymap(&name) {
+            break name;
+        }
+        println!("Use a layout name like us, uk, de or fr.");
+    };
     if choices.encrypt {
         println!(
             "\nOne password, for your account and for unlocking the disk when the computer starts."
@@ -291,18 +379,34 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         username,
         hostname,
         ssh: args.ssh,
+        timezone,
+        keymap,
     };
     let mut runner: Box<dyn Runner> = if args.dry_run {
         Box::new(apply::PrintRunner)
     } else {
         Box::new(apply::SystemRunner)
     };
-    crate::install::run(&choices, &account, &password, runner.as_mut())?;
+    let finished = crate::install::run(
+        &choices,
+        &account,
+        &password,
+        &source,
+        args.edit,
+        runner.as_mut(),
+    )?;
 
     if args.dry_run {
         println!("\n✓ Dry run finished. Nothing was changed.");
     } else {
         println!("\n✓ Bunny Linux is installed on {}.", disk.path);
+        if finished.switched {
+            println!(
+                "Your config is in /etc/bunny/bunny.toml (and this computer's settings in\n\
+                 /etc/bunny/hosts/{}.toml). It's already applied: bunny status shows ✓.",
+                account.hostname
+            );
+        }
         println!("Next:");
         println!("  1. Restart: reboot");
         println!("  2. Take out the USB stick when the screen goes dark.");
@@ -335,5 +439,24 @@ mod tests {
         assert!(!valid_hostname("-laptop"));
         assert!(!valid_hostname("lap top"));
         assert!(!valid_hostname(""));
+    }
+
+    #[test]
+    fn checks_time_zones_and_keyboards() {
+        let zoneinfo = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(zoneinfo.path().join("America")).unwrap();
+        std::fs::write(zoneinfo.path().join("America/Toronto"), "").unwrap();
+        std::fs::write(zoneinfo.path().join("UTC"), "").unwrap();
+        assert!(valid_timezone("America/Toronto", zoneinfo.path()));
+        assert!(valid_timezone("UTC", zoneinfo.path()));
+        assert!(!valid_timezone("America/Atlantis", zoneinfo.path()));
+        assert!(!valid_timezone("../etc/passwd", zoneinfo.path()));
+        assert!(!valid_timezone("/UTC", zoneinfo.path()));
+        // Without zoneinfo to check against, the shape is enough.
+        let none = std::path::Path::new("/nonexistent");
+        assert!(valid_timezone("Europe/London", none));
+        assert!(!valid_timezone("Europe London", none));
+        assert!(valid_keymap("us") && valid_keymap("de-latin1"));
+        assert!(!valid_keymap("") && !valid_keymap("us uk") && !valid_keymap("a/b"));
     }
 }

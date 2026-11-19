@@ -26,7 +26,7 @@ machine pulls the same setup and you have the history of every change:
 ```sh
 cd /etc/bunny
 sudo git init
-sudo git add bunny.toml bunny.lock
+sudo git add bunny.toml bunny.lock hosts
 sudo git commit -m "My system"
 ```
 
@@ -37,5 +37,10 @@ sudo git commit -m "My system"
   emerge can't install it. Run `bunny update` on the new machine to move to
   current versions.
 - **Different hardware.** Packages that only make sense on one machine (a
-  graphics driver, Bluetooth tools) are best kept out of the shared list.
+  graphics driver, Bluetooth tools) go in that machine's host file,
+  `hosts/<computer name>.toml`, instead of the shared list. See
+  [host files](../reference/config.md#host-files).
+- **Installing from scratch.** On a new computer, `bunny install --config
+  github:you/my-system` installs Bunny Linux straight from your repository
+  (see [bunny install, in detail](../reference/install.md)).
   Per-machine settings are planned.

@@ -5,12 +5,20 @@
 //! default) with a minimal system on it: OpenRC, a kernel, networking, one
 //! user with sudo, and bunny. Packages come from Gentoo's binary host.
 //!
+//! Part 2, the config: the new system gets a `bunny.toml` (a starter one from
+//! your answers, or yours with `--config`) and `hosts/<host name>.toml`, and
+//! its first `bunny switch` and `bunny lock` run before you restart.
+//!
 //! - `disks`: which disks can be used, and what's on them
 //! - `layout`: the partitions, encryption, subvolumes and fstab
 //! - `system`: the base system, its settings, and the rest inside it
+//! - `starter`: the starter `bunny.toml` and this computer's host file
+//! - `first_config`: your config in the new system, and its first switch
 
 pub mod disks;
+pub mod first_config;
 pub mod layout;
+pub mod starter;
 pub mod system;
 
 use anyhow::Result;
@@ -26,10 +34,12 @@ pub fn run(
     choices: &Choices,
     account: &Account,
     password: &str,
+    config: &first_config::Source,
+    edit: bool,
     runner: &mut dyn Runner,
-) -> Result<()> {
+) -> Result<Finished> {
     let home_key = system::home_key_path();
-    let result = (|| -> Result<()> {
+    let result = (|| -> Result<Finished> {
         if choices.home_disk.is_some() && choices.encrypt {
             make_key(&home_key, runner)?;
         }
@@ -39,13 +49,31 @@ pub fn run(
         let cmdline = choices.cmdline(&uuids, offset.as_deref());
         system::unpack_stage3(choices, runner)?;
         system::configure(choices, account, &uuids, &cmdline, &home_key, runner)?;
-        system::install_inside(choices, account, password, runner)
+        system::install_inside(choices, account, password, runner)?;
+        let config_path = first_config::put_in_place(config, choices, account, &uuids, runner)?;
+        if edit {
+            // Problems left after editing: the starter settings already in
+            // the new system still work, so this doesn't stop the install.
+            if let Err(err) = first_config::edit(&config_path, &account.hostname, runner) {
+                println!("\n⚠ {err:#}. bunny didn't apply it; fix it after restarting.");
+                return Ok(Finished { switched: false });
+            }
+        }
+        let switched = first_config::first_switch(choices, account, &config_path, runner)?;
+        Ok(Finished { switched })
     })();
     let _ = system::finish(choices, runner);
+    first_config::clean_up(config, runner);
     if !runner.dry() {
         let _ = std::fs::remove_file(&home_key);
     }
     result
+}
+
+/// How the install ended.
+pub struct Finished {
+    /// The first `bunny switch` ran and the lock was written.
+    pub switched: bool,
 }
 
 /// A random key for the /home disk, readable only by root.

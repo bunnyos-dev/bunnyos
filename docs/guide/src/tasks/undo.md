@@ -73,23 +73,34 @@ Turn on the boot menu's undo entry once, in `bunny.toml`:
 undo_entry = true
 ```
 
-and run `bunny switch`. From then on, every change adds an entry to the boot
-menu:
+and run `bunny switch`. From then on, the boot menu has two of bunny's
+entries, right under Bunny Linux's own:
 
 ```
-Bunny Linux: undo the last change (back to 2026-11-17 09:15:00 UTC)
+Bunny Linux
+Advanced options for Bunny Linux
+Undo the last change (+ mangowm, + dejavu, Nov 18, 7:03 PM)
+Earlier versions (11 saved)
+UEFI Firmware Settings
 ```
 
-If a change leaves the system unable to start, restart, pick that entry, and
-the system starts as it was before the change. It's the same as `bunny
-rollback`, done while starting up: the broken system is saved too, so you can
-go back to it with `bunny rollback list`.
+**Undo the last change** says what it undoes and when (in your time zone).
+If a change leaves the system unable to start, restart, pick it, and the
+system starts as it was before the change. It's the same as `bunny
+rollback`, done while starting up: the broken system is saved too, so you
+can go back to it with `bunny rollback list`.
 
-After you've used it, the entry is gone until your next change, so you
-can't go further back by picking it again. (The same happens after `bunny
-rollback`.) To move between saved versions after that, use `bunny rollback
-list`. If the entry is somehow picked twice for the same change, the second
+After you've used it, it's gone until your next change, so you can't go
+further back by picking it again. (The same happens after `bunny
+rollback`.) If it's somehow picked twice for the same change, the second
 time does nothing and the computer starts normally.
+
+**Earlier versions** lists the newest 10 saved versions, newest first, like
+`Nov 18, 7:03 PM · before + repository guru, + mangowm, + dejavu`. Pick one
+to see what came after it, one change per line, and **Go back to this
+version** to start from it. That's undoable too. (The lines describing the
+changes do nothing when picked: GRUB can only show menu entries.) `bunny
+clean` removes the ones it deletes.
 
 If the boot menu doesn't show up when you start the computer, hold **Shift**
 (or press **Esc**) while it starts.

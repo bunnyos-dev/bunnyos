@@ -179,6 +179,10 @@ pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<E
             if let Err(e) = kernels::tidy(root) {
                 println!("Note: couldn't remove old kernel copies from /boot ({e:#}).");
             }
+            // The boot menu's Earlier versions shouldn't list removed ones.
+            if let Err(e) = crate::apply::refresh_earlier(root) {
+                println!("Note: couldn't update the boot menu's Earlier versions ({e:#}).");
+            }
         }
         if failed.is_empty() {
             println!("✓ Removed.");
@@ -309,7 +313,7 @@ pub(crate) fn rollback_cmd(
     }
     if outcome.undo_entry_dropped {
         println!(
-            "  The boot menu's \"undo the last change\" entry is gone until your next change,\n  \
+            "  The boot menu's \"Undo the last change\" entry is gone until your next change,\n  \
              so picking it can't take you further back by accident."
         );
     }

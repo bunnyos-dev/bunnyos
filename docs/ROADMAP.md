@@ -304,7 +304,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `(would run)` line is shown, and long ones wrap. Decided with the
       maintainer: by default, the steps in plain words (each step's name and
       what it does); the exact commands only with `--dry-run --verbose`.
-- [ ] **A clean boot menu, soon (not waiting for phase 9).** The maintainer
+- [~] **A clean boot menu, soon (not waiting for phase 9).** The maintainer
       found the menu overwhelming: the Gentoo logo behind it, "Bunny Linux
       GNU/Linux", and every firmware entry (UiApp, DVD-ROM, PXE and HTTP
       boot, a second "Bunny Linux (EFI BootNext)"), with the Undo entry last
@@ -326,7 +326,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       - GRUB can't show plain text lines, so the change lines are entries
         that do nothing when picked. Hidden menu (Esc to show) and the
         real theme stay in phase 9.
-- [ ] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
+- [~] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
       (once from GRUB's settings, once added by bunny). Harmless; add it
       only when it isn't already there.
 - [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")

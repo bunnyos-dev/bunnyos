@@ -2,7 +2,8 @@
 # bunny-vm.sh: Bunny Linux test VM (UEFI + Secure Boot + TPM 2.0 + KVM + 3D)
 #
 # Usage:
-#   ./bunny-vm.sh run [file.iso]   start the VM (boots the ISO if given)
+#   ./bunny-vm.sh run [file.iso]   start the VM (boots the ISO if given;
+#                                  ISO=file.iso does the same)
 #   ./bunny-vm.sh stop             shut the running VM down (asks for its password)
 #   ./bunny-vm.sh snap <name>      save a snapshot (VM must be off)
 #   ./bunny-vm.sh restore <name>   go back to a snapshot (VM must be off)
@@ -140,7 +141,7 @@ stop() {
 }
 
 case "${1:-run}" in
-    run)        shift 2>/dev/null || true; run "${1:-}" ;;
+    run)        shift 2>/dev/null || true; run "${1:-${ISO:-}}" ;;
     stop)       stop ;;
     snap)       check_off; qemu-img snapshot -c "${2:?name needed}" "$DISK"; echo "✓ Saved snapshot: $2" ;;
     restore)    check_off; qemu-img snapshot -a "${2:?name needed}" "$DISK"; echo "✓ Restored: $2" ;;

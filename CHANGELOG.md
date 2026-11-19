@@ -26,6 +26,9 @@ a minor version can change how things work).
   mounted yourself, without erasing anything. It explains what limits your
   layout (like no undo on ext4) and can make the standard btrfs subvolumes
   on an empty filesystem.
+- New: the Bunny Linux live USB image. `tools/build-iso.sh` builds it; it
+  starts to a terminal with a welcome that explains `bunny install`, links
+  the Guide and says how to get online.
 - New: host files. `hosts/<computer name>.toml` next to `bunny.toml` adds
   packages, services and USE flags for one computer only, so the main config
   works everywhere. `bunny install` writes one with what the computer needs

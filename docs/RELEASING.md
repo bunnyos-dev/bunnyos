@@ -34,6 +34,10 @@ behaviour, and the patch version (`0.2.0` → `0.2.1`) for fixes only.
    - `bunny-x86_64-linux.sha256`: its checksum
    - the release notes, taken from that version's section of
      `CHANGELOG.md`
+   - a few minutes later, from **Actions → ISO**: the live USB image
+     `bunny-linux-live-<version>.iso` and its `.sha256`. That workflow builds
+     the image with `tools/build-iso.sh` and boots it in QEMU first; if it
+     doesn't start, nothing is attached.
 
 If the tag doesn't match the version in `Cargo.toml`, or `CHANGELOG.md` has no
 section for it, the release stops before publishing anything and says which.
@@ -48,6 +52,18 @@ sudo install -m 755 bunny-x86_64-linux /usr/local/bin/bunny
 ```
 
 (Later, the `bunny-overlay` ebuild installs releases with `emerge`.)
+
+## Trying the live USB image without releasing
+
+The ISO workflow also runs on pull requests that change the image
+(`tools/build-iso.sh`, `tools/iso/`), and from **Actions → ISO → Run
+workflow**. The ISO is kept for 7 days as a download on the run's page
+(`bunny-linux-live-preview`). To build it yourself:
+
+```sh
+doas tools/build-iso.sh target/x86_64-unknown-linux-musl/release/bunny
+tools/bunny-vm.sh run bunny-linux-live.iso
+```
 
 ## Trying the release build without releasing
 

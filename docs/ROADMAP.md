@@ -136,7 +136,7 @@ feature PRs now update it as they go.)
 Agreed with the maintainer: make the code easy for other people to read and
 review before the installer adds a lot more of it.
 
-- [ ] **Split the big files:** `apply.rs` (about 1,800 lines) into smaller
+- [~] **Split the big files:** `apply.rs` (about 1,800 lines) into smaller
       modules (the switch steps, quiet install and removal, package.use
       takeover, admin rights), and the command handlers out of `main.rs`
       into their own modules. Long functions (`switch`, `install_quietly`)

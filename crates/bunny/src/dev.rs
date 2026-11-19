@@ -165,7 +165,7 @@ pub fn record_if_on(config: &Path, in_session: bool) -> Option<ExitCode> {
 fn record(args: &[String], subcommand: &str, dev: &Dev) -> Result<ExitCode> {
     let dir = sessions_dir();
     std::fs::create_dir_all(&dir).with_context(|| format!("Couldn't create {}", dir.display()))?;
-    let stamp = crate::timestamp();
+    let stamp = crate::commands::timestamp();
     let base = dir.join(format!("{stamp}-{subcommand}"));
     let log = base.with_extension("log");
     let exe = std::env::current_exe()?;

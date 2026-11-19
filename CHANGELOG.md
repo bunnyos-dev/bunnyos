@@ -10,6 +10,13 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Undo now puts the kernel back on systems where `/boot` is its own partition
+  (usually encrypted ones). Each generation keeps a copy of its kernel on
+  `/boot`, shared when nothing changed; `bunny rollback` restores it and says
+  which kernel you'll get, and the boot menu's undo entry starts it.
+  `bunny status` warns if `/boot` has a kernel the system has no drivers for.
+- `tools/bunny-vm.sh stop` shuts the test VM down from your desktop.
+- `bunny --help` described `report` with `import`'s words; each now has its own.
 - `tools/convert-layout.sh` moves an existing Gentoo on btrfs (with `/` at the
   top of the volume) to the Bunny Linux layout, so undo works. Plan first,
   nothing deleted, and a boot menu entry back to the old system.

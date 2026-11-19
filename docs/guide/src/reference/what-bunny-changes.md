@@ -14,6 +14,7 @@ Everything bunny writes, so nothing is a mystery.
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
 | `/usr/lib/dracut/modules.d/90bunny-rollback/` | The boot menu's undo step, with [`[boot] undo_entry`](config.md#boot). Added to the startup image (`/boot/initramfs-<version>.img`), which is rebuilt once; the old image goes to the backup folder. |
+| `/boot/bunny/` | Only when `/boot` is its own partition: a copy of each generation's kernel files, so undo can put the kernel back. See [Generations](generations.md#when-boot-is-its-own-partition). `bunny clean` removes copies nothing uses. |
 | `/boot/grub/custom.cfg` | The boot menu's undo entry, between `### BEGIN bunny` and `### END bunny`. The rest of the file is kept. |
 | `/var/lib/bunny/news-seen` | How many unread Gentoo news items bunny last told you about, so the tip only comes back when there's something new. |
 | `/var/lib/bunny/applied/` | A copy of the config and lock from the last successful switch, so undoing a later change can put them back. Part of the system, so each generation carries its own. |

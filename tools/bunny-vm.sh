@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./bunny-vm.sh run [file.iso]   start the VM (boots the ISO if given)
+#   ./bunny-vm.sh stop             shut the running VM down (asks for its password)
 #   ./bunny-vm.sh snap <name>      save a snapshot (VM must be off)
 #   ./bunny-vm.sh restore <name>   go back to a snapshot (VM must be off)
 #   ./bunny-vm.sh snaps            list snapshots
@@ -118,8 +119,29 @@ run() {
         $CDROM
 }
 
+stop() {
+    if ! pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; then
+        echo "✓ The VM is already off."
+        return 0
+    fi
+    echo "→ Shutting the VM down (it may ask for your password in the VM)"
+    TERM=xterm-256color ssh -t -p "$PORT" -o StrictHostKeyChecking=no you@localhost \
+        'if command -v doas >/dev/null; then doas poweroff; else sudo poweroff; fi' || true
+    i=0
+    while pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; do
+        i=$((i + 1))
+        if [ "$i" -gt 60 ]; then
+            echo "✗ The VM is still running after a minute. Close its window, or shut it down from inside."
+            exit 1
+        fi
+        sleep 1
+    done
+    echo "✓ The VM is off."
+}
+
 case "${1:-run}" in
     run)        shift 2>/dev/null || true; run "${1:-}" ;;
+    stop)       stop ;;
     snap)       check_off; qemu-img snapshot -c "${2:?name needed}" "$DISK"; echo "✓ Saved snapshot: $2" ;;
     restore)    check_off; qemu-img snapshot -a "${2:?name needed}" "$DISK"; echo "✓ Restored: $2" ;;
     snaps)      qemu-img snapshot -l "$DISK" ;;
@@ -128,5 +150,5 @@ case "${1:-run}" in
                 exec scp -P "$PORT" -o StrictHostKeyChecking=no "$@" you@localhost: ;;
     # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
     ssh)        TERM=xterm-256color exec ssh -p "$PORT" -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
-    *)          sed -n '2,19p' "$0" ;;
+    *)          sed -n '2,18p' "$0" ;;
 esac

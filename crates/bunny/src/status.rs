@@ -58,6 +58,9 @@ pub struct Status {
     pub tree_synced: Option<i64>,
     /// Gentoo security advisories; `None` when not checked (a test root).
     pub security: Option<crate::glsa::Check>,
+    /// Kernels in a separate /boot that this system has no modules (drivers)
+    /// for, e.g. after undoing a kernel update from the boot menu.
+    pub kernels_without_drivers: Vec<String>,
     /// Now (seconds since 1970), passed in so tests are repeatable.
     pub now: i64,
 }
@@ -156,6 +159,12 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
         tree_synced: tree_synced(root),
         // glsa-check reads the real system only.
         security: (root == Path::new("/")).then(crate::glsa::check),
+        kernels_without_drivers: if crate::kernels::separate_boot(&crate::kernels::mountinfo(root))
+        {
+            crate::kernels::missing_modules(root, root)
+        } else {
+            Vec::new()
+        },
         now,
     }
 }
@@ -181,6 +190,7 @@ impl Status {
             && self.generations.is_some()
             && !self.reboot_pending
             && !self.tree_stale()
+            && self.kernels_without_drivers.is_empty()
             && !matches!(&self.security, Some(crate::glsa::Check::Done(found)) if !found.is_empty())
     }
 
@@ -379,6 +389,27 @@ impl Status {
             }
         }
 
+        // Kernel (only shown when something's wrong)
+        if !self.kernels_without_drivers.is_empty() {
+            line(
+                &mut out,
+                "⚠",
+                "Kernel",
+                &format!(
+                    "/boot has kernel {}, but this system has no drivers for it",
+                    self.kernels_without_drivers.join(", ")
+                ),
+            );
+            more(
+                &mut out,
+                "If the computer starts without network or graphics, hold Esc while starting",
+            );
+            more(
+                &mut out,
+                "and pick another kernel under \"Advanced options\".",
+            );
+        }
+
         // Updates
         match self.tree_synced {
             None => {
@@ -563,6 +594,7 @@ mod tests {
             }]),
             tree_synced: Some(NOW - 2 * 86_400),
             security: Some(crate::glsa::Check::Done(vec![])),
+            kernels_without_drivers: vec![],
             now: NOW,
         }
     }
@@ -717,5 +749,16 @@ mod tests {
         assert!(s.render().contains("bunny add app-portage/gentoolkit"));
         s.security = None;
         assert!(!s.render().contains("Security"));
+    }
+
+    #[test]
+    fn a_kernel_without_drivers_is_pointed_out() {
+        let mut s = good();
+        s.kernels_without_drivers = vec!["6.12.60-gentoo-dist".into()];
+        let text = s.render();
+        assert!(!s.all_good());
+        assert!(text.contains("⚠ Kernel"), "{text}");
+        assert!(text.contains("6.12.60-gentoo-dist"), "{text}");
+        assert!(text.contains("Advanced options"), "{text}");
     }
 }

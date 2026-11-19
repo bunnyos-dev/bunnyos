@@ -302,6 +302,13 @@ pub fn switch(
             );
         }
         outcome.snapshot = Some(target);
+        // /boot on its own filesystem (an encrypted system) isn't in the
+        // snapshot: keep this generation's kernel next to it on /boot.
+        if !runner.dry() && crate::kernels::separate_boot(&crate::kernels::mountinfo(root)) {
+            if let Some(note) = save_kernels(root, &format!("bunny-{}", opts.stamp)) {
+                outcome.notes.push(note);
+            }
+        }
         notes::write_note(
             root,
             &format!("bunny-{}", opts.stamp),
@@ -497,6 +504,26 @@ fn install_boot_module(
     Ok(())
 }
 
+/// Keeps a copy of /boot's kernel files for `generation`. Returns a note if
+/// that couldn't be done (the switch goes ahead either way).
+pub fn save_kernels(root: &Path, generation: &str) -> Option<String> {
+    use crate::kernels::Saved;
+    let mb = |b: u64| b.div_ceil(1024 * 1024);
+    match crate::kernels::save(root, generation) {
+        Ok(Saved::Done { .. }) | Ok(Saved::NothingToSave) => None,
+        Ok(Saved::NoRoom { needed, free }) => Some(format!(
+            "There wasn't room on /boot to keep a copy of the kernel ({} MB needed, {} MB free), \
+             so undoing this change can't put the kernel back. `bunny clean` frees space.",
+            mb(needed),
+            mb(free)
+        )),
+        Err(e) => Some(format!(
+            "Couldn't keep a copy of the kernel on /boot ({e:#}), \
+             so undoing this change can't put the kernel back."
+        )),
+    }
+}
+
 /// Points the boot menu's undo entry at this switch's snapshot. Returns a
 /// note for the summary.
 fn write_undo_entry(root: &Path, opts: &Options, outcome: &Outcome) -> Result<Option<String>> {
@@ -515,26 +542,67 @@ fn write_undo_entry(root: &Path, opts: &Options, outcome: &Outcome) -> Result<Op
         )))
     };
 
-    let Some(uuid) = boot::root_uuid(&cmdline) else {
-        return not_added("the system isn't started with root=UUID=…");
-    };
-    let Some(version) = boot::generation_kernel(&generation_dir, running.trim()) else {
-        return not_added("couldn't find a kernel in the saved generation");
-    };
-    if !boot::generation_has_module(&generation_dir, &version) {
-        return not_added("the saved generation's startup image doesn't have the undo step yet");
-    }
     let when = crate::rollback::Generation {
         name: generation.clone(),
     }
     .when();
-    let block = boot::render_entry(
-        &generation,
-        &when,
-        &version,
-        uuid,
-        &boot::undo_cmdline(&cmdline, &generation),
-    );
+    let undo_cmdline = boot::undo_cmdline(&cmdline, &generation);
+
+    let mountinfo = crate::kernels::mountinfo(root);
+    let block = if let Some(device) = crate::kernels::boot_device(&mountinfo) {
+        // /boot is its own filesystem: boot the copies bunny kept there.
+        let Some(saved) = crate::kernels::load(root, &generation) else {
+            return not_added("there's no copy of this generation's kernel on /boot");
+        };
+        let versions = crate::kernels::versions(saved.keys());
+        let running = running.trim();
+        let Some(version) = versions
+            .iter()
+            .find(|v| *v == running)
+            .or_else(|| versions.last())
+        else {
+            return not_added("couldn't find a kernel in the saved generation");
+        };
+        let (Some(kernel), Some(image)) = (
+            saved.get(&format!("vmlinuz-{version}")),
+            saved.get(&format!("initramfs-{version}.img")),
+        ) else {
+            return not_added("the saved generation has no startup image for its kernel");
+        };
+        let store = root.join(crate::kernels::STORE).join("files");
+        if !boot::image_has_module(&generation_dir, &store.join(image)) {
+            return not_added(
+                "the saved generation's startup image doesn't have the undo step yet",
+            );
+        }
+        let Some(boot_uuid) = crate::kernels::device_uuid(root, &device) else {
+            return not_added("couldn't find the UUID of the /boot partition");
+        };
+        let mut initrds: Vec<String> = saved
+            .iter()
+            .filter(|(name, _)| name.ends_with("-uc.img"))
+            .map(|(_, stored)| crate::kernels::grub_path(stored))
+            .collect();
+        initrds.push(crate::kernels::grub_path(image));
+        boot::render_entry_on_boot(
+            &when,
+            &boot_uuid,
+            &crate::kernels::grub_path(kernel),
+            &initrds,
+            &undo_cmdline,
+        )
+    } else {
+        match bootable_from_snapshot(
+            &generation,
+            &generation_dir,
+            &cmdline,
+            running.trim(),
+            &when,
+        ) {
+            Ok(block) => block,
+            Err(why) => return not_added(why),
+        }
+    };
     let path = root.join(boot::CUSTOM_CFG);
     let text = std::fs::read_to_string(&path).unwrap_or_default();
     std::fs::write(&path, boot::merge_custom_cfg(&text, &block))
@@ -543,6 +611,34 @@ fn write_undo_entry(root: &Path, opts: &Options, outcome: &Outcome) -> Result<Op
         "If this change stops the system from starting, pick \"Bunny Linux: undo the last change\" \
          in the boot menu (hold Shift or Esc while starting if the menu is hidden)."
             .to_string(),
+    ))
+}
+
+/// The undo entry when `/boot` is part of the system: the kernel inside the
+/// generation's snapshot. Returns why not, if it can't be made.
+fn bootable_from_snapshot(
+    generation: &str,
+    generation_dir: &Path,
+    cmdline: &str,
+    running: &str,
+    when: &str,
+) -> std::result::Result<String, &'static str> {
+    use crate::boot;
+    let Some(uuid) = boot::root_uuid(cmdline) else {
+        return Err("the system isn't started with root=UUID=…");
+    };
+    let Some(version) = boot::generation_kernel(generation_dir, running) else {
+        return Err("couldn't find a kernel in the saved generation");
+    };
+    if !boot::generation_has_module(generation_dir, &version) {
+        return Err("the saved generation's startup image doesn't have the undo step yet");
+    }
+    Ok(boot::render_entry(
+        generation,
+        when,
+        &version,
+        uuid,
+        &boot::undo_cmdline(cmdline, generation),
     ))
 }
 
@@ -1720,6 +1816,8 @@ mod tests {
         root: PathBuf,
         dracut_ok: bool,
         commands: Vec<String>,
+        /// /boot is its own filesystem, so snapshots don't include it.
+        separate_boot: bool,
     }
 
     impl Runner for Builder {
@@ -1742,9 +1840,24 @@ mod tests {
                     // look newer than the module, as it is on a real snapshot.
                     for sub in [crate::boot::MODULE_DIR, "boot"] {
                         let from = self.root.join(sub);
-                        if from.exists() {
+                        if from.exists() && !(self.separate_boot && sub == "boot") {
                             copy_tree(&from, &target.join(sub)).unwrap();
                         }
+                    }
+                    if self.separate_boot {
+                        // A real snapshot keeps the module's time, which is
+                        // older than the startup image built from it.
+                        let module = target
+                            .join(crate::boot::MODULE_DIR)
+                            .join("bunny-rollback.sh");
+                        let old =
+                            std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
+                        std::fs::File::options()
+                            .write(true)
+                            .open(module)
+                            .unwrap()
+                            .set_modified(old)
+                            .unwrap();
                     }
                     Ok((true, String::new()))
                 }
@@ -1764,6 +1877,7 @@ mod tests {
             root: r.to_path_buf(),
             dracut_ok: true,
             commands: vec![],
+            separate_boot: false,
         };
         let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
 
@@ -1810,6 +1924,7 @@ mod tests {
             root: r.to_path_buf(),
             dracut_ok: false,
             commands: vec![],
+            separate_boot: false,
         };
         let err = switch(&config, r, &plan, &mut runner, &opts())
             .unwrap_err()
@@ -1822,5 +1937,59 @@ mod tests {
             "old image"
         );
         assert!(!r.join(crate::boot::CUSTOM_CFG).exists());
+    }
+
+    #[test]
+    fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
+        let root = bootable_system();
+        let r = root.path();
+        // /boot is the EFI partition; / is encrypted btrfs.
+        write(
+            r,
+            "proc/self/mountinfo",
+            "22 1 0:21 /@ / rw shared:1 - btrfs /dev/mapper/root rw,subvol=/@\n\
+             24 22 259:1 / /boot rw shared:3 - vfat /dev/vda1 rw\n",
+        );
+        write(r, "dev/vda1", "");
+        std::fs::create_dir_all(r.join("dev/disk/by-uuid")).unwrap();
+        std::os::unix::fs::symlink("../../vda1", r.join("dev/disk/by-uuid/ABCD-1234")).unwrap();
+        write(r, "boot/intel-uc.img", "microcode");
+
+        let config = Config::parse(BOOT_CONFIG).unwrap();
+        let plan = plan::make(&config, r).unwrap();
+        let mut runner = Builder {
+            root: r.to_path_buf(),
+            dracut_ok: true,
+            commands: vec![],
+            separate_boot: true,
+        };
+        let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+
+        // The generation's kernel files are kept on /boot.
+        let saved = crate::kernels::load(r, "bunny-20261116-120000").unwrap();
+        assert_eq!(saved.len(), 3, "{saved:?}");
+        assert_eq!(
+            std::fs::read_to_string(r.join("boot/bunny/files/initramfs-6.12.58.img")).unwrap(),
+            "new image with the undo step"
+        );
+
+        let cfg = std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap();
+        assert!(
+            cfg.contains("search --no-floppy --fs-uuid --set=root ABCD-1234"),
+            "{cfg}"
+        );
+        assert!(cfg.contains("linux /bunny/files/vmlinuz-6.12.58 root=UUID=1234-abcd ro rootflags=subvol=@ bunny.rollback=bunny-20261116-120000"), "{cfg}");
+        assert!(
+            cfg.contains("initrd /bunny/files/intel-uc.img /bunny/files/initramfs-6.12.58.img"),
+            "{cfg}"
+        );
+        assert!(
+            outcome
+                .notes
+                .iter()
+                .any(|n| n.contains("undo the last change")),
+            "{:?}",
+            outcome.notes
+        );
     }
 }

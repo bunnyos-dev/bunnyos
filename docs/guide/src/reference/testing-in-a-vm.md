@@ -65,6 +65,7 @@ tools/bunny-vm.sh snap clean-install
 | Command | What it does |
 |---|---|
 | `tools/bunny-vm.sh run` | Start the VM |
+| `tools/bunny-vm.sh stop` | Shut the VM down (asks for your password in the VM) |
 | `tools/bunny-vm.sh ssh` | Log in from your terminal (copy and paste work here) |
 | `tools/bunny-vm.sh put <file>` | Copy a file into the VM's home folder |
 | `tools/bunny-vm.sh restore clean-install` | Go back to the clean install (VM off) |

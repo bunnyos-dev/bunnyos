@@ -191,7 +191,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [~] **ISO in CI:** a GitHub Actions workflow builds the ISO on a tag (and
       by hand), with SHA256 sums, attached to the GitHub Release.
       `tools/bunny-vm.sh` can boot it (`ISO=…`).
-- [ ] **Guide: "Install Bunny Linux":** writing the USB, booting it,
+- [~] **Guide: "Install Bunny Linux":** writing the USB, booting it,
       `bunny install` step by step, first boot, and "what to do first" (add a
       desktop, set up your config in git). Plus a page on turning on
       developer mode during the dry run.

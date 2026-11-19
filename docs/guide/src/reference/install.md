@@ -4,9 +4,10 @@
 [the Bunny Linux disk layout](disk-layout.md) on it, and installs a
 minimal system. It runs from a live USB.
 
-> **Planned:** the Bunny Linux USB image, and a step-by-step "Install Bunny
-> Linux" chapter. Until then, `bunny install` runs from Gentoo's minimal
-> install USB, with the `bunny` file copied onto it.
+> Step by step, for a first install: [Install Bunny Linux](../start/installing.md).
+> This page has every option and exactly what happens. `bunny install` runs
+> from the Bunny Linux live USB (it also works from Gentoo's minimal install
+> USB, with the `bunny` file copied onto it).
 
 ## What you get
 

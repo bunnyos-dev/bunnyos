@@ -43,10 +43,10 @@ config, nothing is lost:
 | Step | Command |
 |---|---|
 | Snapshot | `btrfs subvolume snapshot -r / /.snapshots/bunny-<time>` |
-| See what would be installed | `emerge --pretend --update --deep --newuse @world` |
+| See what would be installed | bunny's Portage helper (`bunny-portage.py plan`, Portage's own library); `emerge --pretend --update --deep --newuse @world` if it can't answer |
 | Install / update | `emerge --update --deep --newuse --quiet-build=y @world` |
-| See what's unused | `emerge --depclean --pretend` |
-| Remove unused | `emerge --depclean` (after bunny asks, always) |
+| See what's unused | bunny's Portage helper (`bunny-portage.py depclean`); `emerge --depclean --pretend` if it can't answer |
+| Remove unused | `emerge --depclean =<each package shown>` (after bunny asks, always); plain `emerge --depclean` when the list came from emerge's text |
 | New repositories | `wget -qO- https://api.gentoo.org/overlays/repositories.xml` (Gentoo's list), then `emaint sync --repo <name>`, right after the snapshot |
 | Services | `rc-update add <name> default`, `rc-service <name> start` |
 | Admin rights | `visudo -cf <file>` or `doas -C <file>` to check, `gpasswd -a <user> wheel` |

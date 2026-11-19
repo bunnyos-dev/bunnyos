@@ -8,6 +8,7 @@ system's python3, which has Portage.
 Usage (one JSON object on stdout; anything Portage prints goes to stderr):
 
     python3 bunny-portage.py plan [atom ...]
+    python3 bunny-portage.py depclean
 
     plan: what `emerge --update --deep --newuse <atoms>` would install
           (default atom: @world), with the same options emerge would use
@@ -17,6 +18,17 @@ Usage (one JSON object on stdout; anything Portage prints goes to stderr):
           {"ok": false, "reason": "..."} when Portage can't work out a plan;
           bunny then asks emerge itself, to explain why.
 
+    depclean: what `emerge --depclean` would remove (nothing is removed),
+          with EMERGE_DEFAULT_OPTS.
+          {"ok": true, "removals": [{"name", "version", "slot",
+                                      "needed_by"}]}
+          `needed_by`: other packages in the same list whose recorded
+          dependencies name this one (so it goes because they go). Portage
+          doesn't record why anything else is unneeded: nothing installed
+          that's being kept depends on it, which is what depclean means.
+          {"ok": false, "reason": "..."} when Portage won't say (for example
+          a dependency problem); bunny then asks emerge itself.
+
 Licence: GPL-3.0 (part of bunny).
 """
 
@@ -25,7 +37,7 @@ import os
 import shlex
 import sys
 
-HELPER_VERSION = 1
+HELPER_VERSION = 2
 
 
 def say(obj):
@@ -120,9 +132,105 @@ def plan(atoms):
     return {"ok": True, "merges": merges}
 
 
+def depclean():
+    # As in plan(): stdout is for our JSON only.
+    sys.stdout = sys.stderr
+
+    import portage
+    from portage.dep import Atom, use_reduce
+    from portage.versions import cpv_getkey, cpv_getversion
+    from _emerge.actions import calc_depclean, load_emerge_config
+    from _emerge.main import parse_opts
+    from _emerge.stdout_spinner import stdout_spinner
+
+    from portage._sets.base import InternalPackageSet
+
+    config = load_emerge_config()
+    settings = config.target_config.settings
+    trees = config.trees
+
+    # The options a plain `emerge --depclean --pretend` would get.
+    args = shlex.split(settings.get("EMERGE_DEFAULT_OPTS", ""))
+    args += ["--depclean", "--pretend"]
+    _action, opts, _files = parse_opts(args, silent=True)
+
+    spinner = stdout_spinner()
+    spinner.update = lambda *args, **kwargs: True
+
+    # The calculation `emerge --depclean` makes before removing anything:
+    # everything installed that @world (and @system, and anything a package
+    # still in them needs) doesn't reach. No packages given, so the whole
+    # system is checked, exactly like a plain `emerge --depclean`.
+    # ldpath_mtimes is only used when removing; nothing is removed here.
+    args_set = InternalPackageSet(allow_repo=True)
+    result = calc_depclean(
+        settings, trees, config.target_config.mtimedb["ldpath"], opts, "depclean", args_set, spinner
+    )
+    # (returncode, cleanlist, ordered, req_pkg_count, unmerge_deps) in
+    # Portage 3.0.7x; older versions return fewer fields. Only the first two
+    # are used.
+    returncode, cleanlist = result[0], result[1]
+    if returncode != 0:
+        return {"ok": False, "reason": "portage couldn't work out what to remove"}
+
+    vardb = trees[settings["EROOT"]]["vartree"].dbapi
+    # The list holds package versions (`cat/pkg-1.0`), or Package objects in
+    # some versions.
+    cpvs = [str(getattr(item, "cpv", item)) for item in cleanlist]
+    names = {cpv: cpv_getkey(cpv) for cpv in cpvs}
+    going = set(names.values())
+
+    def needs(cpv):
+        # Package names this installed package's recorded dependencies
+        # mention, with its own USE flags applied.
+        keys = ["RDEPEND", "PDEPEND", "DEPEND", "BDEPEND", "IDEPEND", "USE", "EAPI"]
+        try:
+            values = dict(zip(keys, vardb.aux_get(cpv, keys)))
+        except Exception:
+            return set()
+        use = set(values["USE"].split())
+        found = set()
+        for key in keys[:5]:
+            try:
+                tokens = use_reduce(
+                    values[key], uselist=use, flat=True, eapi=values["EAPI"] or None
+                )
+            except Exception:
+                continue
+            for token in tokens:
+                try:
+                    atom = Atom(token)
+                except Exception:  # "||" and other markers
+                    continue
+                if not atom.blocker:
+                    found.add(atom.cp)
+        return found
+
+    needed = {cpv: needs(cpv) & going for cpv in cpvs}
+    removals = []
+    for cpv in cpvs:
+        try:
+            slot = vardb.aux_get(cpv, ["SLOT"])[0].split("/")[0]
+        except Exception:
+            slot = None
+        removals.append(
+            {
+                "name": names[cpv],
+                "version": cpv_getversion(cpv),
+                "slot": slot,
+                "needed_by": sorted(
+                    names[other]
+                    for other in cpvs
+                    if other != cpv and names[cpv] in needed[other] and names[other] != names[cpv]
+                ),
+            }
+        )
+    return {"ok": True, "removals": removals}
+
+
 def main(argv):
     if len(argv) < 2:
-        say({"ok": False, "reason": "usage: bunny-portage.py plan [atom ...]"})
+        say({"ok": False, "reason": "usage: bunny-portage.py plan [atom ...] | depclean"})
         return 2
     command, rest = argv[1], argv[2:]
     try:
@@ -130,6 +238,8 @@ def main(argv):
             result = {"ok": True, "version": HELPER_VERSION}
         elif command == "plan":
             result = plan(rest)
+        elif command == "depclean":
+            result = depclean()
         else:
             result = {"ok": False, "reason": "unknown command: %s" % command}
     except Exception as e:  # never crash with a traceback on stdout

@@ -74,6 +74,19 @@ else
     echo "      emerge: $(echo "$emerge_names" | tr '\n' ' ')"
 fi
 
+# The same for what depclean would remove (on a fresh container, likely
+# nothing, but both must agree and the helper must answer).
+emerge --depclean --pretend --color=n >"$work/depclean.txt" 2>&1
+"$bunny" helper depclean >"$work/helper-depclean.json" 2>"$work/helper-depclean-err.txt"
+helper_gone="$(grep -o '"name": "[^"]*", "version": "[^"]*"' "$work/helper-depclean.json" | sed 's/"name": "//; s/", "version": "/-/; s/"$//' | sort)"
+emerge_gone="$(sed -n 's/^All selected packages: //p' "$work/depclean.txt" | tr ' ' '\n' | sed 's/^=//' | grep . | sort)"
+if grep -q '"ok": true' "$work/helper-depclean.json" && [ "$helper_gone" = "$emerge_gone" ]; then
+    pass "bunny's Portage helper agrees with emerge's depclean ($(echo "$helper_gone" | grep -c .) packages)"
+else
+    fail "bunny's Portage helper agrees with emerge's depclean" "helper: $(tr '\n' ' ' < "$work/helper-depclean.json" | cut -c1-300) | $(tail -3 "$work/helper-depclean-err.txt" | tr '\n' ' ')"
+    echo "      emerge: $(echo "$emerge_gone" | tr '\n' ' ')"
+fi
+
 # A missing package: bunny should explain it, not say it doesn't recognise it.
 emerge --pretend --color=n app-misc/bunny-canary-no-such-package >"$work/missing.txt" 2>&1
 if "$bunny" explain "$work/missing.txt" 2>&1 | grep -qi "no package"; then

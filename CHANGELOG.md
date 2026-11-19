@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Removing unused packages now asks Portage itself what can go (through
+  bunny's Portage helper) instead of reading emerge's screen text, says
+  when a package goes only because another one in the list does, and
+  removes exactly the packages it showed. Reading emerge's text is still
+  the fallback.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

@@ -30,7 +30,12 @@ pub struct Listed {
 
 /// Reads Gentoo's `repositories.xml`.
 pub fn parse_list(xml: &str) -> Result<Vec<Listed>> {
-    let doc = roxmltree::Document::parse(xml)
+    // The real list starts with a <!DOCTYPE> line, which has to be allowed.
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    };
+    let doc = roxmltree::Document::parse_with_options(xml, options)
         .context("Gentoo's list of repositories couldn't be read")?;
     let mut out = Vec::new();
     for repo in doc.descendants().filter(|n| n.has_tag_name("repo")) {
@@ -131,7 +136,9 @@ pub fn trust_note(official: bool) -> String {
 mod tests {
     use super::*;
 
+    /// Starts the way Gentoo's real list does, with a DOCTYPE line.
     const XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE repositories SYSTEM "https://www.gentoo.org/dtd/repositories.dtd">
 <repositories xmlns="" version="1.0">
   <repo quality="experimental" status="official">
     <name>guru</name>

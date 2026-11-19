@@ -10,6 +10,13 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: `bunny install` now really sets your time zone (`date` showed `-00`
+  before), lists the services the base system starts (`local`, `netmount`)
+  so `bunny status` doesn't warn right after installing, and marks Gentoo's
+  older announcements as read.
+- Guide: the git steps in "What to do first" work as written (branch
+  `main`, a name for root's commits, signing root in to GitHub), and
+  "Helping test" signs in to GitHub before turning on developer mode.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

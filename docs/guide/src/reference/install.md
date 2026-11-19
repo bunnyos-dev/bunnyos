@@ -75,8 +75,9 @@ Sizes are written like `512M`, `2G` or `1.5G`.
 8. **Settings.** bunny writes `/etc/fstab`, Portage settings (prebuilt
    packages with signatures checked), the startup image's settings (btrfs,
    encryption, hibernation), the sudo file, and copies itself in.
-9. **Inside the new system** (chroot): the package list, language and time
-   zone, the packages, services (`dhcpcd`, `sysklogd`, and `sshd` with
+9. **Inside the new system** (chroot): the package list (Gentoo's
+   announcements so far are marked read, since they're older than the
+   system), language and time zone, the packages, services (`dhcpcd`, `sysklogd`, and `sshd` with
    `--ssh`), the boot menu (GRUB, named "Bunny Linux", also at the EFI
    fallback path), the startup image, and your account.
 10. **Your config.** The starter `bunny.toml` (or yours) goes in
@@ -109,7 +110,7 @@ the disk again. The disk is only partly set up at that point; run
 
 | `/etc/bunny/bunny.toml` | Your config. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
-| `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone and keyboard layout. |
+| `/etc/localtime`, `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone (the link in `/etc/localtime` is what's used) and keyboard layout. |
 
 Passwords are never written to a file: they're passed straight to
 `cryptsetup` and `chpasswd`.

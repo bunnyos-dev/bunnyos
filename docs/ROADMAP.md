@@ -304,12 +304,18 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `(would run)` line is shown, and long ones wrap. Decided with the
       maintainer: by default, the steps in plain words (each step's name and
       what it does); the exact commands only with `--dry-run --verbose`.
-- [ ] **The installed system's boot menu looks like Gentoo's.** It has the
-      Gentoo logo behind it, calls the system "Bunny Linux GNU/Linux", and
-      lists every firmware entry (UiApp, DVD-ROM, PXE and HTTP boot, a second
-      "Bunny Linux (EFI BootNext)"). Until the real look (phase 9): no Gentoo
-      theme, the name "Bunny Linux", and only Bunny Linux, its advanced
-      options, Undo and firmware settings in the list.
+- [ ] **A clean boot menu, soon (not waiting for phase 9).** The maintainer
+      found the menu overwhelming: the Gentoo logo behind it, "Bunny Linux
+      GNU/Linux", and every firmware entry (UiApp, DVD-ROM, PXE and HTTP
+      boot, a second "Bunny Linux (EFI BootNext)"), with the Undo entry last
+      under all of them, so it's easy to miss before the countdown starts
+      the default. Fix: four entries only (Bunny Linux, **Undo the last
+      change second**, Advanced options, Firmware settings), no Gentoo
+      theme (plain dark until the real look), and later hidden by default
+      with Esc to show it. The full look stays in phase 9.
+- [ ] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
+      (once from GRUB's settings, once added by bunny). Harmless; add it
+      only when it isn't already there.
 - [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
       even though the install asked for a time zone. Show local time, and for
       the first generation say "as installed".

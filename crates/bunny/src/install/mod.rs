@@ -14,10 +14,12 @@
 //! - `system`: the base system, its settings, and the rest inside it
 //! - `starter`: the starter `bunny.toml` and this computer's host file
 //! - `first_config`: your config in the new system, and its first switch
+//! - `mounted`: `--mounted`, partitions you made and mounted yourself
 
 pub mod disks;
 pub mod first_config;
 pub mod layout;
+pub mod mounted;
 pub mod starter;
 pub mod system;
 
@@ -40,11 +42,17 @@ pub fn run(
 ) -> Result<Finished> {
     let home_key = system::home_key_path();
     let result = (|| -> Result<Finished> {
-        if choices.home_disk.is_some() && choices.encrypt {
-            make_key(&home_key, runner)?;
-        }
-        layout::prepare(choices, password, &home_key, runner)?;
-        let uuids = layout::read_uuids(choices, runner)?;
+        let uuids = match &choices.mounted {
+            // Your own partitions: nothing to prepare.
+            Some(mounted) => mounted.uuids(),
+            None => {
+                if choices.home_disk.is_some() && choices.encrypt {
+                    make_key(&home_key, runner)?;
+                }
+                layout::prepare(choices, password, &home_key, runner)?;
+                layout::read_uuids(choices, runner)?
+            }
+        };
         let offset = system::resume_offset(choices, runner)?;
         let cmdline = choices.cmdline(&uuids, offset.as_deref());
         system::unpack_stage3(choices, runner)?;

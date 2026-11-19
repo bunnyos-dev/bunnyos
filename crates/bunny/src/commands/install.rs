@@ -31,6 +31,10 @@ pub(crate) struct Args {
     pub dry_run: bool,
     /// Read the list of disks from this file instead of lsblk (for testing).
     pub lsblk: Option<PathBuf>,
+    /// Install onto what's mounted here instead of erasing a disk.
+    pub mounted: Option<PathBuf>,
+    /// Read what's mounted from this file instead of findmnt (for testing).
+    pub findmnt: Option<PathBuf>,
 }
 
 fn ask_line(question: &str) -> anyhow::Result<String> {
@@ -164,31 +168,120 @@ fn pick_disk(disks: &[Disk]) -> anyhow::Result<Disk> {
     }
 }
 
-pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
-    if !args.dry_run {
-        if !is_root() {
-            bail!(
-                "bunny install needs to run as root.\n  \
-                 On the Bunny Linux USB you already are; elsewhere, use sudo."
-            );
-        }
-        if !std::path::Path::new("/sys/firmware/efi").is_dir() {
-            bail!(
-                "This computer started the USB in the old BIOS mode, but Bunny Linux needs UEFI.\n  \
-                 Restart, open the boot menu (often F12, F11 or Esc) and pick the USB entry\n  \
-                 that starts with \"UEFI\"."
-            );
+/// The preview's line about the config.
+fn show_config_line(source: &first_config::Source, edit: bool) {
+    let first = if edit { " (you edit it first)" } else { "" };
+    match source {
+        first_config::Source::Starter => println!(
+            "  A starter config in /etc/bunny/bunny.toml, applied before you restart{first}."
+        ),
+        first_config::Source::File(path) => println!(
+            "  Your config from {}, applied before you restart{first}.",
+            path.display()
+        ),
+        first_config::Source::Repo { url, .. } => {
+            println!("  Your config from {url}, applied before you restart{first}.")
         }
     }
+}
 
-    // Your own config is fetched and checked before anything is erased.
-    let mut check_runner: Box<dyn Runner> = if args.dry_run {
-        Box::new(apply::PrintRunner)
-    } else {
-        Box::new(apply::SystemRunner)
+/// `--mounted`: install onto what you mounted yourself. Nothing is erased.
+fn mounted_flow(
+    args: &Args,
+    folder: &std::path::Path,
+    source: &first_config::Source,
+) -> anyhow::Result<Option<(Choices, String)>> {
+    use crate::install::mounted::{self, Mounted};
+    let json = match &args.findmnt {
+        Some(file) => std::fs::read_to_string(file)
+            .with_context(|| format!("Couldn't read {}", file.display()))?,
+        None => apply::SystemRunner
+            .output(&mounted::findmnt_cmd(folder))?
+            .with_context(|| {
+                format!(
+                    "Nothing is mounted at {0}. Mount the system's partition there, and the\n  \
+                     EFI partition at {0}/boot, then run this again.",
+                    folder.display()
+                )
+            })?,
     };
-    let source = first_config::prepare(args.config.as_deref(), check_runner.as_mut())?;
+    let mounts = mounted::parse_findmnt(&json, folder)?;
+    let mut luks = Vec::new();
+    for m in &mounts {
+        if !m.device.starts_with("/dev/mapper/") || args.findmnt.is_some() {
+            continue;
+        }
+        if let Some(out) = apply::SystemRunner.output(&mounted::lsblk_inverse_cmd(&m.device))? {
+            if let Some(uuid) = mounted::parse_luks(&out) {
+                if !luks.contains(&uuid) {
+                    // The system's own first, so it's unlocked first.
+                    if m.target == "/" {
+                        luks.insert(0, uuid);
+                    } else {
+                        luks.push(uuid);
+                    }
+                }
+            }
+        }
+    }
+    let mut found = Mounted { mounts, luks };
+    let leftovers = mounted::leftovers(folder, &found);
+    let review = mounted::review(&found, folder, &leftovers)?;
 
+    println!("Installing onto what's mounted at {}:", folder.display());
+    for m in &found.mounts {
+        println!("  {}", m.describe());
+    }
+    for note in &review.notes {
+        println!("\n  ⚠ {note}");
+    }
+    if review.offer_subvolumes {
+        let answer = ask_line("\nMake the standard subvolumes first, for undo? [Y/n] ")?;
+        if !answer.eq_ignore_ascii_case("n") && !answer.eq_ignore_ascii_case("no") {
+            let mut runner: Box<dyn Runner> = if args.dry_run {
+                Box::new(apply::PrintRunner)
+            } else {
+                Box::new(apply::SystemRunner)
+            };
+            found = mounted::add_subvolumes(&found, folder, runner.as_mut())?;
+            println!("✓ Made the subvolumes. Now mounted:");
+            for m in &found.mounts {
+                println!("  {}", m.describe());
+            }
+        }
+    }
+    let root = found.get("/").map(|m| m.device.clone()).unwrap_or_default();
+    let choices = Choices {
+        disk: root.clone(),
+        encrypt: !found.luks.is_empty(),
+        mnt: folder.to_path_buf(),
+        mounted: Some(found),
+        ..Default::default()
+    };
+    println!("\nWhat you'll get:");
+    println!(
+        "  A minimal system: OpenRC, a kernel, networking, your account with sudo, and bunny.\n  \
+         Nothing is erased or formatted: bunny only writes into {}.",
+        folder.display()
+    );
+    show_config_line(source, args.edit);
+    if args.dry_run {
+        println!("\nThis is a dry run: nothing will be changed, and commands are only printed.");
+    } else {
+        let answer = ask_line("\nInstall Bunny Linux there? [y/N] ")?;
+        if !answer.eq_ignore_ascii_case("y") && !answer.eq_ignore_ascii_case("yes") {
+            println!("Nothing was changed.");
+            return Ok(None);
+        }
+    }
+    Ok(Some((choices, folder.display().to_string())))
+}
+/// The usual install: pick a disk, see what's erased, confirm. Returns the
+/// choices, or None if you didn't confirm.
+fn erase_disk_flow(
+    args: &Args,
+    source: &first_config::Source,
+) -> anyhow::Result<Option<(Choices, String)>> {
     let json = match &args.lsblk {
         Some(file) => std::fs::read_to_string(file)
             .with_context(|| format!("Couldn't read {}", file.display()))?,
@@ -275,33 +368,7 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         "  A minimal system: OpenRC, a kernel, networking, your account with sudo, and bunny.\n  \
          No desktop yet: adding one with bunny is the first thing the Guide shows."
     );
-    match &source {
-        first_config::Source::Starter => println!(
-            "  A starter config in /etc/bunny/bunny.toml, applied before you restart{}.",
-            if args.edit {
-                " (you edit it first)"
-            } else {
-                ""
-            }
-        ),
-        first_config::Source::File(path) => println!(
-            "  Your config from {}, applied before you restart{}.",
-            path.display(),
-            if args.edit {
-                " (you edit it first)"
-            } else {
-                ""
-            }
-        ),
-        first_config::Source::Repo { url, .. } => println!(
-            "  Your config from {url}, applied before you restart{}.",
-            if args.edit {
-                " (you edit it first)"
-            } else {
-                ""
-            }
-        ),
-    }
+    show_config_line(source, args.edit);
 
     if args.dry_run {
         println!("\nThis is a dry run: nothing will be erased, and commands are only printed.");
@@ -313,9 +380,45 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         ))?;
         if answer != disk.name && answer != disk.path {
             println!("That's not the disk's name, so nothing was changed.");
-            return Ok(ExitCode::SUCCESS);
+            return Ok(None);
         }
     }
+
+    Ok(Some((choices, disk.path.clone())))
+}
+
+pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
+    if !args.dry_run {
+        if !is_root() {
+            bail!(
+                "bunny install needs to run as root.\n  \
+                 On the Bunny Linux USB you already are; elsewhere, use sudo."
+            );
+        }
+        if !std::path::Path::new("/sys/firmware/efi").is_dir() {
+            bail!(
+                "This computer started the USB in the old BIOS mode, but Bunny Linux needs UEFI.\n  \
+                 Restart, open the boot menu (often F12, F11 or Esc) and pick the USB entry\n  \
+                 that starts with \"UEFI\"."
+            );
+        }
+    }
+
+    // Your own config is fetched and checked before anything is erased.
+    let mut check_runner: Box<dyn Runner> = if args.dry_run {
+        Box::new(apply::PrintRunner)
+    } else {
+        Box::new(apply::SystemRunner)
+    };
+    let source = first_config::prepare(args.config.as_deref(), check_runner.as_mut())?;
+
+    let found = match &args.mounted {
+        Some(folder) => mounted_flow(&args, folder, &source)?,
+        None => erase_disk_flow(&args, &source)?,
+    };
+    let Some((choices, target)) = found else {
+        return Ok(ExitCode::SUCCESS);
+    };
 
     // The account.
     println!();
@@ -399,7 +502,7 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
     if args.dry_run {
         println!("\n✓ Dry run finished. Nothing was changed.");
     } else {
-        println!("\n✓ Bunny Linux is installed on {}.", disk.path);
+        println!("\n✓ Bunny Linux is installed on {target}.");
         if finished.switched {
             println!(
                 "Your config is in /etc/bunny/bunny.toml (and this computer's settings in\n\

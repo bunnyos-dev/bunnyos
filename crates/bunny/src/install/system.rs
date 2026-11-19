@@ -385,8 +385,21 @@ pub fn resume_offset(choices: &Choices, runner: &mut dyn Runner) -> Result<Optio
 /// Unmounts everything and locks the disks again. Best effort: the system
 /// is already complete, and a restart unmounts anything left.
 pub fn finish(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
-    say("Unmounting");
     let mnt = choices.mnt.to_string_lossy().into_owned();
+    if choices.mounted.is_some() {
+        // Your own partitions stay mounted; only what bunny mounted goes.
+        say("Unmounting what bunny mounted (your partitions stay mounted)");
+        for dir in ["run", "dev", "sys", "proc"] {
+            let _ = runner.run(&s(&[
+                "umount",
+                "--recursive",
+                "--lazy",
+                &choices.mnt.join(dir).to_string_lossy(),
+            ]));
+        }
+        return Ok(());
+    }
+    say("Unmounting");
     let _ = runner.run(&s(&["umount", "--recursive", "--lazy", &mnt]));
     if choices.encrypt {
         if choices.home_disk.is_some() {

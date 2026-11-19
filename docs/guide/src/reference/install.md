@@ -39,6 +39,7 @@ minimal system. It runs from a live USB.
 | `--home-disk <disk>` | Use a second disk, all of it, for `/home`. It's erased too, encrypted with the same password, and unlocked at boot with a key file kept on the encrypted system (so you only type the password once). |
 | `--ssh` | Start the SSH server at boot. Off by default. |
 | `--config <file or repo>` | Install from your own config instead of the starter one: a `bunny.toml` file, or a git repository with `bunny.toml` at its top (`github:you/my-system` is short for `https://github.com/you/my-system`). It's fetched and checked **before** anything is erased. |
+| `--mounted <folder>` | Install onto partitions you made and mounted yourself, without erasing anything. See [Installing onto your own partitions](#installing-onto-your-own-partitions). |
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
 | `--dry-run` | Show everything it would do (each command, each file), without erasing or changing anything. Doesn't need root. |
 
@@ -136,8 +137,49 @@ everything the computer needs to start. If yours doesn't, bunny says which
 packages are missing and skips the switch, so nothing is removed: add them
 to the host file, then run `sudo bunny switch` after restarting.
 
+## Installing onto your own partitions
+
+If you'd rather partition and format the disk yourself (or keep another
+system on it), mount everything first, then point bunny at it:
+
+```sh
+mount /dev/nvme0n1p5 /mnt/gentoo
+mount --mkdir /dev/nvme0n1p1 /mnt/gentoo/boot
+bunny install --mounted /mnt/gentoo
+```
+
+bunny doesn't partition, format or erase anything. It reads what's mounted,
+shows it, explains anything that limits it, and asks before installing. Then
+it installs the same minimal system, and writes `/etc/fstab` and the kernel
+settings from what's mounted. At the end, your partitions stay mounted.
+
+What it needs:
+
+- **Something mounted at the folder, and empty** (the folders other
+  partitions are mounted on, and `lost+found`, are fine).
+- **The EFI partition mounted at `<folder>/boot`.** Bunny Linux keeps the boot
+  menu and kernels there.
+- **A Linux filesystem for the system:** btrfs, ext4, xfs or f2fs.
+
+What it explains:
+
+| What's mounted | What you get |
+|---|---|
+| btrfs, the system in a subvolume named `@`, and an `@snapshots` subvolume at `/.snapshots` | Everything, including undo. This is [the Bunny Linux layout](disk-layout.md). |
+| btrfs with `@`, but no `/.snapshots` | No undo until you add one. |
+| btrfs mounted without subvolumes, still empty | bunny offers to make the standard subvolumes first (`@`, `@home`, `@log`, `@cache`, `@build`, `@snapshots`) and mounts everything again the Bunny Linux way, so you get undo. |
+| btrfs with the system in a subvolume with another name | No undo (it needs `@`). |
+| ext4, xfs or f2fs | No undo (it needs btrfs). Everything else works, and bunny keeps backups of the files it changes. |
+| `/home` not its own subvolume or partition | Undo would also put your own files back. bunny suggests an `@home` subvolume. |
+| Encrypted partitions (LUKS) | Each is unlocked when the computer starts, asking for its password. |
+
+These layouts are allowed and checked, but only the standard one is tested
+in every release. `--mounted` can't be combined with the options that
+describe a disk (`--disk`, `--no-encrypt`, `--efi-size`, `--swap`,
+`--hibernate`, `--home-disk`); a swapfile is yours to set up.
+
 ## Planned
 
 - Choosing the language.
-- Installing alongside another system, and installing onto partitions you
-  made yourself (`--mounted`).
+- Installing alongside another system on the same disk (today, use
+  `--mounted`).

@@ -821,3 +821,195 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
         outcome.notes
     );
 }
+
+/// Records commands, answers `wget` with Gentoo's list of repositories, and
+/// "downloads" a repository by making its folder with one package in it.
+struct WithRepos {
+    root: PathBuf,
+    commands: Vec<String>,
+}
+
+const REPO_LIST: &str = r#"<repositories version="1.0">
+  <repo quality="experimental" status="official"><name>guru</name>
+    <description lang="en">Gentoo User Repository</description>
+    <source type="git">https://anongit.gentoo.org/git/repo/proj/guru.git</source></repo>
+</repositories>"#;
+
+impl Runner for WithRepos {
+    fn run(&mut self, cmd: &[String]) -> Result<bool> {
+        let line = cmd.join(" ");
+        if let Some(name) = line.strip_prefix("emaint sync --repo ") {
+            write(
+                &self.root,
+                &format!("var/db/repos/{name}/metadata/md5-cache/gui-wm/mangowm-0.12.5"),
+                "DESCRIPTION=A Wayland compositor\n",
+            );
+        }
+        self.commands.push(line);
+        Ok(true)
+    }
+    fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
+        self.commands.push(cmd.join(" "));
+        Ok(cmd
+            .first()
+            .is_some_and(|c| c == "wget")
+            .then(|| REPO_LIST.to_string()))
+    }
+}
+
+const WITH_GURU: &str = r#"
+    packages = ["app-editors/neovim", "gui-wm/mangowm"]
+    repositories = ["guru"]
+    [pkg."gui-wm/mangowm"]
+    keywords = ["~amd64"]
+"#;
+
+#[test]
+fn adds_a_repository_and_testing_versions() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    write(
+        r,
+        "var/db/repos/gentoo/metadata/md5-cache/app-editors/neovim-0.11",
+        "DESCRIPTION=Vim fork\n",
+    );
+    // A package.accept_keywords that's a single file moves into the folder.
+    write(r, portage::KEYWORDS_DIR, "dev-libs/mine ~amd64\n");
+    let config = Config::parse(WITH_GURU).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(plan.add_repositories, ["guru"]);
+    assert!(plan.check_after_sync);
+    assert!(
+        plan.unknown_packages.is_empty(),
+        "checked after the download"
+    );
+    assert_eq!(plan.keyword_changes[0].to, ["~amd64"]);
+    let shown = plan.render();
+    assert!(shown.contains("Repositories to add:\n  + guru"), "{shown}");
+    assert!(
+        shown.contains("aren't checked by Gentoo's developers"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("~ gui-wm/mangowm: stable only → ~amd64"),
+        "{shown}"
+    );
+    assert!(
+        plan.summary().starts_with("+ repository guru"),
+        "{}",
+        plan.summary()
+    );
+
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+    };
+    switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+    let c = &runner.commands;
+    let sync = c
+        .iter()
+        .position(|l| l == "emaint sync --repo guru")
+        .expect("synced");
+    let emerge = c
+        .iter()
+        .position(|l| l.starts_with("emerge --update"))
+        .expect("installed");
+    assert!(
+        sync < emerge,
+        "the repository is downloaded before installing: {c:#?}"
+    );
+
+    let conf = std::fs::read_to_string(portage::repo_conf_path(r, "guru")).unwrap();
+    assert!(conf.contains("[guru]\nlocation = /var/db/repos/guru\nsync-type = git\nsync-uri = https://anongit.gentoo.org/git/repo/proj/guru.git"), "{conf}");
+    let kw = r.join(portage::KEYWORDS_DIR);
+    assert!(
+        std::fs::read_to_string(kw.join(portage::BUNNY_KEYWORDS_FILE))
+            .unwrap()
+            .contains("gui-wm/mangowm ~amd64")
+    );
+    assert_eq!(
+        std::fs::read_to_string(kw.join(portage::KEPT_KEYWORDS_FILE)).unwrap(),
+        "dev-libs/mine ~amd64\n"
+    );
+
+    // Afterwards nothing is left to do for repositories or keywords.
+    let after = plan::make(&config, r).unwrap();
+    assert!(after.add_repositories.is_empty() && after.keyword_changes.is_empty());
+    assert!(!after.check_after_sync);
+
+    // Taking guru out of the config stops bunny using it.
+    let without = Config::parse("packages = [\"app-editors/neovim\"]").unwrap();
+    let plan = plan::make(&without, r).unwrap();
+    assert_eq!(plan.remove_repositories, ["guru"]);
+    assert_eq!(plan.keyword_changes[0].from, ["~amd64"]);
+    let outcome = switch(&without, r, &plan, &mut runner, &opts()).unwrap();
+    assert!(!portage::repo_conf_path(r, "guru").exists());
+    assert!(!kw.join(portage::BUNNY_KEYWORDS_FILE).exists());
+    assert!(outcome
+        .notes
+        .iter()
+        .any(|n| n.contains("stopped using the guru repository")));
+}
+
+#[test]
+fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config =
+        Config::parse("packages = [\"gui-wm/mangowmm\"]\nrepositories = [\"guru\"]\n").unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+    };
+    let err = switch(&config, r, &plan, &mut runner, &opts())
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("gui-wm/mangowmm"), "{err}");
+    assert!(err.contains("nothing was installed"), "{err}");
+    assert!(!runner.commands.iter().any(|l| l.starts_with("emerge")));
+}
+
+#[test]
+fn says_so_when_a_repository_isnt_in_gentoos_list() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse("repositories = [\"nosuchrepo\"]\n").unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+    };
+    let err = switch(&config, r, &plan, &mut runner, &opts())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("no repository called \"nosuchrepo\" in Gentoo's list"),
+        "{err}"
+    );
+    assert!(!portage::repo_conf_path(r, "nosuchrepo").exists());
+}
+
+#[test]
+fn keywords_are_put_back_when_the_switch_is_cancelled() {
+    let root = fake_system();
+    let r = root.path();
+    let config = Config::parse(
+        "packages = [\"app-editors/neovim\", \"app-shells/zsh\"]\n[pkg.\"app-shells/zsh\"]\nkeywords = [\"~amd64\"]\n",
+    )
+    .unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = Scripted {
+        replies: vec![("--pretend --update", true, PRETEND.into())],
+        ..Scripted::default()
+    };
+    let err = switch(&config, r, &plan, &mut runner, &quiet(false, false)).unwrap_err();
+    assert!(err.is::<Cancelled>());
+    assert!(
+        !r.join(portage::KEYWORDS_DIR).exists(),
+        "no keywords file was left"
+    );
+}

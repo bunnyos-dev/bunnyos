@@ -22,6 +22,7 @@ impl Diff<'_> {
     pub fn is_empty(&self) -> bool {
         self.plan.is_empty()
             && self.plan.extra_services.is_empty()
+            && self.plan.extra_repositories.is_empty()
             && self.plan.missing_services.is_empty()
             && self.plan.security.is_empty()
             && self.plan.boot.is_empty()
@@ -78,6 +79,52 @@ impl Diff<'_> {
                 if !system_only.is_empty() {
                     let _ = writeln!(out, "    system only   {}", describe_flags(&system_only));
                 }
+            }
+            out.push('\n');
+        }
+
+        // Testing versions
+        if !p.keyword_changes.is_empty() {
+            out.push_str("Testing versions ([pkg] keywords)\n");
+            for change in &p.keyword_changes {
+                let show = |k: &[String]| {
+                    if k.is_empty() {
+                        "stable only".to_string()
+                    } else {
+                        k.join(" ")
+                    }
+                };
+                let _ = writeln!(
+                    out,
+                    "  {}   config: {}, system: {}",
+                    change.atom,
+                    show(&change.to),
+                    show(&change.from)
+                );
+            }
+            out.push('\n');
+        }
+
+        // Repositories
+        if !p.add_repositories.is_empty()
+            || !p.remove_repositories.is_empty()
+            || !p.extra_repositories.is_empty()
+        {
+            out.push_str("Repositories\n");
+            for r in &p.add_repositories {
+                let _ = writeln!(out, "  config only   {r}   (not set up yet)");
+            }
+            for r in &p.remove_repositories {
+                let _ = writeln!(
+                    out,
+                    "  system only   {r}   (set up by bunny before; a switch stops using it)"
+                );
+            }
+            for r in &p.extra_repositories {
+                let _ = writeln!(
+                    out,
+                    "  system only   {r}   (set up outside bunny; a switch leaves it alone)"
+                );
             }
             out.push('\n');
         }

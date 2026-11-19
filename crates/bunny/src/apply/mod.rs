@@ -19,6 +19,7 @@ mod admin;
 mod boot_menu;
 mod install;
 mod package_use;
+mod repositories;
 mod runner;
 #[cfg(test)]
 mod tests;
@@ -30,7 +31,8 @@ pub use runner::{PrintRunner, Runner, SystemRunner};
 use admin::apply_security;
 use boot_menu::{install_boot_module, write_undo_entry};
 use install::{emerge_failed, install_quietly, is_tip, remove_quietly};
-use package_use::{adopt_package_use, copy_tree, USE_BEFORE};
+use package_use::{adopt_package_use, copy_tree, write_keywords, USE_BEFORE};
+use repositories::set_up_repositories;
 
 /// The user said no at a question, so the switch stopped and its file
 /// changes were put back. Not an error to report, just "nothing changed".
@@ -91,7 +93,7 @@ pub struct Outcome {
     pub log: Option<PathBuf>,
 }
 
-fn cmd(parts: &[&str]) -> Vec<String> {
+pub(super) fn cmd(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|s| s.to_string()).collect()
 }
 
@@ -123,7 +125,10 @@ pub fn switch(
     take_snapshot(root, plan, runner, opts, &mut outcome)?;
     std::fs::create_dir_all(&outcome.backup_dir)
         .with_context(|| format!("Couldn't create {}", outcome.backup_dir.display()))?;
-    // 2–3. package.use and the world file, each backed up first.
+    // 1b. Repositories, so packages from new ones can be checked and installed.
+    set_up_repositories(config, root, plan, runner, &mut outcome)?;
+    // 2–3. package.use, package.accept_keywords and the world file, each
+    //      backed up first.
     write_package_files(config, root, &outcome)?;
     // 4. Install and update.
     install_and_update(root, plan, runner, opts, &mut outcome)?;
@@ -218,6 +223,7 @@ fn write_package_files(config: &Config, root: &Path, outcome: &Outcome) -> Resul
         copy_tree(&use_dir, &outcome.backup_dir.join(USE_BEFORE))?;
     }
     adopt_package_use(config, root, &outcome.backup_dir)?;
+    write_keywords(config, root, &outcome.backup_dir)?;
 
     // 3. World set.
     let world = portage::world_path(root);
@@ -241,8 +247,10 @@ fn install_and_update(
     opts: &Options,
     outcome: &mut Outcome,
 ) -> Result<()> {
-    let needs_emerge =
-        opts.update_all || !plan.add_packages.is_empty() || !plan.use_changes.is_empty();
+    let needs_emerge = opts.update_all
+        || !plan.add_packages.is_empty()
+        || !plan.use_changes.is_empty()
+        || !plan.keyword_changes.is_empty();
     if needs_emerge && !opts.verbose && !runner.dry() {
         install_quietly(root, plan, runner, opts, outcome)?;
     } else if needs_emerge {

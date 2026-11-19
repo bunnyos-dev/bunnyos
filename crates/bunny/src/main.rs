@@ -19,6 +19,7 @@ mod interrupt;
 mod kernels;
 mod lock;
 mod notes;
+mod overlays;
 mod plan;
 mod portage;
 mod progress;

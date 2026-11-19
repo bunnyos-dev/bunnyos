@@ -55,6 +55,61 @@ fn prefix_of(value: &Value) -> String {
 
 const ITEM_PREFIX: &str = "\n    ";
 
+/// Adds a repository to `repositories` (made if it isn't there, above the
+/// first section). Returns the text unchanged if it's already listed.
+pub fn add_repository(text: &str, name: &str) -> Result<String> {
+    let mut doc = parse(text)?;
+    if !doc.contains_key("repositories") {
+        let mut array = Array::new();
+        array.push(name);
+        let mut item = Item::Value(Value::Array(array));
+        if let Some(value) = item.as_value_mut() {
+            value.decor_mut().set_prefix(" ");
+        }
+        doc.insert("repositories", item);
+        if let Some(mut key) = doc.key_mut("repositories") {
+            key.leaf_decor_mut().set_prefix(
+                "\n# Package repositories besides Gentoo's own (see the Guide: bunny.toml).\n",
+            );
+        }
+        return Ok(doc.to_string());
+    }
+    let Some(array) = doc["repositories"].as_array_mut() else {
+        bail!("`repositories` in bunny.toml should be a list, like repositories = [\"guru\"].");
+    };
+    if array.iter().any(|v| v.as_str() == Some(name)) {
+        return Ok(text.to_string());
+    }
+    array.push(name);
+    Ok(doc.to_string())
+}
+
+/// Sets `keywords` for a package (`[pkg."category/name"]`), keeping its
+/// other settings.
+pub fn set_keywords(text: &str, atom: &str, keywords: &[&str]) -> Result<String> {
+    let mut doc = parse(text)?;
+    if !doc.contains_key("pkg") {
+        let mut table = toml_edit::Table::new();
+        table.set_implicit(true);
+        doc.insert("pkg", Item::Table(table));
+    }
+    let Some(pkg) = doc["pkg"].as_table_mut() else {
+        bail!("`pkg` in bunny.toml should be a section, like [pkg.\"app-misc/tmux\"].");
+    };
+    if !pkg.contains_key(atom) {
+        pkg.insert(atom, Item::Table(toml_edit::Table::new()));
+    }
+    let Some(entry) = pkg[atom].as_table_like_mut() else {
+        bail!("[pkg.\"{atom}\"] in bunny.toml should be a section.");
+    };
+    let mut array = Array::new();
+    for k in keywords {
+        array.push(*k);
+    }
+    entry.insert("keywords", Item::Value(Value::Array(array)));
+    Ok(doc.to_string())
+}
+
 /// Adds packages to `packages`, in alphabetical position.
 ///
 /// In TOML, a comment after an item is stored at the start of the *next*
@@ -173,6 +228,39 @@ pub fn remove_packages(text: &str, names: &[String]) -> Result<Edited> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adds_a_repository_and_keywords() {
+        use crate::config::Config;
+        let text =
+            "# My system\npackages = [\n    \"app-misc/tmux\",\n]\n\n[boot]\nundo_entry = true\n";
+        let with_repo = add_repository(text, "guru").unwrap();
+        let c = Config::parse(&with_repo).unwrap_or_else(|e| panic!("{e}\n{with_repo}"));
+        assert_eq!(c.repositories, ["guru"]);
+        assert!(c.boot.undo_entry, "{with_repo}");
+        assert!(with_repo.starts_with("# My system\n"));
+        // Already there: unchanged.
+        assert_eq!(add_repository(&with_repo, "guru").unwrap(), with_repo);
+        let two = add_repository(&with_repo, "hyproverlay").unwrap();
+        assert_eq!(
+            Config::parse(&two).unwrap().repositories,
+            ["guru", "hyproverlay"]
+        );
+
+        let kw = set_keywords(&two, "gui-wm/mangowm", &["~amd64"]).unwrap();
+        let kw = set_keywords(&kw, "gui-libs/scenefx", &["~amd64"]).unwrap();
+        let c = Config::parse(&kw).unwrap_or_else(|e| panic!("{e}\n{kw}"));
+        assert_eq!(c.keywords()["gui-wm/mangowm"], ["~amd64"]);
+        assert_eq!(c.keywords()["gui-libs/scenefx"], ["~amd64"]);
+        assert!(kw.contains("[pkg.\"gui-wm/mangowm\"]"), "{kw}");
+        assert!(c.problems().is_empty());
+
+        // Keeps a package's USE flags.
+        let use_too = "[pkg.\"gui-wm/dwl\"]\nuse = [\"X\"]\n";
+        let c = Config::parse(&set_keywords(use_too, "gui-wm/dwl", &["~amd64"]).unwrap()).unwrap();
+        assert_eq!(c.pkg["gui-wm/dwl"].use_flags, ["X"]);
+        assert_eq!(c.pkg["gui-wm/dwl"].keywords, ["~amd64"]);
+    }
     use crate::config::Config;
 
     const CONFIG: &str = r#"# My desktop

@@ -14,6 +14,18 @@ pub const BUNNY_USE_FILE: &str = "zz-bunny";
 /// package.use lines bunny can't manage yet, kept word for word. Read first.
 pub const KEPT_USE_FILE: &str = "00-bunny-kept";
 
+/// The package.accept_keywords directory, and bunny's file in it (read last).
+pub const KEYWORDS_DIR: &str = "etc/portage/package.accept_keywords";
+pub const BUNNY_KEYWORDS_FILE: &str = "zz-bunny";
+/// Where a package.accept_keywords that was a single file goes, so bunny's
+/// file can sit next to it.
+pub const KEPT_KEYWORDS_FILE: &str = "00-yours";
+
+/// repos.conf, and the prefix of the files bunny writes there (one per
+/// repository in `repositories`).
+pub const REPOS_CONF_DIR: &str = "etc/portage/repos.conf";
+pub const BUNNY_REPO_PREFIX: &str = "bunny-";
+
 pub fn world_path(root: &Path) -> PathBuf {
     root.join(WORLD_FILE)
 }
@@ -92,9 +104,128 @@ pub fn render_package_use(config: &Config) -> String {
     out
 }
 
+/// The contents bunny's package.accept_keywords file should have.
+pub fn render_keywords(config: &Config) -> String {
+    let mut out = String::from("# Managed by bunny. Edit bunny.toml ([pkg] keywords) instead.\n");
+    for (atom, keywords) in config.keywords() {
+        out.push_str(&format!("{atom} {}\n", keywords.join(" ")));
+    }
+    out
+}
+
+/// What bunny's package.accept_keywords file says now, per package.
+pub fn read_bunny_keywords(root: &Path) -> std::collections::BTreeMap<String, Vec<String>> {
+    let path = root.join(KEYWORDS_DIR).join(BUNNY_KEYWORDS_FILE);
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter_map(|l| {
+            let mut words = l.split_whitespace();
+            let atom = words.next()?.to_string();
+            Some((atom, words.map(String::from).collect()))
+        })
+        .collect()
+}
+
+/// Repositories Portage knows about, from every repos.conf file: the name,
+/// and whether bunny manages it (one of its `bunny-<name>.conf` files).
+/// Gentoo's own (`[gentoo]`) and `[DEFAULT]` aren't included.
+pub fn configured_repositories(root: &Path) -> std::collections::BTreeMap<String, bool> {
+    let mut found = std::collections::BTreeMap::new();
+    let dir = root.join(REPOS_CONF_DIR);
+    let files: Vec<PathBuf> = if dir.is_file() {
+        vec![dir]
+    } else {
+        std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file())
+            .collect()
+    };
+    for file in files {
+        let ours = file
+            .file_name()
+            .map(|n| n.to_string_lossy().starts_with(BUNNY_REPO_PREFIX))
+            .unwrap_or(false);
+        for line in std::fs::read_to_string(&file).unwrap_or_default().lines() {
+            let line = line.trim();
+            if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+                if name != "DEFAULT" && name != "gentoo" {
+                    let entry = found.entry(name.to_string()).or_insert(false);
+                    *entry |= ours;
+                }
+            }
+        }
+    }
+    found
+}
+
+/// bunny's repos.conf file for one repository.
+pub fn render_repo_conf(name: &str, sync_uri: &str) -> String {
+    format!(
+        "# Managed by bunny: `repositories` in bunny.toml. Edit bunny.toml instead.\n\
+         [{name}]\n\
+         location = /var/db/repos/{name}\n\
+         sync-type = git\n\
+         sync-uri = {sync_uri}\n\
+         auto-sync = yes\n"
+    )
+}
+
+pub fn repo_conf_path(root: &Path, name: &str) -> PathBuf {
+    root.join(REPOS_CONF_DIR)
+        .join(format!("{BUNNY_REPO_PREFIX}{name}.conf"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renders_keywords_and_reads_them_back() {
+        let config = Config::parse(
+            "[pkg.\"gui-wm/dwl\"]\nkeywords = [\"~amd64\"]\n[pkg.\"app-misc/tmux\"]\nuse = [\"x\"]\n",
+        )
+        .unwrap();
+        let text = render_keywords(&config);
+        assert!(text.contains("gui-wm/dwl ~amd64\n"));
+        assert!(!text.contains("tmux"));
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(KEYWORDS_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(BUNNY_KEYWORDS_FILE), &text).unwrap();
+        assert_eq!(read_bunny_keywords(root.path())["gui-wm/dwl"], ["~amd64"]);
+    }
+
+    #[test]
+    fn finds_the_repositories_portage_knows() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(REPOS_CONF_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("gentoo.conf"),
+            "[DEFAULT]\nmain-repo = gentoo\n[gentoo]\nlocation = /var/db/repos/gentoo\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("eselect-repo.conf"),
+            "[guru]\nlocation = /var/db/repos/guru\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_conf_path(root.path(), "hyproverlay"),
+            render_repo_conf("hyproverlay", "https://example.org/h.git"),
+        )
+        .unwrap();
+        let found = configured_repositories(root.path());
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(!found["guru"]);
+        assert!(found["hyproverlay"]);
+    }
 
     #[test]
     fn renders_package_use() {

@@ -21,6 +21,17 @@ pub struct Plan {
     pub remove_packages: Vec<String>,
     /// Packages whose USE flags would change.
     pub use_changes: Vec<UseChange>,
+    /// Packages whose accepted keywords (testing versions) would change.
+    pub keyword_changes: Vec<UseChange>,
+    /// Repositories to add (in the config, not set up yet).
+    pub add_repositories: Vec<String>,
+    /// Repositories bunny set up that the config no longer lists.
+    pub remove_repositories: Vec<String>,
+    /// Repositories set up outside bunny that the config doesn't list.
+    pub extra_repositories: Vec<String>,
+    /// Some repositories in the config haven't been downloaded yet, so
+    /// packages can only be checked after the switch gets them.
+    pub check_after_sync: bool,
     /// Services to enable at boot.
     pub enable_services: Vec<String>,
     /// Services in the config that aren't installed (yet).
@@ -55,6 +66,10 @@ impl Plan {
         self.add_packages.is_empty()
             && self.remove_packages.is_empty()
             && self.use_changes.is_empty()
+            && self.keyword_changes.is_empty()
+            && self.add_repositories.is_empty()
+            && self.remove_repositories.is_empty()
+            && !self.check_after_sync
             && self.enable_services.is_empty()
             && self.security.is_empty()
             && self.boot.is_empty()
@@ -67,6 +82,11 @@ impl Plan {
             name.rsplit('/').next().unwrap_or(name).to_string()
         };
         let mut parts: Vec<String> = Vec::new();
+        parts.extend(
+            self.add_repositories
+                .iter()
+                .map(|r| format!("+ repository {r}")),
+        );
         parts.extend(self.add_packages.iter().map(|a| format!("+ {}", short(a))));
         parts.extend(
             self.remove_packages
@@ -77,6 +97,19 @@ impl Plan {
             let names: Vec<_> = self.use_changes.iter().map(|c| short(&c.atom)).collect();
             parts.push(format!("USE flags for {}", names.join(", ")));
         }
+        if !self.keyword_changes.is_empty() {
+            let names: Vec<_> = self
+                .keyword_changes
+                .iter()
+                .map(|c| short(&c.atom))
+                .collect();
+            parts.push(format!("testing versions for {}", names.join(", ")));
+        }
+        parts.extend(
+            self.remove_repositories
+                .iter()
+                .map(|r| format!("- repository {r}")),
+        );
         parts.extend(self.enable_services.iter().map(|s| format!("start {s}")));
         if !self.security.is_empty() {
             if let Some(p) = self.security.privilege {
@@ -102,6 +135,31 @@ impl Plan {
         let mut out = String::new();
         if self.is_empty() {
             out.push_str("✓ This system already matches your config. Nothing to do.\n");
+        }
+
+        if !self.add_repositories.is_empty() {
+            section(&mut out, "Repositories to add", "+", &self.add_repositories);
+            out.push_str(
+                "  ⚠ Repositories besides Gentoo's own aren't checked by Gentoo's developers,\n    \
+                 and their packages run build steps as root. Only add ones you trust.\n\n",
+            );
+        }
+        if !self.remove_repositories.is_empty() {
+            section(
+                &mut out,
+                "Repositories no longer in your config (bunny stops using them)",
+                "-",
+                &self.remove_repositories,
+            );
+            out.push_str(
+                "  Packages you installed from them stay installed, but get no more updates.\n\n",
+            );
+        }
+        if self.check_after_sync {
+            out.push_str(
+                "Repositories in your config still to be downloaded; packages are checked once\n\
+                 they are (during the switch).\n\n",
+            );
         }
 
         if !self.unknown_packages.is_empty() {
@@ -142,6 +200,27 @@ impl Plan {
                         "(none)".to_string()
                     } else {
                         flags.join(" ")
+                    }
+                };
+                let _ = writeln!(
+                    out,
+                    "  ~ {}: {} → {}",
+                    change.atom,
+                    show(&change.from),
+                    show(&change.to)
+                );
+            }
+            out.push('\n');
+        }
+
+        if !self.keyword_changes.is_empty() {
+            out.push_str("Versions to accept beyond stable ones ([pkg] keywords):\n");
+            for change in &self.keyword_changes {
+                let show = |k: &[String]| {
+                    if k.is_empty() {
+                        "stable only".to_string()
+                    } else {
+                        k.join(" ")
                     }
                 };
                 let _ = writeln!(
@@ -230,6 +309,14 @@ impl Plan {
             out.push_str("  Everything else still works.\n\n");
         }
 
+        if !self.extra_repositories.is_empty() {
+            out.push_str("Also set up, but not in your config's repositories (left alone):\n");
+            for name in &self.extra_repositories {
+                let _ = writeln!(out, "  · {name}");
+            }
+            out.push_str("  Add them to `repositories` to keep track of them in your config.\n\n");
+        }
+
         if !self.extra_services.is_empty() {
             out.push_str("Also starting at boot, but not in your config (left alone):\n");
             for name in &self.extra_services {
@@ -256,7 +343,7 @@ fn section(out: &mut String, heading: &str, mark: &str, items: &[String]) {
 /// Packages in `wanted` that no repository in `/var/db/repos` has and that
 /// aren't installed. Skipped (empty) when there are no repositories to check.
 /// Uses the same package index as `bunny search` and `bunny add`.
-fn unknown_packages(root: &Path, wanted: &[String]) -> Vec<String> {
+pub fn unknown_packages(root: &Path, wanted: &[String]) -> Vec<String> {
     if wanted.is_empty() {
         return Vec::new();
     }
@@ -276,6 +363,28 @@ fn unknown_packages(root: &Path, wanted: &[String]) -> Vec<String> {
             !available.contains(plain) && !installed.contains(plain)
         })
         .cloned()
+        .collect()
+}
+
+/// Compares bunny's package.accept_keywords file with the config's
+/// `[pkg] keywords` (other files there are left alone).
+fn keyword_changes(config: &Config, root: &Path) -> Vec<UseChange> {
+    let current = portage::read_bunny_keywords(root);
+    let wanted = config.keywords();
+    let as_set = |k: &[String]| k.iter().cloned().collect::<BTreeSet<_>>();
+    let mut atoms: BTreeSet<&String> = wanted.keys().collect();
+    atoms.extend(current.keys());
+    atoms
+        .into_iter()
+        .filter_map(|atom| {
+            let from = current.get(atom).cloned().unwrap_or_default();
+            let to = wanted.get(atom).cloned().unwrap_or_default();
+            (as_set(&from) != as_set(&to)).then(|| UseChange {
+                atom: atom.clone(),
+                from,
+                to,
+            })
+        })
         .collect()
 }
 
@@ -320,15 +429,37 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
         .context("Couldn't read which services start at boot")?;
     let wanted_services: BTreeSet<String> = config.services.iter().cloned().collect();
 
+    let configured = portage::configured_repositories(root);
+    let wanted_repos: BTreeSet<String> = config.repositories.iter().cloned().collect();
+    let check_after_sync = wanted_repos
+        .iter()
+        .any(|r| !root.join("var/db/repos").join(r).is_dir());
+    let to_add: Vec<String> = wanted_world.difference(&current_world).cloned().collect();
+
     Ok(Plan {
         init_name: init.name(),
-        unknown_packages: unknown_packages(
-            root,
-            &wanted_world
-                .difference(&current_world)
-                .cloned()
-                .collect::<Vec<_>>(),
-        ),
+        unknown_packages: if check_after_sync {
+            Vec::new()
+        } else {
+            unknown_packages(root, &to_add)
+        },
+        keyword_changes: keyword_changes(config, root),
+        add_repositories: wanted_repos
+            .iter()
+            .filter(|r| !configured.contains_key(*r))
+            .cloned()
+            .collect(),
+        remove_repositories: configured
+            .iter()
+            .filter(|(name, ours)| **ours && !wanted_repos.contains(*name))
+            .map(|(name, _)| name.clone())
+            .collect(),
+        extra_repositories: configured
+            .iter()
+            .filter(|(name, ours)| !**ours && !wanted_repos.contains(*name))
+            .map(|(name, _)| name.clone())
+            .collect(),
+        check_after_sync,
         add_packages: wanted_world.difference(&current_world).cloned().collect(),
         remove_packages: current_world.difference(&wanted_world).cloned().collect(),
         use_changes,

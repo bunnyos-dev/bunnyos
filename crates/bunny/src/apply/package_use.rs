@@ -10,6 +10,8 @@ use crate::portage;
 
 /// The copy of package.use taken before the takeover, inside the backup folder.
 pub(super) const USE_BEFORE: &str = "package.use.before";
+/// The same for package.accept_keywords.
+pub(super) const KEYWORDS_BEFORE: &str = "package.accept_keywords.before";
 
 /// package.use files that aren't bunny's (they'll be moved to the backup).
 pub fn foreign_package_use_files(root: &Path) -> Vec<String> {
@@ -144,5 +146,49 @@ pub(super) fn restore_files(root: &Path, backup: &Path) -> Result<()> {
     if before.exists() {
         copy_tree(&before, &use_dir).context("Couldn't put package.use back")?;
     }
+    let keywords = root.join(portage::KEYWORDS_DIR);
+    if keywords.is_dir() {
+        std::fs::remove_dir_all(&keywords)?;
+    } else if keywords.exists() {
+        std::fs::remove_file(&keywords)?;
+    }
+    let before = backup.join(KEYWORDS_BEFORE);
+    if before.exists() {
+        copy_tree(&before, &keywords).context("Couldn't put package.accept_keywords back")?;
+    }
+    Ok(())
+}
+
+/// Writes bunny's package.accept_keywords file from `[pkg] keywords`. Other
+/// files there are left alone; a package.accept_keywords that's a single
+/// file moves into the folder unchanged (`00-yours`), so bunny's file can sit
+/// next to it.
+pub(super) fn write_keywords(config: &Config, root: &Path, backup: &Path) -> Result<()> {
+    let dir = root.join(portage::KEYWORDS_DIR);
+    let saved = backup.join(KEYWORDS_BEFORE);
+    if saved.is_dir() {
+        std::fs::remove_dir_all(&saved)?;
+    } else if saved.exists() {
+        std::fs::remove_file(&saved)?;
+    }
+    if dir.exists() {
+        copy_tree(&dir, &saved)?;
+    }
+    let ours = dir.join(portage::BUNNY_KEYWORDS_FILE);
+    if config.keywords().is_empty() {
+        if ours.is_file() {
+            std::fs::remove_file(&ours)?;
+        }
+        return Ok(());
+    }
+    if dir.is_file() {
+        let tmp = root.join("etc/portage/.accept_keywords.bunny-move");
+        std::fs::rename(&dir, &tmp)?;
+        std::fs::create_dir_all(&dir)?;
+        std::fs::rename(&tmp, dir.join(portage::KEPT_KEYWORDS_FILE))?;
+    }
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(&ours, portage::render_keywords(config))
+        .context("Couldn't write package.accept_keywords")?;
     Ok(())
 }

@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- After an undo from the boot menu on an encrypted disk (where `/boot` is its
+  own partition), bunny now puts `/boot`'s kernel back to the one that version
+  used, early in the first start afterwards, and rebuilds the boot menu.
+  `bunny status` says what it did. The next switch adds the small
+  `bunny-finish-undo` start-up service for this.
+
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

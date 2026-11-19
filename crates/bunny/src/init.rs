@@ -19,6 +19,12 @@ pub trait InitSystem {
     fn user_services(&self) -> io::Result<BTreeSet<String>>;
     /// Whether a service with this name is installed.
     fn service_exists(&self, name: &str) -> bool;
+    /// Installs one of bunny's own early start-up services (`script` is its
+    /// service file) and starts it at boot. Writes files only, so it works
+    /// on a fake root.
+    fn add_boot_service(&self, name: &str, script: &str) -> io::Result<()>;
+    /// Whether that service is installed as `script` and starts at boot.
+    fn has_boot_service(&self, name: &str, script: &str) -> bool;
 }
 
 pub fn for_config(init: Init, root: &Path) -> Box<dyn InitSystem> {
@@ -71,6 +77,34 @@ impl InitSystem for OpenRc {
     fn service_exists(&self, name: &str) -> bool {
         self.root.join("etc/init.d").join(name).exists()
     }
+
+    /// Writes `/etc/init.d/<name>` and links it into the `boot` runlevel,
+    /// which is what `rc-update add <name> boot` does.
+    fn add_boot_service(&self, name: &str, script: &str) -> io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let init_d = self.root.join("etc/init.d");
+        std::fs::create_dir_all(&init_d)?;
+        let path = init_d.join(name);
+        let tmp = init_d.join(format!(".{name}.bunny-new"));
+        std::fs::write(&tmp, script)?;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+        std::fs::rename(&tmp, &path)?;
+        let boot = self.root.join("etc/runlevels/boot");
+        std::fs::create_dir_all(&boot)?;
+        let link = boot.join(name);
+        if std::fs::symlink_metadata(&link).is_err() {
+            std::os::unix::fs::symlink(format!("/etc/init.d/{name}"), &link)?;
+        }
+        Ok(())
+    }
+
+    fn has_boot_service(&self, name: &str, script: &str) -> bool {
+        std::fs::read_to_string(self.root.join("etc/init.d").join(name))
+            .ok()
+            .as_deref()
+            == Some(script)
+            && std::fs::symlink_metadata(self.root.join("etc/runlevels/boot").join(name)).is_ok()
+    }
 }
 
 #[cfg(test)]
@@ -83,6 +117,32 @@ mod tests {
         std::fs::write(dir.join(service), "").unwrap();
         std::fs::create_dir_all(root.join("etc/init.d")).unwrap();
         std::fs::write(root.join("etc/init.d").join(service), "").unwrap();
+    }
+
+    #[test]
+    fn adds_a_boot_service() {
+        let dir = tempfile::tempdir().unwrap();
+        let rc = OpenRc::new(dir.path());
+        assert!(!rc.has_boot_service("bunny-x", "#!/sbin/openrc-run\n"));
+        rc.add_boot_service("bunny-x", "#!/sbin/openrc-run\n")
+            .unwrap();
+        // Twice is fine (the link is already there).
+        rc.add_boot_service("bunny-x", "#!/sbin/openrc-run\n")
+            .unwrap();
+        assert!(rc.has_boot_service("bunny-x", "#!/sbin/openrc-run\n"));
+        assert!(!rc.has_boot_service("bunny-x", "something else"));
+        assert_eq!(
+            std::fs::read_link(dir.path().join("etc/runlevels/boot/bunny-x")).unwrap(),
+            PathBuf::from("/etc/init.d/bunny-x")
+        );
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dir.path().join("etc/init.d/bunny-x"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o755);
+        // Boot services aren't "your" services.
+        assert!(rc.user_services().unwrap().is_empty());
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {

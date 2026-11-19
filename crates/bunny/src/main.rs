@@ -5,6 +5,7 @@ mod apply;
 mod boot;
 mod commands;
 mod config;
+mod desktop;
 mod dev;
 mod diff;
 mod edit;

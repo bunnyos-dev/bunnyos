@@ -69,13 +69,31 @@ it. Or copy `bunny.toml` onto the USB and give its path instead.)
 ## Add a desktop
 
 Bunny Linux starts with only a terminal on purpose: adding a desktop is the
-first thing you learn to do with bunny. A `[desktop]` section that does it
-in one line (Bunny Desktop, KDE Plasma, Xfce, Hyprland) is planned. Until
-then, you add the pieces yourself.
+first thing you learn to do with bunny. Choosing a whole desktop in one line
+(Bunny Desktop, KDE Plasma, Xfce, Hyprland) is planned. Until then, you add
+the desktop yourself, and one line in `bunny.toml` sets up what it needs.
 
 > **Being tested:** these steps are new, and some packages compile for a
 > while instead of downloading. If something fails, bunny explains what
 > happened; if it's still unclear, [send a report](helping-test.md).
+
+A Wayland desktop gets the screen and keyboard through **elogind**, which
+Bunny Linux's minimal system doesn't use yet. Open `bunny.toml`:
+
+```sh
+sudo nano /etc/bunny/bunny.toml
+```
+
+and add this at the end of the file:
+
+```toml
+[desktop]
+wayland = true
+```
+
+Save (Ctrl+O, Enter) and close (Ctrl+X). That turns on elogind and D-Bus,
+and logins that go through elogind. (The exact settings are in
+[`[desktop]`](../reference/config.md#desktop).)
 
 [Mango](https://mangowm.github.io) is a small, fast Wayland desktop, set up
 with one text file. It isn't in Gentoo's own package tree: it's in **GURU**,
@@ -83,62 +101,25 @@ a repository Gentoo users look after together, and only as a testing
 version. bunny sets both up for you:
 
 ```sh
-bunny add mangowm gui-apps/foot media-fonts/dejavu sys-auth/elogind sys-apps/dbus
+bunny add mangowm gui-apps/foot media-fonts/dejavu
 ```
 
 bunny says Mango is in the GURU repository and asks whether to add it. Type
 `y`. It adds three things to `bunny.toml`: `repositories = ["guru"]`, and
 `keywords = ["~amd64"]` for Mango and the effects library it uses, which
-allows their testing versions. Then it shows the plan and asks again before
-changing anything.
+allows their testing versions. Then it shows the plan, with the elogind
+pieces marked "(from [desktop])", and asks again before changing anything.
 
 (foot is the terminal Mango opens, and DejaVu is a font, since a fresh
 system has none.)
 
-Mango gets the screen and keyboard through **elogind**, which Bunny
-Linux's minimal system doesn't use yet. Three changes turn it on: the
-`elogind` and `dbus` services, logins that go through elogind (`pambase`),
-and the small library Mango asks for the screen (`seatd`). Open
-`bunny.toml`:
-
-```sh
-sudo nano /etc/bunny/bunny.toml
-```
-
-Add the two services to `services`:
-
-```toml
-services = [
-    "dhcpcd",
-    "sysklogd",
-    "elogind",
-    "dbus",
-]
-```
-
-and these at the end of the file:
-
-```toml
-[pkg."sys-auth/pambase"]
-use = ["elogind"]
-
-[pkg."sys-auth/seatd"]
-use = ["elogind"]
-```
-
-Save (Ctrl+O, Enter), close (Ctrl+X), and apply:
-
-```sh
-bunny switch
-```
-
 It may say a font is no longer needed (the one something else pulled in
 before DejaVu); that's fine to remove.
 
-**Log out and back in** (`exit`), so your login goes through elogind.
-`echo $XDG_RUNTIME_DIR` should now print `/run/user/1000`. Then, at the
-computer itself (not over SSH, which has no screen), copy Mango's starting
-settings so you can change them, and start it:
+**Log out and back in** (`exit`), so your login goes through elogind (bunny
+reminds you at the end). `echo $XDG_RUNTIME_DIR` should now print
+`/run/user/1000`. Then, at the computer itself (not over SSH, which has no
+screen), copy Mango's starting settings so you can change them, and start it:
 
 ```sh
 mkdir -p ~/.config/mango
@@ -150,13 +131,13 @@ Alt+Enter opens a terminal, Alt+Q closes a window, and Super+M leaves Mango.
 Everything else is in `~/.config/mango/config.conf`; Super+R reloads it.
 
 > **Prefer something in Gentoo's own tree?** Sway works the same way without
-> a second repository: `bunny add gui-wm/sway gui-apps/foot media-fonts/dejavu
-> sys-auth/elogind sys-apps/dbus`, the same services and `[pkg]` lines, then
-> `sway` (Super+Enter for a terminal, Super+Shift+E to leave).
+> a second repository: the same `[desktop]` lines, then `bunny add
+> gui-wm/sway gui-apps/foot media-fonts/dejavu`, log in again, and `sway`
+> (Super+Enter for a terminal, Super+Shift+E to leave).
 
 If `mango` says "XDG_RUNTIME_DIR must be set", your login isn't going through
-elogind yet: check the `pambase` lines and log in again. "No backend was
-able to open a seat" means the `seatd` lines are missing, or you started it
-over SSH.
+elogind yet: check that `[desktop]` has `wayland = true` (`bunny plan` should
+say nothing is left to do) and log in again. "No backend was able to open a
+seat" means the same, or that you started it over SSH.
 
 Next: the rest of [Everyday tasks](../tasks/status.md).

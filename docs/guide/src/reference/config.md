@@ -30,6 +30,9 @@ use = ["pgo", "wayland", "-telemetry"]
 
 [pkg."dev-lang/python:3.12"]
 use = ["sqlite", "python_targets_python3_12"]
+
+[desktop]
+wayland = true
 ```
 
 ## `packages`
@@ -46,7 +49,8 @@ dependencies nothing else needs.
 
 Two things are kept even if they're not in the list:
 
-- the admin tool chosen in [`[security]`](#security) (sudo or doas), and
+- the admin tool chosen in [`[security]`](#security) (sudo or doas),
+- what [`[desktop]`](#desktop) needs (elogind and D-Bus), and
 - bunny itself, when it was installed from the Bunny Linux overlay
   (`app-admin/bunny-bin` or `app-admin/bunny`), so a switch never removes
   bunny.
@@ -54,7 +58,9 @@ Two things are kept even if they're not in the list:
 ## `services`
 
 Services that start at boot, by their plain name (as in `/etc/init.d/`).
-bunny adds them to OpenRC's `default` runlevel and starts them.
+bunny adds them to OpenRC's `default` runlevel and starts them. The one
+exception is `elogind`, which goes in the `boot` runlevel, as Gentoo
+recommends, so even the first login goes through it.
 
 Services already started in the `boot` or `sysinit` runlevels (like
 `elogind`) count as enabled. bunny doesn't turn off services you leave out of
@@ -131,6 +137,59 @@ undo_entry = true   # add "undo the last change" to the boot menu
 
 It's off by default for now, while it's new, because it changes the startup
 image. The Bunny Linux installer will turn it on.
+
+## `[desktop]`
+
+What a graphical desktop needs from the base system. Bunny Linux installs a
+minimal system where logins don't go through
+[elogind](https://wiki.gentoo.org/wiki/Elogind), and a Wayland desktop
+(Mango, Sway, Hyprland, …) needs them to: without it, the desktop says
+"XDG_RUNTIME_DIR must be set" or "libseat: No backend was able to open a
+seat". One line sets it up:
+
+```toml
+[desktop]
+wayland = true
+```
+
+| Setting | Values | Default | Meaning |
+|---|---|---|---|
+| `wayland` | `true` / `false` | `false` | Set up elogind logins and seats, which any Wayland desktop needs. |
+
+It's as if you'd written these yourself:
+
+```toml
+packages = ["sys-apps/dbus", "sys-auth/elogind"]
+services = ["dbus", "elogind"]      # elogind in the boot runlevel
+
+[pkg."sys-auth/pambase"]
+use = ["elogind"]    # logins register with elogind, which makes /run/user/<id>
+
+[pkg."sys-auth/seatd"]
+use = ["elogind"]    # libseat asks elogind for the screen and keyboard
+```
+
+`bunny plan` and `bunny diff` mark each of these "(from [desktop])". Your own
+settings win: a `[pkg."sys-auth/seatd"]` entry of yours replaces the one
+`[desktop]` would add, and listing `elogind` in `services` too is fine.
+
+Set this up by hand before (the `[pkg]` lines and services above)? Those
+lines can stay, or you can replace them with the section: `bunny plan` then
+says there's nothing to do.
+
+After the switch that turns it on, **log out and back in**: logins from before
+don't go through elogind. bunny reminds you.
+
+It doesn't install a desktop itself; add the one you want with `bunny add`.
+Choosing a whole desktop in this section (`name = "mango"`, Bunny Desktop,
+KDE Plasma, Xfce) is planned.
+
+Why only these packages, and not `USE="elogind"` for everything or Gentoo's
+desktop profile: both rebuild every installed package with that flag (the
+profile also turns on about 70 other flags, like `pulseaudio`, `cups` and
+`qt6`), which isn't what a minimal system wants. Some programs you add later
+have an `elogind` flag of their own; if one needs it, turn it on in that
+program's `[pkg]` entry.
 
 ## `[dev]`
 

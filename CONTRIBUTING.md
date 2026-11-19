@@ -83,6 +83,7 @@ tests.
 | `portage.rs` | Turns the config into Portage's files (world, package.use). |
 | `init.rs` | Services, behind the `InitSystem` trait (OpenRC today). |
 | `security.rs` | `[security]`: the sudo or doas file and the wheel group. |
+| `desktop.rs` | `[desktop]`: the packages, USE flags and services a Wayland desktop needs. |
 | `rollback.rs` | Generations: listing, rolling back, cleaning. |
 | `applied.rs` | The copy of the config kept inside the system, so undo puts it back. |
 | `boot.rs` | The boot menu's undo entry and the dracut module (`boot/`). |

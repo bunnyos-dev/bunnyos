@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Developer mode's `"auto"` no longer sends a report when you mistype a
+  package name, make a config mistake, or don't give sudo your password
+  (Ctrl+C at its question). These now end with exit code 4 ("stopped
+  because of what was typed; nothing was changed") instead of 1.
+
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.

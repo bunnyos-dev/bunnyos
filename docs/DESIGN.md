@@ -833,7 +833,13 @@ testing and decisions.
   swaps user names, home folders, the hostname, emails and `*.ts.net` names
   for placeholders, and files one issue in the private
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
-  `"auto"` sends any command that fails or shows ⚠/✗. Daily sessions read
+  `"auto"` sends any command that fails or shows ⚠/✗, except ones that
+  stopped because of the user's own input: those exit with code 4
+  (`YOUR_INPUT`: a package name that doesn't exist, config mistakes, sudo or
+  doas getting no password, Ctrl+C at its question included), which bunny
+  as root passes through to the bunny that elevated. They're still recorded
+  and sent by a manual `bunny report`. Other Ctrl+C stops are still sent,
+  since a "hang" the user had to stop can be bunny's problem. Daily sessions read
   new reports first.
 - **Recording the install:** the live USB has no config, so preview images
   (CI builds that aren't releases, `PREVIEW=1 tools/build-iso.sh`) ship

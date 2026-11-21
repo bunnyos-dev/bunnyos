@@ -973,6 +973,47 @@ fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
 }
 
 #[test]
+fn bunny_linuxs_own_repository_needs_no_list_and_no_warning() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse("repositories = [\"bunny\"]\n").unwrap();
+    assert!(config.problems().is_empty());
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(plan.add_repositories, ["bunny"]);
+    let shown = plan.render();
+    assert!(shown.contains("Repositories to add:\n  + bunny"), "{shown}");
+    assert!(!shown.contains("aren't checked"), "{shown}");
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+    };
+    switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+    // Gentoo's list isn't downloaded: bunny knows where its own lives.
+    assert!(
+        !runner.commands.iter().any(|c| c.starts_with("wget")),
+        "{:#?}",
+        runner.commands
+    );
+    assert!(runner
+        .commands
+        .iter()
+        .any(|c| c == "emaint sync --repo bunny"));
+    let conf = std::fs::read_to_string(portage::repo_conf_path(r, "bunny")).unwrap();
+    assert!(
+        conf.contains("sync-uri = https://github.com/bunnyos-dev/bunny-overlay.git"),
+        "{conf}"
+    );
+
+    // With another repository too, the list is fetched for that one, and
+    // the warning is about it.
+    let both = Config::parse("repositories = [\"bunny\", \"guru\"]\n").unwrap();
+    let plan = plan::make(&both, r).unwrap();
+    assert_eq!(plan.add_repositories, ["guru"]);
+    assert!(plan.render().contains("aren't checked"));
+}
+
+#[test]
 fn says_so_when_a_repository_isnt_in_gentoos_list() {
     let root = fake_system();
     let r = root.path();

@@ -36,6 +36,13 @@ pub const BASE_PACKAGES: [&str; 5] = [
     "dev-vcs/git",
 ];
 
+/// Packages from Bunny Linux's own repository, in the main config after
+/// [`BASE_PACKAGES`]. `bunny-release` makes the system say Bunny Linux
+/// (`/etc/os-release`, and the logo for fastfetch). They're installed by the
+/// first `bunny switch`, which sets up the repository first; the install
+/// script's own emerge (Gentoo's packages only) leaves them out.
+pub const OWN_PACKAGES: [&str; 1] = ["sys-apps/bunny-release"];
+
 /// Services in the main config.
 pub fn services(account: &Account) -> Vec<&'static str> {
     let mut out = vec!["dhcpcd", "sysklogd"];
@@ -70,6 +77,10 @@ pub fn config(account: &Account) -> String {
 # What you want installed. Add things with `bunny add <name>`, or here.
 packages = {packages}
 
+# Package repositories besides Gentoo's own. \"bunny\" is Bunny Linux's own
+# (bunny-release, which makes the system say Bunny Linux).
+repositories = [\"{own}\"]
+
 # Services that start when the computer does.
 services = {services}
 
@@ -84,7 +95,8 @@ admins = [\"{user}\"]
 undo_entry = true
 ",
         host = account.hostname,
-        packages = list(&BASE_PACKAGES),
+        packages = list(&[&BASE_PACKAGES[..], &OWN_PACKAGES[..]].concat()),
+        own = crate::overlays::OWN,
         services = list(&services(account)),
         user = account.username,
     )
@@ -154,7 +166,9 @@ mod tests {
         let text = config(&account());
         let c = Config::parse(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
         assert!(c.problems().is_empty(), "{:?}", c.problems());
-        assert_eq!(c.packages, BASE_PACKAGES);
+        assert_eq!(c.packages, [&BASE_PACKAGES[..], &OWN_PACKAGES[..]].concat());
+        assert_eq!(c.repositories, ["bunny"]);
+        assert!(c.packages.contains(&"sys-apps/bunny-release".to_string()));
         assert_eq!(c.services, ["dhcpcd", "sysklogd", "sshd"]);
         assert_eq!(c.security.unwrap().admins, ["you"]);
         assert!(c.boot.undo_entry);
@@ -214,9 +228,10 @@ mod tests {
                 "{atom} isn't in the config"
             );
         }
+        // Plus Bunny Linux's own, which the first switch installs.
         assert_eq!(
             c.packages.len(),
-            super::super::system::packages(&choices).len()
+            super::super::system::packages(&choices).len() + OWN_PACKAGES.len()
         );
     }
 }

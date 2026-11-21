@@ -506,6 +506,9 @@ mod tests {
         );
         assert!(env.contains("CMDLINE=\"rd.luks.uuid=luks\""), "{env}");
         assert!(env.contains("sys-fs/cryptsetup"), "{env}");
+        // Bunny Linux's own packages come with the first switch, once its
+        // repository is set up: the install script's emerge can't see them.
+        assert!(!env.contains("bunny-release"), "{env}");
         assert!(env.contains("SERVICES=\"dhcpcd sysklogd sshd\""), "{env}");
         assert!(env.contains("BOOT_SERVICES=\"swapfiles\""), "{env}");
         assert!(read("etc/init.d/swapfiles").contains("need localmount"));

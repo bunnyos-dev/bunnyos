@@ -104,6 +104,29 @@ With `[boot] undo_entry = true`:
   **the kernel and startup image saved in that generation**, with
   `bunny.rollback=<generation>` added. Using the generation's own kernel means
   everything matches after the swap, even if the change updated the kernel.
+- The same switch tidies the menu (shown in `bunny plan` under "Boot menu,
+  tidied", once; again only if something brings them back):
+  - **Gentoo's theme:** a `GRUB_THEME=` line in `/etc/default/grub` is
+    commented out, with a note above it saying so.
+  - **"Bunny Linux GNU/Linux":** GRUB's `/etc/grub.d/10_linux` always adds
+    " GNU/Linux" to `GRUB_DISTRIBUTOR`. bunny adds `/etc/grub.d/10_bunny`,
+    which runs `10_linux` and changes only the titles: "Bunny Linux", its
+    submenu "Advanced options", and "Bunny Linux, with Linux 6.12.58" inside
+    it. Everything else (kernels, startup images, microcode, settings) is
+    still `10_linux`'s own work. `10_linux` is made non-executable, so
+    `grub-mkconfig` doesn't list everything twice. If a GRUB update makes it
+    executable again, `10_bunny` prints nothing (the menu says "GNU/Linux"
+    again, but nothing is listed twice) and the next switch tidies it.
+  - **"(EFI BootNext)" entries:** `/etc/grub.d/31_efi_bootnext` is made
+    non-executable. "UEFI Firmware Settings" (`30_uefi-firmware`) and other
+    systems (`30_os-prober`) stay.
+
+  Each file is copied to the switch's backup folder
+  (`/var/lib/bunny/backups/<time>/etc/…`) first, then `grub-mkconfig` runs
+  once. The files are in `/etc`, so undoing the switch puts them back. With
+  `/boot` on its own partition, the menu itself keeps the new titles until
+  the next `grub-mkconfig` (a kernel update or switch). Turning `undo_entry`
+  off leaves the tidied menu as it is.
 - On a normal boot the step does nothing. When the entry is picked, it does
   the same as `bunny rollback` before the system is mounted: saves the current
   system as `bunny-<time>-before-rollback`, moves it aside to

@@ -24,6 +24,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub mod tidy;
+
 /// The `[boot]` section.
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
@@ -67,11 +69,14 @@ pub struct Changes {
     /// Why it can't be set up on this system (shown, but doesn't stop the
     /// rest of the switch).
     pub problems: Vec<String>,
+    /// Gentoo's leftovers in the menu to tidy (theme, "GNU/Linux",
+    /// "(EFI BootNext)").
+    pub tidy: Vec<tidy::Tidy>,
 }
 
 impl Changes {
     pub fn is_empty(&self) -> bool {
-        self.install_module.is_none() && !self.remove_entry
+        self.install_module.is_none() && !self.remove_entry && self.tidy.is_empty()
     }
 }
 
@@ -117,6 +122,8 @@ pub fn changes(boot: &Boot, root: &Path) -> Changes {
     if !root.join("boot/grub/grub.cfg").exists() {
         out.problems
             .push("the undo entry needs GRUB, and there's no /boot/grub/grub.cfg".into());
+    } else {
+        out.tidy = tidy::needed(root);
     }
     if !root.join("usr/bin/dracut").exists() {
         out.problems

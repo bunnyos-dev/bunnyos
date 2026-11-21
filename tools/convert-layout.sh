@@ -70,9 +70,43 @@ else
     esac
 fi
 
+# /boot must be its own filesystem (usually the EFI partition), as on an
+# encrypted install. Then GRUB and the kernels live outside the btrfs volume
+# and keep working as they are. With /boot inside /, GRUB reads its files
+# from the top of the volume, which the conversion leaves behind, so GRUB
+# itself would have to be reinstalled: not handled here yet.
+if [ "$MODE" != finish ] && [ "$REAL" = 1 ]; then
+    BOOT_UUID="$(findmnt -no UUID --mountpoint /boot 2>/dev/null || true)"
+    [ -n "$BOOT_UUID" ] && [ "$BOOT_UUID" != "$UUID" ] || fail "/boot is part of / here, not its own partition. This script only converts
+  systems where /boot is a separate partition (like the EFI partition on an
+  encrypted install), because otherwise GRUB has to be reinstalled too.
+  Nothing was changed."
+fi
+
+# Folders from the layout that are already their own filesystem (another
+# disk, or tmpfs for /var/tmp/portage): left exactly as they are.
+separate() {
+    other="$(findmnt -no UUID --mountpoint "${ROOT}$1" 2>/dev/null || true)"
+    fs="$(findmnt -no FSTYPE --mountpoint "${ROOT}$1" 2>/dev/null || true)"
+    [ -n "$fs" ] && [ "$other" != "$UUID" ]
+}
+KEPT=""
+WANTED=""
+for pair in $SUBVOLS; do
+    if separate "${pair#*:}"; then KEPT="$KEPT ${pair#*:}"; else WANTED="$WANTED $pair"; fi
+done
+SUBVOLS="${WANTED# }"
+
 # Nested subvolumes inside / (they aren't part of a snapshot of /).
+# Ones at a layout folder (like /home as a subvolume) are copied into that
+# folder's @ subvolume instead, so they're left out here.
 nested() {
-    btrfs subvolume list -o "${ROOT:-/}" | sed 's/.* path //' | grep -v '^@' || true
+    btrfs subvolume list -o "${ROOT:-/}" | sed 's/.* path //' | grep -v '^@' | while read -r sv; do
+        layout=0
+        for pair in $SUBVOLS; do [ "/$sv" = "${pair#*:}" ] && layout=1; done
+        [ "$layout" = 1 ] || echo "$sv"
+    done
+    true
 }
 
 # Swapfiles on this filesystem: in use now, or listed in /etc/fstab. A
@@ -122,7 +156,7 @@ if [ "$MODE" = finish ]; then
     printf '%s\n' "$LEFT" | while read -r f; do
         [ -n "$f" ] && rm -rf "${TOP:?}/${f:?}"
     done
-    if [ -f /boot/grub/custom.cfg ]; then
+    if [ "$REAL" = 1 ] && mountpoint -q /boot && [ -f /boot/grub/custom.cfg ]; then
         sed -i "/^$OLD_ENTRY_BEGIN\$/,/^$OLD_ENTRY_END\$/d" /boot/grub/custom.cfg
     fi
     umount "$TOP"
@@ -155,6 +189,9 @@ if [ -n "$NESTED" ]; then
         step "/$sv is a subvolume inside /, so it isn't in the copy: copy its files into @ as a normal folder."
     done
 fi
+for dir in $KEPT; do
+    step "$dir is already its own filesystem ($(findmnt -no FSTYPE --mountpoint "${ROOT}$dir")), so it stays as it is."
+done
 if [ -n "$SWAPS" ]; then
     printf '%s\n' "$SWAPS" | while read -r f; do
         size="$(stat -c %s "${ROOT}$f")"
@@ -185,7 +222,14 @@ read -r answer
 [ "$answer" = convert ] || fail "Cancelled. Nothing was changed."
 
 # If anything fails from here on, say where things stand.
+BOOT_SWITCHED=0
 stopped() {
+    if [ "$BOOT_SWITCHED" = 1 ]; then
+        printf '\n\033[1;31m✗ Stopped after the boot menu was switched to the new layout.\033[0m\n' >&2
+        printf 'Don'"'"'t delete @: the computer starts from it now. Restart and check it works;\n' >&2
+        printf 'only the "Before the Bunny Linux layout" entry may be missing.\n' >&2
+        return
+    fi
     made=""
     for sv in @ $SUBVOLS @swap; do
         name="${sv%%:*}"
@@ -219,7 +263,14 @@ for pair in $SUBVOLS; do
     sv="${pair%%:*}"; dir="${pair#*:}"
     say "Creating $sv ($dir)"
     btrfs subvolume create "${ROOT}/$sv" >/dev/null
+    # If the folder was a subvolume, the copy of / has a read-only
+    # placeholder there: replace it with a normal folder.
+    rmdir "${NEW:?}$dir" 2>/dev/null || true
     mkdir -p "${NEW:?}$dir"
+    if [ -d "${ROOT}$dir" ]; then
+        chown --reference="${ROOT}$dir" "${NEW:?}$dir"
+        chmod --reference="${ROOT}$dir" "${NEW:?}$dir"
+    fi
     case "$sv" in
         @snapshots|@build) ;;
         *)
@@ -288,8 +339,16 @@ cp "$FSTAB" "$FSTAB.before-bunny-layout"
 SWAPS_FOR_AWK="$(printf '%s ' $SWAPS)"
 awk -v uuid="$UUID" -v opts="$BASE_OPTS" -v subvols="$SUBVOLS" -v swapline="$SWAP_LINE" \
     -v oldswaps="$SWAPS_FOR_AWK" -v swapdone=0 '
-    BEGIN { n = split(oldswaps, os, " ") }
+    BEGIN {
+        n = split(oldswaps, os, " ")
+        m = split(subvols, sv, " ")
+        for (i = 1; i <= m; i++) { split(sv[i], p, ":"); replaced[p[2]] = 1 }
+        if (swapline != "") replaced["/swap"] = 1
+    }
     /^[[:space:]]*#/ || NF < 2 { print; next }
+    # An old line for a folder that now gets its @ subvolume (like a /home
+    # subvolume mounted on its own): replaced by the new line.
+    ($2 in replaced) { print "# (replaced by the Bunny Linux layout) " $0; next }
     $2 == "/" {
         printf "UUID=%s  /  btrfs  %s,subvol=@  0 0\n", uuid, opts
         m = split(subvols, sv, " ")
@@ -324,11 +383,12 @@ if [ "$REAL" = 1 ]; then
         grep -q 'rootflags=subvol=@' "$grubconf" || fail "Couldn't add rootflags=subvol=@ to $grubconf. Add it to GRUB_CMDLINE_LINUX by hand, then run grub-mkconfig -o /boot/grub/grub.cfg."
     done
     grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || fail "grub-mkconfig failed. Your old system is untouched; run it by hand to see why."
+    BOOT_SWITCHED=1
 
     # "Before the Bunny Linux layout": the newest kernel, with the old root.
     KERNEL="$(ls -t /boot/vmlinuz-* 2>/dev/null | grep -v '\.old$' | head -1)"
     VERSION="${KERNEL#/boot/vmlinuz-}"
-    ESP_UUID="$(findmnt -no UUID /boot)"
+    ESP_UUID="$BOOT_UUID"
     CMDLINE="$(sed 's/BOOT_IMAGE=[^ ]* //; s/rootflags=[^ ]* \{0,1\}//' /proc/cmdline)"
     if [ -n "$KERNEL" ] && [ -f "/boot/initramfs-$VERSION.img" ] && [ -n "$ESP_UUID" ]; then
         CUSTOM=/boot/grub/custom.cfg

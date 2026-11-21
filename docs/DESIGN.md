@@ -321,7 +321,8 @@ when nothing is set and both are installed).
 
 1. Shows the plan and asks before changing anything (`--yes` skips this).
    Re-runs itself through sudo or doas (see `[security]`) when not root.
-   If sudo or doas refuses (exit code 1; bunny run as root never uses 1),
+   If sudo or doas refuses (exit code 1, or doas stopped by Ctrl+C; bunny
+   run as root never uses 1 and handles Ctrl+C itself),
    bunny says nothing was changed and to run the command again.
 2. Takes a read-only btrfs snapshot of `/` in `/.snapshots/bunny-<time>`. If
    that fails, nothing is changed.

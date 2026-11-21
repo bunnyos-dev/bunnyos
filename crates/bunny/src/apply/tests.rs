@@ -664,7 +664,7 @@ fn removal_list_comes_from_the_helper_and_only_those_are_removed() {
     );
     assert!(
         c.iter().any(|l| l
-            == "emerge --depclean --color=n =acct-user/nullmail-0-r2 =mail-mta/nullmailer-2.2-r2"),
+            == "emerge --depclean --color=n --ask=n =acct-user/nullmail-0-r2 =mail-mta/nullmailer-2.2-r2"),
         "{c:#?}"
     );
 
@@ -713,7 +713,7 @@ fn removal_falls_back_to_emerges_text_when_the_helper_cant_answer() {
     assert!(asked < pretend, "{c:#?}");
     // The text path removes as it always did: emerge's own full list.
     assert!(
-        c.iter().any(|l| l == "emerge --depclean --color=n"),
+        c.iter().any(|l| l == "emerge --depclean --color=n --ask=n"),
         "{c:#?}"
     );
 }

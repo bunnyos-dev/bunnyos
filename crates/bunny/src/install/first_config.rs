@@ -337,7 +337,11 @@ pub fn start_history(
         );
         return Ok(());
     }
-    println!("\n==> Starting your config's history (git, in /{DIR})");
+    super::say(
+        runner,
+        &format!("Starting your config's history (git, in /{DIR})"),
+        "Makes /etc/bunny a git repository with a first commit, \"As installed\",\nso every later change can be saved and sent to GitHub with `bunny publish`.",
+    );
     let who = crate::config_repo::Identity::placeholder(&account.username, &account.hostname);
     if !crate::config_repo::start(&dir, &who, "As installed", runner)? {
         println!(

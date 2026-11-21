@@ -112,7 +112,11 @@ fn keep_recording(
     let sessions = ".local/state/bunny/sessions";
     say(runner, "Keeping the recording of this install (developer mode)", "Copies the recording of this install into your home folder in the new system,\nso `bunny report` can send it after the first start.");
     if runner.dry() {
-        would(runner, "copy", &format!("{} to {home}/{sessions}/", log.display()));
+        would(
+            runner,
+            "copy",
+            &format!("{} to {home}/{sessions}/", log.display()),
+        );
         return;
     }
     let to = choices.mnt.join(&home[1..]).join(sessions);

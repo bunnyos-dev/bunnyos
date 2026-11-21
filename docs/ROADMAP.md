@@ -204,7 +204,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Filled in from the maintainer's notes and developer-mode reports.)
 
-- [~] **Bug: the time zone from `bunny install` isn't set.** After the
+- [x] **Bug: the time zone from `bunny install` isn't set.** After the
       install, `/etc/timezone` is missing and `/etc/localtime` still points
       to `zoneinfo/Factory` (from the stage3), so `date` shows `-00`.
       `inside.sh` writes `/etc/timezone` and runs `emerge --config
@@ -212,30 +212,30 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       Gentoo. Fix: make the link the way Gentoo's handbook now says for
       OpenRC (`ln -sf ../usr/share/zoneinfo/<zone> /etc/localtime`), and
       check it with a test.
-- [~] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
+- [x] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
       at boot, not in your config: local, netmount". Those two are in the
       stage3's default runlevel, and the starter config doesn't list them.
       Fix: list them in the starter config, or have bunny treat OpenRC's own
       default services as part of the base system.
-- [~] **Bug: `bunny report` swaps every "bunny" when your user name is
+- [x] **Bug: `bunny report` swaps every "bunny" when your user name is
       `bunny`.** The report read `/etc/you/you.toml`, `you update`, `you
       rollback list`. Replace the user name only where it's a user name
       (`/home/<name>`, `<name>@`, a login line), never inside bunny's own
       name, paths and commands. Add a test with the user name `bunny`.
-- [~] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
+- [x] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
       reinstalled curl, gettext, iputils, libb2 and portage-utils, shown as
       "(rebuild)". Say why (a USE flag changed, a library they use changed).
-- [~] **26 unread Gentoo announcements on a fresh install.** They're all
+- [x] **26 unread Gentoo announcements on a fresh install.** They're all
       older than the system. `bunny install` should mark them read
       (`eselect news read --quiet all`), so only new ones are mentioned.
-- [~] **Guide, What to do first: the git steps don't work as written.**
+- [x] **Guide, What to do first: the git steps don't work as written.**
       `git init` makes a `master` branch (the page later pushes `main`), and
       the commit fails with "Author identity unknown" because root has no
       git name or email. Then `sudo git push` would fail too: the GitHub
       sign-in belongs to your user, not root. Fix the page (`git init -b
       main`, set a name and email for the repository, sign root in with
       `sudo gh auth login` + `sudo gh auth setup-git`), or better:
-- [~] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
+- [x] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
       (branch `main`, a first commit "As installed", identity from the
       install's answers), and a later `bunny git`/`bunny publish` connects it
       to GitHub with your own sign-in. Then the Guide's git section is one
@@ -255,7 +255,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       registered ones, and offers to add the repository, with a plain
       warning that Gentoo doesn't check community overlays. Testing-only
       packages need `[pkg] keywords` too (not in `bunny.toml` yet).
-- [~] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
+- [x] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
       (`[desktop] wayland = true`, PR open)
       The install uses Gentoo's base profile, where logins don't go through
       elogind (`sys-auth/pambase` without `USE=elogind`), so no
@@ -266,7 +266,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       libseat is built without elogind (`[pkg."sys-auth/seatd"] use =
       ["elogind"]`). The fix should turn elogind on everywhere a desktop
       needs it at once (likely a desktop profile, or a set of USE flags).
-- [~] **A switch that failed early leaves a generation behind.** The
+- [x] **A switch that failed early leaves a generation behind.** The
       switch that stopped at Gentoo's list (before changing anything) kept
       its snapshot, so `bunny generations` shows #6 and #7 with the same
       description, and #6 is a copy of the system before nothing happened.
@@ -280,22 +280,22 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       plus a system-wide fastfetch setting that uses it; later, offer the
       logo to fastfetch itself. It replaces a file from Gentoo's baselayout,
       so it's the first entry in OVERRIDES.md. Needs the logo (design work).
-- [~] **Downloading a repository prints emaint's raw output** (git clone
+- [x] **Downloading a repository prints emaint's raw output** (git clone
       lines, "Performing Global Updates", every `profiles/updates` file,
       "Action: sync … returned code = 0"). Show one line per repository
       ("Downloading guru… ✓ 17.5 MB") and keep the rest in the log, like
       emerge's output.
-- [~] **The repository trust warning counts as a problem in developer
+- [x] **The repository trust warning counts as a problem in developer
       mode.** Its ⚠ made `report = "auto"` send a report for a switch that
       worked. Use a symbol that isn't a problem marker (or skip plan
       warnings when deciding to auto-report).
-- [~] **Guide, Helping test: sign in to GitHub before turning on
+- [x] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
       and 2. Also say that without a desktop, `gh auth login` warns it can't
       copy the code or open a browser, which is expected: open
       github.com/login/device on another device and type the code.
-- [~] **Live USB welcome says "Not online yet" when it is online.** The
+- [x] **Live USB welcome says "Not online yet" when it is online.** The
       welcome checks once, 3 seconds after login, by pinging
       `distfiles.gentoo.org` (needs DNS too). In the VM, `ping 1.1.1.1`
       worked right after. Likely the network or DNS wasn't up yet at that
@@ -306,10 +306,10 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `x`, e.g. "v Dry run finished"). Check which symbols the console font
       has (✓ ✗ ⚠ ·) and load a font that has them on the USB (or fall back
       to plain text when the terminal is the Linux console).
-- [~] **"Welcome to your new account!"** appears above the welcome on the
+- [x] **"Welcome to your new account!"** appears above the welcome on the
       live USB, which is confusing there (it isn't a new account). Find what
       prints it at the first login and turn it off on the USB.
-- [~] **`bunny install --dry-run` is a wall of commands.** Every
+- [x] **`bunny install --dry-run` is a wall of commands.** Every
       `(would run)` line is shown, and long ones wrap. Decided with the
       maintainer: by default, the steps in plain words (each step's name and
       what it does); the exact commands only with `--dry-run --verbose`.
@@ -335,10 +335,10 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       - GRUB can't show plain text lines, so the change lines are entries
         that do nothing when picked. Hidden menu (Esc to show) and the
         real theme stay in phase 9.
-- [~] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
+- [x] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
       (once from GRUB's settings, once added by bunny). Harmless; add it
       only when it isn't already there.
-- [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
+- [x] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
       even though the install asked for a time zone. Show local time, and for
       the first generation say "as installed".
 - [ ] **`tools/bunny-vm.sh ssh` warns "REMOTE HOST IDENTIFICATION HAS
@@ -346,11 +346,60 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       uses port 2223, so SSH remembers the last VM's key and refuses the new
       one. Fix: keep each VM's key in its own known_hosts file
       (`$VM_DIR/known_hosts`), or give each VM its own port.
-- [~] **Developer mode can't record `bunny install`.** It's set in
+- [x] **Developer mode can't record `bunny install`.** It's set in
       `bunny.toml`, and the live USB has none, so the install itself (the
       part being tested most) isn't recorded. Idea: preview ISOs record by
       default, and the recording is copied into the new system so
       `bunny report` sends it after the first start.
+
+### Fixes from the Friday test
+
+(Found while testing the dry-run fixes together, on the `test/friday` branch.)
+
+- [ ] **The boot menu's leftover clutter** (the rest of "A clean boot menu"):
+      the Gentoo theme (`GRUB_THEME=…/gentoo_glass` in `/etc/default/grub`),
+      "Bunny Linux GNU/Linux" (GRUB's `10_linux` always adds " GNU/Linux";
+      bunny writes the main entry itself instead), and every
+      "(EFI BootNext)" entry (`/etc/grub.d/31_efi_bootnext`; turn it off,
+      keep "UEFI Firmware Settings").
+- [ ] **`git log` in /etc/bunny fails as your user** ("detected dubious
+      ownership"): `/etc/bunny` belongs to root. `bunny install` (and
+      `bunny publish`) add `/etc/bunny` to git's system-wide
+      `safe.directory`.
+- [ ] **Install asks about encryption and swap** (agreed with the
+      maintainer): a few questions after the disk, each with a recommended
+      answer and one line of why: encrypt? [Y/n], swap (Enter for none, a
+      size, or "hibernate"; encrypted with the disk), and /home on a second
+      disk when there is one. Enter through everything = today's install.
+      No partition sizes, mount points or filesystem menus (btrfs is needed
+      for undo, said in one line). At the end, print the same choices as
+      options (`bunny install --no-encrypt --swap 8G`) to repeat it. Full
+      control stays `--mounted` (the Guide's "Installing by hand").
+- [ ] **Short passwords: warn, don't refuse.** Under 8 characters, say it's
+      easy to guess and suggest a longer one, then carry on.
+- [ ] **`bunny install --dry-run` asks for a password** although nothing is
+      encrypted on a dry run. Skip it.
+- [ ] **`bunny plan` without sudo says the undo entry can't be set up**
+      (it can't read `/boot`). Say "run with sudo to check the boot menu"
+      instead of guessing.
+- [ ] **`bunny plan <copy>` silently drops the host file.** A copy of
+      `bunny.toml` elsewhere has no `hosts/` next to it, so this computer's
+      packages (GRUB, the kernel…) show as "would be removed". Use this
+      computer's host file, or say clearly that it isn't included.
+- [ ] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
+      sudo's password and a package name that doesn't exist each sent a
+      report. Only bunny's own problems should.
+- [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
+      them?"). One question for a plain remove.
+- [ ] **`bunny status` shows times in UTC**; the boot menu now uses local
+      time. Use local time everywhere (and "as installed" for the first).
+- [ ] **"before − tree" in Earlier versions reads oddly.** Find clearer
+      wording for "the version before this change".
+- [ ] **The install's recording says "0 s"**, and the first
+      `bunny report --dry-run` seemed to hang (Ctrl+C) before working the
+      second time.
+- [ ] **Two test VMs can't run at once**: both use port 2223. Give each
+      named VM its own port (with its own known_hosts).
 
 ## Talk to Portage directly (after the dry run and the laptop)
 
@@ -503,8 +552,8 @@ is tested first in a VM with the same layout.
 
 ## Known issues / small fixes
 
-- [~] Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
-- [~] When sudo didn't give bunny admin rights (no password typed), bunny
+- [x] Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
+- [x] When sudo didn't give bunny admin rights (no password typed), bunny
       stopped with only sudo's "a password is required" and no word of its
       own. Now it says nothing was changed and to run it again.
 - Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.

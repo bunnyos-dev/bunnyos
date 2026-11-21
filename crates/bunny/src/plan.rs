@@ -138,6 +138,9 @@ impl Plan {
         if self.boot.install_module.is_some() {
             parts.push("boot menu undo".into());
         }
+        if !self.boot.tidy.is_empty() {
+            parts.push("tidier boot menu".into());
+        }
 
         const MAX: usize = 6;
         let extra = parts.len().saturating_sub(MAX);
@@ -335,6 +338,15 @@ impl Plan {
             out.push_str(
                 "    The startup image is rebuilt; the old one is backed up first.\n\
                  \x20   After each change, the boot menu gets an entry that undoes it.\n\n",
+            );
+        }
+        if !self.boot.tidy.is_empty() {
+            out.push_str("Boot menu, tidied:\n");
+            for item in &self.boot.tidy {
+                let _ = writeln!(out, "  ~ {}", item.describe());
+            }
+            out.push_str(
+                "    The files are backed up first, and undoing this change puts them back.\n\n",
             );
         }
         if self.boot.remove_entry {

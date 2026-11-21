@@ -74,16 +74,22 @@ Turn on the boot menu's undo entry once, in `bunny.toml`:
 undo_entry = true
 ```
 
-and run `bunny switch`. From then on, the boot menu has two of bunny's
-entries, right under Bunny Linux's own:
+and run `bunny switch`. (New installs have it on already.) From then on, the
+boot menu has two of bunny's entries, right under Bunny Linux's own:
 
 ```
 Bunny Linux
-Advanced options for Bunny Linux
+Advanced options
 Undo the last change (+ mangowm, + dejavu, Nov 18, 7:03 PM)
 Earlier versions (11 saved)
 UEFI Firmware Settings
 ```
+
+The same switch tidies what Gentoo's setup leaves in the menu: its theme
+(the menu is plain dark until Bunny Linux has its own look), "GNU/Linux"
+after the name, and the "(EFI BootNext)" entries. Other systems on the
+computer, like Windows, still show. `bunny plan` lists each of these under
+"Boot menu, tidied" first, and undoing that switch puts them back.
 
 **Undo the last change** says what it undoes and when (in your time zone).
 If a change leaves the system unable to start, restart, pick it, and the

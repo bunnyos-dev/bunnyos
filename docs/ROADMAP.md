@@ -356,7 +356,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Found while testing the dry-run fixes together, on the `test/friday` branch.)
 
-- [ ] **The boot menu's leftover clutter** (the rest of "A clean boot menu"):
+- [~] **The boot menu's leftover clutter** (the rest of "A clean boot menu"):
       the Gentoo theme (`GRUB_THEME=…/gentoo_glass` in `/etc/default/grub`),
       "Bunny Linux GNU/Linux" (GRUB's `10_linux` always adds " GNU/Linux";
       bunny writes the main entry itself instead), and every

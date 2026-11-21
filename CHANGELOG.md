@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The boot menu is tidier: no Gentoo theme, the main entry is "Bunny Linux"
+  (not "Bunny Linux GNU/Linux") with "Advanced options" under it, and the
+  "(EFI BootNext)" entries are gone. New installs get it straight away;
+  existing systems with the boot-menu undo entry get it on the next switch,
+  shown in `bunny plan` first and undone by undo.
+
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.

@@ -31,6 +31,7 @@ That's useful for testing.
 | `bunny lock [config]` | Accepts the system as it is now: writes `bunny.lock` from the installed versions. |
 | `bunny rollback [number]` | Puts the system back to a generation (the last switch if no number). Takes effect after a reboot. |
 | `bunny clean [--keep N]` | Removes old generations and rollback leftovers. Keeps the newest 5 by default. |
+| `bunny publish [repository]` | Sends your config folder (`/etc/bunny`) to a GitHub repository, with your own GitHub sign-in (needs `gh auth login` first, as yourself). The first time, it starts the folder's git history if there's none, makes the repository (private; `my-system` unless you name one, like `laptop-config` or `you/laptop-config`) and connects the folder to it; after that it commits what changed ("Saved with bunny publish") and sends it. `--dry-run` shows the exact commands; `--yes` doesn't ask. Root's git asks your `gh` for the password each time (`runuser … gh auth git-credential`), so nothing is copied into root's files. A repository that's public gets a warning, and Enter means no. |
 
 `switch`, `add`, `remove` and `update` take:
 
@@ -50,6 +51,14 @@ That's useful for testing.
 | Command | What it does |
 |---|---|
 | `bunny report [--dry-run] [--yes]` | Sends recorded commands that haven't been sent yet as one GitHub issue. `--dry-run` shows what would be sent. Needs `[dev] report` on; see [Developer mode](developer-mode.md). |
+
+## One at a time
+
+Only one command that changes the system runs at a time. If another is
+still going (say a long `bunny update` in another terminal), bunny says so
+and changes nothing. If something fails before the system was touched
+(the snapshot, the startup image), `add` and `remove` put the config back
+too.
 
 ## How questions work
 

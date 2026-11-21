@@ -21,6 +21,16 @@ pub trait InitSystem {
     fn service_exists(&self, name: &str) -> bool;
 }
 
+/// The OpenRC runlevel a service is added to. Most go in `default`; elogind
+/// goes in `boot`, as Gentoo's elogind instructions say, so logins made early (like the
+/// first one on a console) already go through it.
+pub fn openrc_runlevel(service: &str) -> &'static str {
+    match service {
+        "elogind" => "boot",
+        _ => "default",
+    }
+}
+
 pub fn for_config(init: Init, root: &Path) -> Box<dyn InitSystem> {
     match init {
         Init::Openrc => Box::new(OpenRc::new(root)),
@@ -104,6 +114,13 @@ mod tests {
         assert_eq!(openrc.user_services().unwrap(), set(&["sshd"]));
         assert!(openrc.service_exists("sshd"));
         assert!(!openrc.service_exists("bluetooth"));
+    }
+
+    #[test]
+    fn elogind_starts_in_the_boot_runlevel() {
+        assert_eq!(openrc_runlevel("elogind"), "boot");
+        assert_eq!(openrc_runlevel("dbus"), "default");
+        assert_eq!(openrc_runlevel("sshd"), "default");
     }
 
     #[test]

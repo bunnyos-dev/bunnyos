@@ -1,0 +1,13 @@
+#! /bin/sh
+# Written by bunny. Puts bunny's boot menu entries (Undo the last change,
+# Earlier versions) right after the system's own, instead of at the bottom.
+# The entries themselves are in /boot/grub/bunny.cfg, read when the menu is
+# shown, so bunny can change them without running grub-mkconfig again.
+# (The same form as GRUB's own 41_custom.)
+cat <<'BUNNY'
+if [ -f  ${config_directory}/bunny.cfg ]; then
+  source ${config_directory}/bunny.cfg
+elif [ -z "${config_directory}" -a -f  $prefix/bunny.cfg ]; then
+  source $prefix/bunny.cfg
+fi
+BUNNY

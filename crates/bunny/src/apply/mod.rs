@@ -24,13 +24,13 @@ mod runner;
 #[cfg(test)]
 mod tests;
 
-pub use boot_menu::save_kernels;
+pub use boot_menu::{refresh_earlier, save_kernels};
 pub use package_use::foreign_package_use_files;
-pub use runner::{PrintRunner, Runner, SystemRunner};
+pub use runner::{PrintRunner, Runner, StepsRunner, SystemRunner};
 
 use admin::apply_security;
-use boot_menu::{install_boot_module, write_undo_entry};
-use install::{emerge_failed, install_quietly, is_tip, remove_quietly};
+use boot_menu::{install_boot_module, write_menu};
+use install::{drop_snapshot, emerge_failed, install_quietly, is_tip, remove_quietly};
 use package_use::{adopt_package_use, copy_tree, write_keywords, USE_BEFORE};
 use repositories::set_up_repositories;
 
@@ -46,6 +46,33 @@ impl std::fmt::Display for Cancelled {
 }
 
 impl std::error::Error for Cancelled {}
+
+/// Something failed before anything on the system was changed (the
+/// snapshot, the startup image, reading the system). `bunny add`/`remove`
+/// put the config back when they see it.
+#[derive(Debug)]
+pub struct NothingChanged(pub String);
+
+impl std::fmt::Display for NothingChanged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for NothingChanged {}
+
+/// Marks an error as coming from before anything was changed.
+pub fn nothing_changed(e: anyhow::Error) -> anyhow::Error {
+    if e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>() {
+        return e;
+    }
+    anyhow::Error::new(NothingChanged(format!("{e:#}")))
+}
+
+/// Whether nothing on the system was changed when `e` happened.
+pub fn changed_nothing(e: &anyhow::Error) -> bool {
+    e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>()
+}
 
 /// emerge refused before installing anything (its dry run failed), and the
 /// files were put back, so nothing changed. Holds the explanation to show.
@@ -119,14 +146,20 @@ pub fn switch(
     //    boot menu. It only adds a module and rebuilds the image (the old
     //    image is backed up); if that fails, nothing else has changed.
     if let Some(versions) = &plan.boot.install_module {
-        install_boot_module(root, versions, runner, &outcome.backup_dir)?;
+        install_boot_module(root, versions, runner, &outcome.backup_dir)
+            .map_err(nothing_changed)?;
     }
     // 1. Snapshot first, so there's always a way back.
-    take_snapshot(root, plan, runner, opts, &mut outcome)?;
+    take_snapshot(root, plan, runner, opts, &mut outcome).map_err(nothing_changed)?;
     std::fs::create_dir_all(&outcome.backup_dir)
         .with_context(|| format!("Couldn't create {}", outcome.backup_dir.display()))?;
     // 1b. Repositories, so packages from new ones can be checked and installed.
-    set_up_repositories(config, root, plan, runner, &mut outcome)?;
+    //     If this stops the switch, nothing else changed yet: the snapshot
+    //     goes too, so it isn't left as a generation that changed nothing.
+    if let Err(err) = set_up_repositories(config, root, plan, runner, opts, &mut outcome) {
+        let _ = drop_snapshot(runner, &mut outcome);
+        return Err(err);
+    }
     // 2–3. package.use, package.accept_keywords and the world file, each
     //      backed up first.
     write_package_files(config, root, &outcome)?;
@@ -140,8 +173,19 @@ pub fn switch(
     remove_unused(plan, runner, opts, &mut outcome)?;
     // 7. Services.
     enable_services(config, root, plan, runner, &mut outcome)?;
+    if plan
+        .use_changes
+        .iter()
+        .any(|c| c.atom == "sys-auth/pambase")
+    {
+        outcome.notes.push(
+            "Logins changed (sys-auth/pambase). Log out and back in so yours \
+             picks it up: a desktop won't start in a login from before."
+                .into(),
+        );
+    }
     // 8. The boot menu's undo entry, pointing at this switch's snapshot.
-    update_boot_menu(config, root, plan, opts, &mut outcome)?;
+    update_boot_menu(config, root, plan, opts, runner, &mut outcome)?;
 
     notes::write_state(
         root,
@@ -319,7 +363,8 @@ fn enable_services(
             ));
             continue;
         }
-        if !runner.run(&cmd(&["rc-update", "add", service, "default"]))? {
+        let runlevel = init::openrc_runlevel(service);
+        if !runner.run(&cmd(&["rc-update", "add", service, runlevel]))? {
             outcome
                 .notes
                 .push(format!("Couldn't enable \"{service}\" at boot."));
@@ -344,17 +389,23 @@ fn update_boot_menu(
     root: &Path,
     plan: &Plan,
     opts: &Options,
+    runner: &mut dyn Runner,
     outcome: &mut Outcome,
 ) -> Result<()> {
     if config.boot.undo_entry && plan.boot.problems.is_empty() {
-        if let Some(note) = write_undo_entry(root, opts, outcome)? {
-            outcome.notes.push(note);
-        }
+        let notes = write_menu(root, opts, outcome, runner)?;
+        outcome.notes.extend(notes);
     } else if plan.boot.remove_entry {
-        let path = root.join(crate::boot::CUSTOM_CFG);
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        std::fs::write(&path, crate::boot::merge_custom_cfg(&text, ""))
-            .context("Couldn't remove the undo entry from the boot menu")?;
+        for file in [crate::boot::BUNNY_CFG, crate::boot::CUSTOM_CFG] {
+            let path = root.join(file);
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let text = crate::boot::merge_custom_cfg(&text, "");
+            let text = crate::boot::merge_earlier(&text, "");
+            std::fs::write(&path, text)
+                .context("Couldn't remove bunny's entries from the boot menu")?;
+        }
     }
     Ok(())
 }

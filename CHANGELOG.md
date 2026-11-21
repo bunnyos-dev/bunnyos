@@ -13,6 +13,9 @@ a minor version can change how things work).
 - Guide: "Helping test" now has you sign in to GitHub before turning on
   developer mode, and explains the "can't open a browser" message from
   `gh auth login` on a computer without a desktop.
+- Fixed: with a user name like `bunny`, `bunny report` swapped the word
+  everywhere, turning `bunny update` into `you update`. Names that are also
+  bunny's own words are now only swapped where they're used as names.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

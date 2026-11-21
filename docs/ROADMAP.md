@@ -217,7 +217,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       stage3's default runlevel, and the starter config doesn't list them.
       Fix: list them in the starter config, or have bunny treat OpenRC's own
       default services as part of the base system.
-- [ ] **Bug: `bunny report` swaps every "bunny" when your user name is
+- [~] **Bug: `bunny report` swaps every "bunny" when your user name is
       `bunny`.** The report read `/etc/you/you.toml`, `you update`, `you
       rollback list`. Replace the user name only where it's a user name
       (`/home/<name>`, `<name>@`, a login line), never inside bunny's own

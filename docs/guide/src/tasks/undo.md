@@ -53,7 +53,8 @@ Changed your mind? After rebooting, run: bunny rollback 3
 ## Your config file after a rollback
 
 Your `bunny.toml` goes back too, to the version that matched the system you
-went back to. If you'd just run `bunny add htop` and then undid it, htop is gone
+went back to, and so does this computer's host file (`hosts/<computer
+name>.toml`). If you'd just run `bunny add htop` and then undid it, htop is gone
 from the system **and** from `bunny.toml`, so `bunny status` is all ✓ right away.
 
 This works for a config in `/etc` (the default, `/etc/bunny/bunny.toml`). A

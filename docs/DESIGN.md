@@ -91,8 +91,8 @@ config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
 kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
 plus a `[machine]` record from `bunny install` that's read but never acted on
 (the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
-main file. Rollback restores the main config and lock, not host files (known
-limit). The Baseline layer is still planned.
+main file. Rollback restores the main config, its lock and this computer's
+host file. The Baseline layer is still planned.
 
 Modules expand one line into packages + services + config files, for example
 `[desktop] wm = "hyprland"` or `[security] encryption = true`.
@@ -184,11 +184,13 @@ isolated = false       # compile inside a clean container
 - `clean` never removes the generation you're running a copy of.
 - **The config goes back too:** after every successful switch or update (and
   a switch with nothing to do), bunny copies the config, its lock and the
-  config's path to `/var/lib/bunny/applied/`. That's inside `@`, so each later
+  config's path to `/var/lib/bunny/applied/`, plus this computer's host file
+  (`host.toml`, with its path in `host-path`; dropped when there's none). That's inside `@`, so each later
   snapshot carries the config that matches it. Rollback (and the boot-menu
   hook) copies it back over the config in the restored `@`, only for a config
   under `/etc` (one in `/home` is on its own subvolume and isn't rolled
-  back).
+  back). The host file goes back under the same rule; other computers' host
+  files aren't touched, and older generations without a copy leave it as is.
 - Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
   right after it (a switch with a short summary, or a rollback and its
   target), and `/.snapshots/bunny-state.toml` remembers the last action, so

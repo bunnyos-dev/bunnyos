@@ -288,11 +288,18 @@ pub(crate) fn rollback_cmd(
         .map(|i| (i + 1).to_string())
         .unwrap_or_else(|| outcome.before.clone());
     println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
-    if let Some(config) = &outcome.config_restored {
-        println!(
-            "  {} is put back as it was then, so it matches the restored system.",
-            config.display()
-        );
+    if let Some(restored) = &outcome.config_restored {
+        match &restored.host {
+            Some(host) => println!(
+                "  {} and {} are put back as they were then,\n  so they match the restored system.",
+                restored.config.display(),
+                host.display()
+            ),
+            None => println!(
+                "  {} is put back as it was then, so it matches the restored system.",
+                restored.config.display()
+            ),
+        }
     }
     if let Some(done) = &outcome.kernel_restored {
         if done.versions_now != done.versions_then {

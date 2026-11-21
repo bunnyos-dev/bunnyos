@@ -7,6 +7,8 @@
 //! of the system, so every later snapshot carries the config that matches it.
 //! On rollback (from bunny, or the boot menu) the copy in the restored system
 //! is put back where the config lives, so config and system match again.
+//! This computer's host file (`hosts/<name>.toml`) is kept and put back the
+//! same way, since it's part of what was applied.
 
 use std::path::{Path, PathBuf};
 
@@ -18,6 +20,17 @@ const CONFIG: &str = "bunny.toml";
 const LOCK: &str = "bunny.lock";
 /// Where the config lives, so a rollback knows where to put it back.
 const PATH_FILE: &str = "config-path";
+/// This computer's host file as applied, and where it lives.
+const HOST: &str = "host.toml";
+const HOST_PATH_FILE: &str = "host-path";
+
+/// What a rollback put back.
+#[derive(Debug, PartialEq)]
+pub struct Restored {
+    pub config: PathBuf,
+    /// The host file, if one was applied with the config.
+    pub host: Option<PathBuf>,
+}
 
 /// Keeps a copy of the config (and its lock) that was just applied.
 pub fn save(root: &Path, config: &Path) -> Result<()> {
@@ -38,14 +51,29 @@ pub fn save(root: &Path, config: &Path) -> Result<()> {
         std::env::current_dir()?.join(config)
     };
     std::fs::write(dir.join(PATH_FILE), format!("{}\n", absolute.display()))?;
+    // This computer's host file, read on top of the config.
+    let host = crate::config::this_host(root)
+        .map(|name| crate::config::host_path(&absolute, &name))
+        .filter(|path| path.is_file());
+    match host {
+        Some(path) => {
+            std::fs::copy(&path, dir.join(HOST))
+                .with_context(|| format!("Couldn't keep a copy of {}", path.display()))?;
+            std::fs::write(dir.join(HOST_PATH_FILE), format!("{}\n", path.display()))?;
+        }
+        None => {
+            let _ = std::fs::remove_file(dir.join(HOST));
+            let _ = std::fs::remove_file(dir.join(HOST_PATH_FILE));
+        }
+    }
     Ok(())
 }
 
 /// Puts the saved config back in a restored system (mounted at `system`).
 /// Only for a config inside the system itself (under /etc): one in /home is
-/// on its own subvolume and isn't rolled back, so it's left alone. Returns
-/// the config's path if it was put back.
-pub fn restore_into(system: &Path) -> Result<Option<PathBuf>> {
+/// on its own subvolume and isn't rolled back, so it's left alone. The host
+/// file goes back too, under the same rule. Returns what was put back.
+pub fn restore_into(system: &Path) -> Result<Option<Restored>> {
     let dir = system.join(DIR);
     let Ok(recorded) = std::fs::read_to_string(dir.join(PATH_FILE)) else {
         return Ok(None);
@@ -69,7 +97,32 @@ pub fn restore_into(system: &Path) -> Result<Option<PathBuf>> {
     } else {
         let _ = std::fs::remove_file(&lock_target);
     }
-    Ok(Some(config))
+    let host = restore_host(system, &dir)?;
+    Ok(Some(Restored { config, host }))
+}
+
+/// Puts the saved host file back, if there is one and it lives under /etc.
+fn restore_host(system: &Path, dir: &Path) -> Result<Option<PathBuf>> {
+    let Ok(recorded) = std::fs::read_to_string(dir.join(HOST_PATH_FILE)) else {
+        return Ok(None);
+    };
+    let host = PathBuf::from(recorded.trim());
+    let Ok(inside) = host.strip_prefix("/etc") else {
+        return Ok(None);
+    };
+    let safe = inside
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)));
+    if !safe || inside.as_os_str().is_empty() || !dir.join(HOST).is_file() {
+        return Ok(None);
+    }
+    let target = system.join("etc").join(inside);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(dir.join(HOST), &target)
+        .with_context(|| format!("Couldn't put back {}", host.display()))?;
+    Ok(Some(host))
 }
 
 #[cfg(test)]
@@ -92,8 +145,9 @@ mod tests {
         )
         .unwrap();
 
-        let put_back = restore_into(s).unwrap();
-        assert_eq!(put_back, Some(PathBuf::from("/etc/bunny/bunny.toml")));
+        let put_back = restore_into(s).unwrap().unwrap();
+        assert_eq!(put_back.config, PathBuf::from("/etc/bunny/bunny.toml"));
+        assert_eq!(put_back.host, None);
         assert_eq!(
             std::fs::read_to_string(s.join("etc/bunny/bunny.toml")).unwrap(),
             "packages = [\"app-misc/tmux\"]\n"
@@ -102,6 +156,57 @@ mod tests {
             std::fs::read_to_string(s.join("etc/bunny/bunny.lock")).unwrap(),
             "version = 1\n"
         );
+    }
+
+    #[test]
+    fn puts_the_host_file_back_too() {
+        let system = tempfile::tempdir().unwrap();
+        let s = system.path();
+        std::fs::create_dir_all(s.join(DIR)).unwrap();
+        std::fs::write(s.join(DIR).join(CONFIG), "packages = []\n").unwrap();
+        std::fs::write(s.join(DIR).join(PATH_FILE), "/etc/bunny/bunny.toml\n").unwrap();
+        std::fs::write(
+            s.join(DIR).join(HOST),
+            "packages = [\"sys-kernel/gentoo-kernel-bin\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            s.join(DIR).join(HOST_PATH_FILE),
+            "/etc/bunny/hosts/laptop.toml\n",
+        )
+        .unwrap();
+        // Edited by hand after the switch that was applied.
+        std::fs::create_dir_all(s.join("etc/bunny/hosts")).unwrap();
+        std::fs::write(
+            s.join("etc/bunny/hosts/laptop.toml"),
+            "packages = [\"x11-drivers/nvidia-drivers\"]\n",
+        )
+        .unwrap();
+
+        let put_back = restore_into(s).unwrap().unwrap();
+        assert_eq!(
+            put_back.host,
+            Some(PathBuf::from("/etc/bunny/hosts/laptop.toml"))
+        );
+        assert_eq!(
+            std::fs::read_to_string(s.join("etc/bunny/hosts/laptop.toml")).unwrap(),
+            "packages = [\"sys-kernel/gentoo-kernel-bin\"]\n"
+        );
+    }
+
+    #[test]
+    fn a_host_path_outside_etc_is_left_alone() {
+        let system = tempfile::tempdir().unwrap();
+        let s = system.path();
+        std::fs::create_dir_all(s.join(DIR)).unwrap();
+        std::fs::write(s.join(DIR).join(CONFIG), "x").unwrap();
+        std::fs::write(s.join(DIR).join(PATH_FILE), "/etc/bunny/bunny.toml\n").unwrap();
+        std::fs::write(s.join(DIR).join(HOST), "x").unwrap();
+        for path in ["/etc/../root/x.toml", "/home/you/hosts/laptop.toml"] {
+            std::fs::write(s.join(DIR).join(HOST_PATH_FILE), format!("{path}\n")).unwrap();
+            assert_eq!(restore_into(s).unwrap().unwrap().host, None, "{path}");
+        }
+        assert!(!s.join("root/x.toml").exists());
     }
 
     #[test]
@@ -138,5 +243,48 @@ mod tests {
             std::fs::read_to_string(dir.join(PATH_FILE)).unwrap().trim(),
             config.display().to_string()
         );
+    }
+
+    #[test]
+    fn save_keeps_this_computers_host_file() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("etc/conf.d")).unwrap();
+        std::fs::write(
+            root.path().join("etc/conf.d/hostname"),
+            "hostname=\"laptop\"\n",
+        )
+        .unwrap();
+        let etc = tempfile::tempdir().unwrap();
+        let config = etc.path().join("bunny.toml");
+        std::fs::write(&config, "packages = []\n").unwrap();
+        std::fs::create_dir_all(etc.path().join("hosts")).unwrap();
+        std::fs::write(
+            etc.path().join("hosts/laptop.toml"),
+            "packages = [\"a/b\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            etc.path().join("hosts/desktop.toml"),
+            "packages = [\"c/d\"]\n",
+        )
+        .unwrap();
+        save(root.path(), &config).unwrap();
+        let dir = root.path().join(DIR);
+        assert_eq!(
+            std::fs::read_to_string(dir.join(HOST)).unwrap(),
+            "packages = [\"a/b\"]\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join(HOST_PATH_FILE))
+                .unwrap()
+                .trim(),
+            etc.path().join("hosts/laptop.toml").display().to_string()
+        );
+
+        // Without a host file any more, the old copy is dropped.
+        std::fs::remove_file(etc.path().join("hosts/laptop.toml")).unwrap();
+        save(root.path(), &config).unwrap();
+        assert!(!dir.join(HOST).exists());
+        assert!(!dir.join(HOST_PATH_FILE).exists());
     }
 }

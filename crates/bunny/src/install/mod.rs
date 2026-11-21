@@ -59,6 +59,7 @@ pub fn run(
         system::unpack_stage3(choices, runner)?;
         system::configure(choices, account, &uuids, &cmdline, &home_key, runner)?;
         system::install_inside(choices, account, password, runner)?;
+        system::tidy_boot_menu(choices, runner)?;
         let config_path = first_config::put_in_place(config, choices, account, &uuids, runner)?;
         let mut edited_ok = true;
         if edit {

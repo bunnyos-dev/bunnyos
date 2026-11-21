@@ -234,7 +234,24 @@ isolated = false       # compile inside a clean container
   initramfs is newer than its copy of the module. Limits: nested subvolumes
   aren't carried over by the boot-time swap; needs GRUB, dracut and
   `root=UUID=`. Off by default until it's had more testing; the installer
-  will turn it on.
+  turns it on.
+- **A tidy boot menu (current behaviour):** the menu is Bunny Linux ·
+  Advanced options · Undo the last change · Earlier versions · (other
+  systems) · UEFI Firmware Settings. A switch with `undo_entry` on, and
+  `bunny install` itself (right after the chroot step, whatever the config
+  says), tidy Gentoo's leftovers, each shown in the plan and backed up first:
+  `GRUB_THEME` in `/etc/default/grub` is commented out; `31_efi_bootnext` is
+  made non-executable; and the main entry loses " GNU/Linux". That last one
+  is `/etc/grub.d/10_bunny`, which runs GRUB's own `10_linux` (made
+  non-executable) and rewrites only the `menuentry`/`submenu` titles with
+  sed. Chosen over writing the entries from scratch because `10_linux`'s
+  kernel discovery, microcode, recovery entries and settings keep working
+  and keep up with GRUB; and over editing `10_linux` or `grub.cfg` because
+  GRUB updates and every kernel update's `grub-mkconfig` would undo it. A
+  GRUB update can make `10_linux` executable again (Portage restores the
+  mode of an unedited file); `10_bunny` then prints nothing, so nothing is
+  listed twice, and the next switch tidies it again. Everything changed is
+  in `/etc`, so undo puts it back.
 
 ### Explaining and fixing errors
 

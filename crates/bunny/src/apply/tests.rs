@@ -988,6 +988,99 @@ fn undo_entry_is_set_up_in_one_switch() {
     assert!(plan::make(&config, r).unwrap().boot.is_empty());
 }
 
+/// Gentoo's GRUB files, as a Gentoo install leaves them.
+fn add_gentoo_grub(r: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    write(
+        r,
+        "etc/default/grub",
+        "GRUB_THEME=\"/usr/share/grub/themes/gentoo_glass/theme.txt\"\nGRUB_DISTRIBUTOR=\"Bunny Linux\"\n",
+    );
+    for name in ["10_linux", "30_uefi-firmware", "31_efi_bootnext"] {
+        let path = format!("etc/grub.d/{name}");
+        write(r, &path, "#! /bin/sh\n");
+        std::fs::set_permissions(r.join(&path), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).unwrap().permissions().mode() & 0o111 != 0
+}
+
+#[test]
+fn a_switch_tidies_the_boot_menu_of_an_existing_system() {
+    use crate::boot::tidy::{self, Tidy};
+    let root = bootable_system();
+    let r = root.path();
+    add_gentoo_grub(r);
+    // bunny's own menu script is already there from an earlier switch.
+    write(r, crate::boot::GRUBD_SCRIPT, crate::boot::GRUBD_TEXT);
+    let config = Config::parse(BOOT_CONFIG).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(
+        plan.boot.tidy,
+        vec![Tidy::Theme, Tidy::Titles, Tidy::BootNext]
+    );
+    let shown = plan.render();
+    assert!(shown.contains("Boot menu, tidied:"), "{shown}");
+    assert!(shown.contains("turn off Gentoo's menu theme"), "{shown}");
+    assert!(shown.contains("\"(EFI BootNext)\""), "{shown}");
+
+    let mut runner = Builder {
+        root: r.to_path_buf(),
+        dracut_ok: true,
+        commands: vec![],
+        separate_boot: false,
+    };
+    let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+
+    let grub = std::fs::read_to_string(r.join(tidy::DEFAULT_GRUB)).unwrap();
+    assert!(grub.contains("#GRUB_THEME="), "{grub}");
+    assert!(is_executable(&r.join(tidy::OWN_SCRIPT)));
+    assert!(!is_executable(&r.join(tidy::LINUX_SCRIPT)));
+    assert!(!is_executable(&r.join(tidy::BOOTNEXT_SCRIPT)));
+    assert!(is_executable(&r.join("etc/grub.d/30_uefi-firmware")));
+    // Backed up as they were.
+    let backup = &outcome.backup_dir;
+    assert!(std::fs::read_to_string(backup.join(tidy::DEFAULT_GRUB))
+        .unwrap()
+        .starts_with("GRUB_THEME="));
+    assert!(is_executable(&backup.join(tidy::LINUX_SCRIPT)));
+    assert!(is_executable(&backup.join(tidy::BOOTNEXT_SCRIPT)));
+    // After the files changed, the menu is rebuilt once.
+    let mkconfig: Vec<_> = runner
+        .commands
+        .iter()
+        .filter(|c| c.starts_with("grub-mkconfig -o "))
+        .collect();
+    assert_eq!(mkconfig.len(), 1, "{:?}", runner.commands);
+    // In the snapshot? The files are in /etc, so undo puts them back: the
+    // snapshot is taken before they change.
+    let snap = runner
+        .commands
+        .iter()
+        .position(|c| c.starts_with("btrfs"))
+        .unwrap();
+    let rebuilt = runner
+        .commands
+        .iter()
+        .position(|c| c.starts_with("grub-mkconfig"))
+        .unwrap();
+    assert!(snap < rebuilt);
+
+    assert!(plan::make(&config, r).unwrap().boot.tidy.is_empty());
+}
+
+#[test]
+fn the_boot_menu_is_left_alone_without_undo_entry() {
+    let root = bootable_system();
+    let r = root.path();
+    add_gentoo_grub(r);
+    let config = Config::parse("packages = [\"app-editors/neovim\"]\n").unwrap();
+    assert!(plan::make(&config, r).unwrap().boot.tidy.is_empty());
+}
+
 #[test]
 fn a_failed_startup_image_build_changes_nothing() {
     let root = bootable_system();

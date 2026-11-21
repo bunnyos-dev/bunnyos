@@ -118,7 +118,8 @@ it after you restart. See
 | `/etc/portage/package.use/bunny-install` | The kernel installer uses dracut and GRUB; sudo is built without a mail server. |
 | `/etc/dracut.conf.d/bunny.conf` | The startup image can mount btrfs, unlock the disk and resume from hibernation. |
 | `/etc/sudoers.d/bunny` | Admin rights for the `wheel` group, the same file [`[security]`](config.md#security) manages. |
-| `/etc/default/grub` | Adds `GRUB_DISTRIBUTOR="Bunny Linux"` and the kernel settings (`rd.luks.uuid=…`, `rootflags=subvol=@`, and `resume=…` with `--hibernate`). |
+| `/etc/default/grub` | Adds `GRUB_DISTRIBUTOR="Bunny Linux"` and the kernel settings (`rd.luks.uuid=…`, `rootflags=subvol=@`, and `resume=…` with `--hibernate`). Comments out Gentoo's `GRUB_THEME`. |
+| `/etc/grub.d/10_bunny` | Names the main boot menu entry "Bunny Linux" (not "Bunny Linux GNU/Linux"), with "Advanced options" under it. `10_linux` and `31_efi_bootnext` ("(EFI BootNext)" entries) are made non-executable; the originals are in `/var/lib/bunny/backups/as-installed/`. See [the boot menu](generations.md#undo-from-the-boot-menu). |
 | `/etc/init.d/swapfiles` | Only with a swapfile: turns it on once `/swap` is mounted (OpenRC's own swap service starts too early for a swapfile on its own subvolume). |
 | `/etc/conf.d/dmcrypt`, `/etc/bunny/keys/home.key` | Only with `--home-disk` and encryption: unlocks the `/home` disk at boot. The key is readable only by root. |
 

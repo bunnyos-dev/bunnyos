@@ -29,7 +29,7 @@ pub use package_use::foreign_package_use_files;
 pub use runner::{PrintRunner, Runner, StepsRunner, SystemRunner};
 
 use admin::apply_security;
-use boot_menu::{install_boot_module, write_menu};
+use boot_menu::{install_boot_module, rebuild_menu, tidy_menu, write_menu};
 use install::{drop_snapshot, emerge_failed, install_quietly, is_tip, remove_quietly};
 use package_use::{adopt_package_use, copy_tree, write_keywords, USE_BEFORE};
 use repositories::set_up_repositories;
@@ -382,8 +382,8 @@ fn enable_services(
     Ok(())
 }
 
-/// Step 8: point the boot menu's undo entry at this switch's snapshot, or
-/// remove it if `undo_entry` was turned off.
+/// Step 8: tidy the boot menu and point its undo entry at this switch's
+/// snapshot, or remove the entry if `undo_entry` was turned off.
 fn update_boot_menu(
     config: &Config,
     root: &Path,
@@ -392,9 +392,16 @@ fn update_boot_menu(
     runner: &mut dyn Runner,
     outcome: &mut Outcome,
 ) -> Result<()> {
-    if config.boot.undo_entry && plan.boot.problems.is_empty() {
-        let notes = write_menu(root, opts, outcome, runner)?;
-        outcome.notes.extend(notes);
+    if config.boot.undo_entry {
+        // Gentoo's leftovers in the menu first, so the one grub-mkconfig
+        // below picks them up.
+        let tidied = tidy_menu(root, plan, outcome)?;
+        if plan.boot.problems.is_empty() {
+            let notes = write_menu(root, opts, outcome, runner, tidied)?;
+            outcome.notes.extend(notes);
+        } else if tidied {
+            outcome.notes.extend(rebuild_menu(root, runner)?);
+        }
     } else if plan.boot.remove_entry {
         for file in [crate::boot::BUNNY_CFG, crate::boot::CUSTOM_CFG] {
             let path = root.join(file);

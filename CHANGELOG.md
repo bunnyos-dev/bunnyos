@@ -31,6 +31,8 @@ a minor version can change how things work).
 - `bunny install` no longer refuses a password under 8 characters. It says
   it's easy to guess and suggests a longer one, then lets you keep it (type
   it again) or choose another (press Enter).
+- `bunny install --dry-run` no longer asks for a password: a dry run
+  encrypts nothing and makes no account.
 
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also

@@ -632,7 +632,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn the_boot_menu_is_tidied_and_rebuilt() {
         let mnt = crate::boot::tidy::tests::gentoo_root();
         let choices = Choices {

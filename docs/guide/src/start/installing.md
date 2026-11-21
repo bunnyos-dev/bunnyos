@@ -118,7 +118,8 @@ It ends with "✓ You're online." when you are.
 bunny install --dry-run
 ```
 
-This goes through every question and then lists each step and what it
+This goes through every question (except the password: nothing is
+encrypted and no account is made) and then lists each step and what it
 does, without changing anything. It's a good way to see what's coming:
 
 ```

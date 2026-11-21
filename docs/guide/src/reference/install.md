@@ -42,7 +42,7 @@ minimal system. It runs from a live USB.
 | `--config <file or repo>` | Install from your own config instead of the starter one: a `bunny.toml` file, or a git repository with `bunny.toml` at its top (`github:you/my-system` is short for `https://github.com/you/my-system`). It's fetched and checked **before** anything is erased. |
 | `--mounted <folder>` | Install onto partitions you made and mounted yourself, without erasing anything. See [Installing onto your own partitions](#installing-onto-your-own-partitions). |
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
-| `--dry-run` | Go through the questions, then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
+| `--dry-run` | Go through the questions (not the password, since nothing is encrypted and no account is made), then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
 
 Sizes are written like `512M`, `2G` or `1.5G`.
 

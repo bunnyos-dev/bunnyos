@@ -377,7 +377,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       control stays `--mounted` (the Guide's "Installing by hand").
 - [~] **Short passwords: warn, don't refuse.** Under 8 characters, say it's
       easy to guess and suggest a longer one, then carry on.
-- [ ] **`bunny install --dry-run` asks for a password** although nothing is
+- [~] **`bunny install --dry-run` asks for a password** although nothing is
       encrypted on a dry run. Skip it.
 - [ ] **`bunny plan` without sudo says the undo entry can't be set up**
       (it can't read `/boot`). Say "run with sudo to check the boot menu"

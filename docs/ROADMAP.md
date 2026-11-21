@@ -502,6 +502,9 @@ is tested first in a VM with the same layout.
 
 ## Known issues / small fixes
 
+- [~] When sudo didn't give bunny admin rights (no password typed), bunny
+      stopped with only sudo's "a password is required" and no word of its
+      own. Now it says nothing was changed and to run it again.
 - Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
 
 

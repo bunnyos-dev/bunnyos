@@ -265,7 +265,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       libseat is built without elogind (`[pkg."sys-auth/seatd"] use =
       ["elogind"]`). The fix should turn elogind on everywhere a desktop
       needs it at once (likely a desktop profile, or a set of USE flags).
-- [ ] **A switch that failed early leaves a generation behind.** The
+- [~] **A switch that failed early leaves a generation behind.** The
       switch that stopped at Gentoo's list (before changing anything) kept
       its snapshot, so `bunny generations` shows #6 and #7 with the same
       description, and #6 is a copy of the system before nothing happened.

@@ -30,7 +30,7 @@ pub use runner::{PrintRunner, Runner, SystemRunner};
 
 use admin::apply_security;
 use boot_menu::{install_boot_module, write_undo_entry};
-use install::{emerge_failed, install_quietly, is_tip, remove_quietly};
+use install::{drop_snapshot, emerge_failed, install_quietly, is_tip, remove_quietly};
 use package_use::{adopt_package_use, copy_tree, write_keywords, USE_BEFORE};
 use repositories::set_up_repositories;
 
@@ -126,7 +126,12 @@ pub fn switch(
     std::fs::create_dir_all(&outcome.backup_dir)
         .with_context(|| format!("Couldn't create {}", outcome.backup_dir.display()))?;
     // 1b. Repositories, so packages from new ones can be checked and installed.
-    set_up_repositories(config, root, plan, runner, &mut outcome)?;
+    //     If this stops the switch, nothing else changed yet: the snapshot
+    //     goes too, so it isn't left as a generation that changed nothing.
+    if let Err(err) = set_up_repositories(config, root, plan, runner, &mut outcome) {
+        let _ = drop_snapshot(runner, &mut outcome);
+        return Err(err);
+    }
     // 2–3. package.use, package.accept_keywords and the world file, each
     //      backed up first.
     write_package_files(config, root, &outcome)?;

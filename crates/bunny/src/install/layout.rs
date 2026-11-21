@@ -159,10 +159,15 @@ impl Choices {
         );
         if self.swap_mib > 0 {
             out.push(format!(
-                "   A {} swapfile in /swap{}",
+                "   Swap: {}, a file in /swap{}{}",
                 mib(self.swap_mib),
+                if self.encrypt {
+                    ", encrypted with the system"
+                } else {
+                    ""
+                },
                 if self.hibernate {
-                    ", set up for hibernation"
+                    "; set up for hibernation"
                 } else {
                     ""
                 }
@@ -493,7 +498,7 @@ pub fn prepare(
         say(
             runner,
             "Making the swapfile",
-            &format!("Makes a {} swapfile in /swap.", mib(choices.swap_mib)),
+            &format!("Makes the swap file in /swap ({}).", mib(choices.swap_mib)),
         );
         step(
             runner,

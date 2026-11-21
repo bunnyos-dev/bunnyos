@@ -146,17 +146,28 @@ bunny asks a few things, one at a time:
 1. **Which disk.** It lists the disks with their size and model, and leaves
    out ones it can't use (the USB stick, for one) with the reason. With only
    one disk, it picks that one.
-2. **What will be erased, and what you'll get.** Every partition on the disk
-   (like "NTFS (Windows)"), then the new layout: a small EFI partition, and
-   the rest encrypted.
-3. **Confirm by typing the disk's name** (like `nvme0n1`). Anything else
+2. **Encrypt the disk?** Recommended: yes (press Enter). If the computer is
+   lost or stolen, nobody can read your files without the password.
+3. **Swap** (extra memory on disk). Press Enter for none, type a size like
+   `8G`, or `hibernate` to be able to sleep to disk (bunny sizes it from
+   your memory). It's a file inside the system, so it's encrypted with it.
+4. **Keep your files (`/home`) on the other disk?** Only asked when the
+   computer has a second disk. Recommended: no (press Enter). Yes erases
+   that disk too, and your files stay there if you reinstall later.
+5. **What will be erased, and what you'll get.** Every partition on the
+   disk (like "NTFS (Windows)"), then the new layout in plain words, and
+   which disks aren't touched. If you chose anything besides the
+   recommended answers, bunny also shows the same choices as options
+   (like `bunny install --swap 8G`), to install the same way on another
+   computer.
+6. **Confirm by typing the disk's name** (like `nvme0n1`). Anything else
    stops here, and nothing is changed.
-4. **Your user name**, in lowercase (like `you`).
-5. **A name for this computer** (like `laptop`).
-6. **Your time zone**, like `America/Toronto` or `Europe/London` (Enter for
+7. **Your user name**, in lowercase (like `you`).
+8. **A name for this computer** (like `laptop`).
+9. **Your time zone**, like `America/Toronto` or `Europe/London` (Enter for
    UTC).
-7. **Your keyboard layout**, like `us`, `uk`, `de` or `fr` (Enter for `us`).
-8. **A password**, typed twice. It's for your account **and** for unlocking
+10. **Your keyboard layout**, like `us`, `uk`, `de` or `fr` (Enter for `us`).
+11. **A password**, typed twice. It's for your account **and** for unlocking
    the disk each time the computer starts, so pick one you'll remember. If
    it's lost, the disk can't be read. A long one is safest: a few words
    together is easy to remember and hard to guess. If it's under 8
@@ -176,14 +187,15 @@ If a step fails, bunny says which and why, puts the disk back to a state
 where you can simply run `bunny install` again, and changes nothing else.
 The most common cause is the network dropping.
 
-Useful options (all of them are in
-[bunny install, in detail](../reference/install.md)):
+Options answer those questions ahead of time, so they aren't asked (all of
+them are in [bunny install, in detail](../reference/install.md)):
 
 | Option | What it does |
 |---|---|
 | `--swap 8G` | A swapfile (8 GB here). |
 | `--hibernate` | Set up hibernation (a swapfile as big as your memory). |
 | `--no-encrypt` | Don't encrypt the disk. Anyone with the computer can then read it. |
+| `--home-disk sda` | Keep `/home` on a second disk (erased too). |
 | `--edit` | Change the config before it's applied. |
 | `--config github:you/my-system` | Install from your own config instead. |
 

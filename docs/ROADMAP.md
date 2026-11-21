@@ -366,7 +366,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       ownership"): `/etc/bunny` belongs to root. `bunny install` (and
       `bunny publish`) add `/etc/bunny` to git's system-wide
       `safe.directory`.
-- [ ] **Install asks about encryption and swap** (agreed with the
+- [~] **Install asks about encryption and swap** (agreed with the
       maintainer): a few questions after the disk, each with a recommended
       answer and one line of why: encrypt? [Y/n], swap (Enter for none, a
       size, or "hibernate"; encrypted with the disk), and /home on a second

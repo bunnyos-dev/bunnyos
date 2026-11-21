@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny install` asks whether to encrypt the disk, whether to make swap (or
+  set up hibernation), and, when there's a second disk, whether to keep
+  `/home` on it. Pressing Enter takes the recommended answer each time, and
+  the summary shows the options that repeat your choices on another
+  computer.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

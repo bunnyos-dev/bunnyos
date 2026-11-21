@@ -33,6 +33,9 @@ a minor version can change how things work).
   it again) or choose another (press Enter).
 - `bunny install --dry-run` no longer asks for a password: a dry run
   encrypts nothing and makes no account.
+- Fixed: `bunny plan` without sudo said the boot menu's undo entry couldn't
+  be set up, when it just couldn't read `/boot`. It now says the boot menu
+  wasn't checked and to run `sudo bunny plan` to include it.
 
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also

@@ -359,6 +359,15 @@ impl Plan {
         if self.boot.remove_entry {
             out.push_str("Boot menu:\n  - remove bunny's entries (Undo the last change, Earlier versions)\n\n");
         }
+        if self.boot.needs_root {
+            let _ = writeln!(
+                out,
+                "Boot menu: not checked, because /boot can only be read as root. To check it\n  \
+                 too, run with {}: {} bunny plan\n",
+                crate::security::admin(),
+                crate::security::admin()
+            );
+        }
         if !self.boot.problems.is_empty() {
             out.push_str("Note: the boot menu's undo entry can't be set up on this system:\n");
             for problem in &self.boot.problems {
@@ -558,6 +567,24 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asks_for_admin_rights_to_check_the_boot_menu() {
+        let plan = Plan {
+            boot: crate::boot::Changes {
+                needs_root: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let text = plan.render();
+        assert!(
+            text.contains("Boot menu: not checked, because /boot can only be read as root."),
+            "{text}"
+        );
+        assert!(text.contains(" bunny plan"), "{text}");
+        assert!(!text.contains("can't be set up"), "{text}");
+    }
 
     fn fake_root() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

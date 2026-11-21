@@ -150,6 +150,9 @@ Limits:
   `bunny rollback` from a running system does carry them.
 - The entry needs GRUB, dracut, and the system started with `root=UUID=…`.
   `bunny plan` says if something's missing; everything else still works.
+  (Run as yourself on a system whose `/boot` only root can read, `bunny plan`
+  can't look, so it says "Boot menu: not checked" and to run it with sudo
+  instead of guessing.)
 
 ## When `/boot` is its own partition
 

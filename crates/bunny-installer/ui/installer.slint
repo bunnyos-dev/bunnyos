@@ -393,13 +393,11 @@ export component Installer inherits Window {
                 Field {
                     label: "Your user name";
                     hint: "Lowercase letters, digits, - and _, like you.";
-                    placeholder: "you";
                     value <=> root.user;
                 }
                 Field {
                     label: "A name for this computer";
                     hint: "Like laptop or my-desktop.";
-                    placeholder: "laptop";
                     value <=> root.hostname;
                 }
                 HorizontalLayout {
@@ -490,7 +488,6 @@ export component Installer inherits Window {
             Field {
                 width: root.column;
                 label: "To erase " + root.disks[root.disk].name + " and install, type its name";
-                placeholder: root.disks[root.disk].name;
                 value <=> root.confirm-name;
             }
         }

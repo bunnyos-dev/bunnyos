@@ -682,6 +682,18 @@ GPT
 - UI toolkit: **Slint** (Rust, draws directly to the screen via `linuxkms`, no
   compositor, software-render fallback). Plain Qt Quick is the fallback choice.
 - The installer only writes a `bunny.toml`; `bunny install` does the work.
+- **Current behaviour (part 1):** `crates/bunny-installer`, Slint with the
+  software renderer (works without a GPU), `linuxkms` on the USB and
+  `winit` in a window for `--demo`. Screens: welcome (or "use the terminal
+  instead") → disk (from `bunny install --list-disks`) → setup (Recommended,
+  or choose encryption and swap) → account → password (short: a warning,
+  not a refusal) → review (bunny's own preview from a dry run with the
+  answers, which also checks them; type the disk's name) → installing
+  (bunny's `==>` steps as they start, the full output behind "Show the
+  details") → done (Restart) or stopped (Back). It decides nothing: it
+  builds `bunny install --yes --disk … --user … --password-stdin` and shows
+  what bunny prints. Not yet: the step counter and top bar, Utilities, the
+  map, the `bunny.toml` panel, the desktop choice, Wi-Fi.
 - **Layout (decided November 2026):** not the sidebar-and-steps layout
   most Linux installers share. Full-screen black with a centered column, a
   small top bar (installer name, a Utilities menu, language, Wi-Fi, battery,

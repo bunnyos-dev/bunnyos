@@ -155,3 +155,21 @@ Every command takes `VM=laptop` the same way: `VM=laptop tools/bunny-vm.sh ssh`,
   lines there aren't used any more.)
 - **Paste commands that ask questions one at a time**, or the next pasted line
   becomes the answer.
+
+## Trying the graphical installer
+
+The graphical installer (`crates/bunny-installer`) runs on your desktop too,
+in a window, with two pretend disks. It only does dry runs there, so nothing
+is changed:
+
+```sh
+cargo build -p bunny -p bunny-installer
+```
+```sh
+target/debug/bunny-installer --demo --bunny target/debug/bunny
+```
+
+`--screenshots <folder>` draws every screen to PNG files instead, with no
+window. The installer is a thin window over `bunny install`: it builds the
+command (`--yes`, `--user`, `--password-stdin` and the rest), and bunny
+checks the answers, shows the preview and does the work.

@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- A first graphical installer (`bunny-installer`): one question per screen
+  on black, over `bunny install`, which still checks every answer and does
+  the work. Try it in a window with `bunny-installer --demo`.
+- `bunny install` can take every answer as an option (`--recommended`,
+  `--user`, `--hostname`, `--timezone`, `--keymap`, `--password-stdin`,
+  `--yes`) and list the disks as JSON (`--list-disks`).
 - `bunny install` asks "Use the recommended setup?": Enter gives an encrypted
   disk with compressed swap in memory (zram, like Fedora); `n` asks about
   encryption and swap one at a time (zram, a swap file too, hibernate, or

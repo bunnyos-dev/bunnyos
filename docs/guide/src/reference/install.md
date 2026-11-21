@@ -126,6 +126,7 @@ it after you restart. See
 | `/etc/bunny/.git`, `/etc/bunny/.gitignore` | The config's git history (first commit "As installed"), and what's kept out of it. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
 | `/etc/localtime`, `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone (the link in `/etc/localtime` is what's used) and keyboard layout. |
+| `/usr/local/share/consolefonts/bunny.psfu`, `/etc/conf.d/consolefont` | A console font that can draw bunny's marks (✓ ✗ ⚠), set by OpenRC's `consolefont` service at boot. It's kbd's `eurlatgr`, with ⚠ drawn as `!` (no console font has a ⚠). Only the text console uses it; desktops have their own fonts. |
 
 Passwords are never written to a file: they're passed straight to
 `cryptsetup` and `chpasswd`.

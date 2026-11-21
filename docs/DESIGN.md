@@ -754,6 +754,15 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  **Console font** (also set by `bunny install`): the Linux console's usual
+  font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
+  console fonts don't have them either (only its full, 1356-glyph BDF
+  does). kbd's `eurlatgr` (part of every Gentoo system) has ✓ ✗ · but no
+  ⚠, so both scripts copy it to `/usr/local/share/consolefonts/bunny.psfu`
+  with ⚠ added to its `!` glyph (`psfgettable`/`psfaddtable`), and set it in
+  `/etc/conf.d/consolefont` with the `consolefont` service in the boot
+  runlevel. The ISO build checks the font has all four marks. A real ⚠
+  glyph would need our own font (later, with the logo work).
   Portage and Python are still in it (removing them is later work), so it's
   bigger than the target; the package tree, docs and kernel sources are
   removed.

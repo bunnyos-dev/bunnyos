@@ -302,7 +302,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       moment. Fix: wait up to ~15 s ("Checking the connection…"), check the
       address and DNS separately (so "online, but names don't work" is its
       own message), and say "type welcome to check again".
-- [ ] **The live USB console can't draw ✓ or ✗** (they show as `v` and
+- [~] **The live USB console can't draw ✓ or ✗** (they show as `v` and
       `x`, e.g. "v Dry run finished"). Check which symbols the console font
       has (✓ ✗ ⚠ ·) and load a font that has them on the USB (or fall back
       to plain text when the terminal is the Linux console).

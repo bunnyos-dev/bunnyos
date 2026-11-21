@@ -73,6 +73,8 @@ a minor version can change how things work).
 - `bunny install --dry-run` now shows each step in plain words (its name
   and what it does) instead of a wall of commands. `--dry-run --verbose`
   shows every command and file, as before.
+- The live USB and newly installed systems use a console font that can draw
+  ✓ and ✗ (they showed as `v` and `x`); ⚠ shows as `!`.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

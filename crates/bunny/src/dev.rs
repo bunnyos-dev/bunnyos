@@ -304,8 +304,14 @@ pub fn shell_quote(arg: &str) -> String {
     format!("'{}'", arg.replace('\'', "'\\''"))
 }
 
-/// A command "had a problem" if it failed or printed a ⚠ or ✗.
+/// A command "had a problem" if it failed or printed a ⚠ or ✗, unless it
+/// stopped because of what you typed (a name that doesn't exist, a config
+/// mistake, no password at sudo's question): that's yours, not bunny's, even
+/// though it prints a ✗ to tell you.
 pub fn had_problem(meta: &Meta, text: &str) -> bool {
+    if meta.exit_code == Some(i32::from(crate::commands::YOUR_INPUT)) {
+        return false;
+    }
     meta.exit_code != Some(0) || text.contains('✗') || text.contains('⚠')
 }
 
@@ -911,6 +917,24 @@ mod tests {
             clean(raw),
             "✓ looks good.\nApply these changes? [Y/n]\n  ✓ Installed 2 packages.\ntype\ndone"
         );
+    }
+
+    #[test]
+    fn your_own_mistakes_are_not_reported_by_themselves() {
+        let yours = Meta {
+            exit_code: Some(i32::from(crate::commands::YOUR_INPUT)),
+            ..Meta::default()
+        };
+        // Ctrl+C at sudo's password question.
+        assert!(!had_problem(
+            &yours,
+            "[sudo] password for you: \n✗ bunny needs admin rights to change the system, and sudo didn't give them,\n  so nothing was changed."
+        ));
+        // A package name that doesn't exist.
+        assert!(!had_problem(
+            &yours,
+            "✗ \"mpvv\" isn't a package. Did you mean media-video/mpv?\nNothing was changed."
+        ));
     }
 
     #[test]

@@ -61,6 +61,11 @@ a minor version can change how things work).
 - Fixed: when sudo or doas doesn't give bunny admin rights (no password, a
   wrong one, or Ctrl+C at the question), bunny now says that nothing was
   changed and what to do, instead of stopping with only sudo's own line.
+- Removing unused packages now asks Portage itself what can go (through
+  bunny's Portage helper) instead of reading emerge's screen text, says
+  when a package goes only because another one in the list does, and
+  removes exactly the packages it showed. Reading emerge's text is still
+  the fallback.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

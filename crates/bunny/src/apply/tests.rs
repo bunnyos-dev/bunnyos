@@ -425,6 +425,9 @@ fn running_twice_is_safe() {
 struct Scripted {
     commands: Vec<String>,
     replies: Vec<(&'static str, bool, String)>,
+    /// What bunny's Portage helper answers, per command (`plan`,
+    /// `depclean`). Not listed: the helper isn't available.
+    helper: Vec<(&'static str, String)>,
 }
 
 impl Scripted {
@@ -441,6 +444,21 @@ impl Scripted {
 impl Runner for Scripted {
     fn run(&mut self, cmd: &[String]) -> Result<bool> {
         Ok(self.reply(&cmd.join(" ")).0)
+    }
+
+    fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
+        // The helper's command line holds the whole script; record just
+        // what it was asked.
+        if cmd[0] == "python3" && cmd[1] == "-c" {
+            let asked = cmd[3..].join(" ");
+            self.commands.push(format!("(helper) {asked}"));
+            return Ok(self
+                .helper
+                .iter()
+                .find(|(what, _)| *what == asked)
+                .map(|(_, json)| json.clone()));
+        }
+        Ok(None)
     }
 
     fn run_quiet(
@@ -623,6 +641,93 @@ fn quiet_removal_lists_and_always_asks() {
         .commands
         .iter()
         .any(|c| c == "emerge --depclean --color=n --ask=n"));
+}
+
+const HELPER_DEPCLEAN: &str = r#"{"ok": true, "removals": [{"name": "acct-user/nullmail", "version": "0-r2", "slot": "0", "needed_by": ["mail-mta/nullmailer"]}, {"name": "mail-mta/nullmailer", "version": "2.2-r2", "slot": "0", "needed_by": []}], "helper": 2}"#;
+
+#[test]
+fn removal_list_comes_from_the_helper_and_only_those_are_removed() {
+    let root = fake_system();
+    let config = Config::parse("packages = []").unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Scripted {
+        helper: vec![("depclean", HELPER_DEPCLEAN.into())],
+        ..Scripted::default()
+    };
+    switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+    let c = &runner.commands;
+    assert!(c.iter().any(|l| l == "(helper) depclean"), "{c:#?}");
+    // emerge's text isn't needed.
+    assert!(
+        !c.iter().any(|l| l.contains("--depclean --pretend")),
+        "{c:#?}"
+    );
+    assert!(
+        c.iter().any(|l| l
+            == "emerge --depclean --color=n =acct-user/nullmail-0-r2 =mail-mta/nullmailer-2.2-r2"),
+        "{c:#?}"
+    );
+
+    // Saying no removes nothing, as before.
+    let mut runner = Scripted {
+        helper: vec![("depclean", HELPER_DEPCLEAN.into())],
+        ..Scripted::default()
+    };
+    let outcome = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(true, false),
+    )
+    .unwrap();
+    assert!(!runner
+        .commands
+        .iter()
+        .any(|l| l.starts_with("emerge --depclean --color=n")));
+    assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
+}
+
+#[test]
+fn removal_falls_back_to_emerges_text_when_the_helper_cant_answer() {
+    let root = fake_system();
+    let config = Config::parse("packages = []").unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let depclean = "All selected packages: =app-text/tree-2.2.1\n\nNumber to remove:     1\n";
+    let mut runner = Scripted {
+        replies: vec![("--depclean --pretend", true, depclean.into())],
+        helper: vec![(
+            "depclean",
+            r#"{"ok": false, "reason": "portage couldn't work out what to remove", "helper": 2}"#
+                .into(),
+        )],
+        ..Scripted::default()
+    };
+    switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+    let c = &runner.commands;
+    let asked = c.iter().position(|l| l == "(helper) depclean").unwrap();
+    let pretend = c
+        .iter()
+        .position(|l| l.contains("--depclean --pretend"))
+        .unwrap();
+    assert!(asked < pretend, "{c:#?}");
+    // The text path removes as it always did: emerge's own full list.
+    assert!(
+        c.iter().any(|l| l == "emerge --depclean --color=n"),
+        "{c:#?}"
+    );
+}
+
+#[test]
+fn removal_list_says_why_when_portage_does() {
+    let list = crate::helper::parse_depclean(HELPER_DEPCLEAN).unwrap();
+    let text = super::install::describe_removals(&list);
+    assert_eq!(
+        text,
+        "\nThese packages aren't needed anymore (nothing you asked for uses them):\n  \
+         - acct-user/nullmail   0-r2    (only mail-mta/nullmailer used it)\n  \
+         - mail-mta/nullmailer  2.2-r2\n"
+    );
 }
 
 #[test]

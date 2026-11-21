@@ -13,7 +13,8 @@
 //! - `layout`: the partitions, encryption, subvolumes and fstab
 //! - `system`: the base system, its settings, and the rest inside it
 //! - `starter`: the starter `bunny.toml` and this computer's host file
-//! - `first_config`: your config in the new system, and its first switch
+//! - `first_config`: your config in the new system, its first switch, and
+//!   its git history
 //! - `mounted`: `--mounted`, partitions you made and mounted yourself
 
 pub mod disks;
@@ -59,15 +60,19 @@ pub fn run(
         system::configure(choices, account, &uuids, &cmdline, &home_key, runner)?;
         system::install_inside(choices, account, password, runner)?;
         let config_path = first_config::put_in_place(config, choices, account, &uuids, runner)?;
+        let mut edited_ok = true;
         if edit {
             // Problems left after editing: the starter settings already in
             // the new system still work, so this doesn't stop the install.
             if let Err(err) = first_config::edit(&config_path, &account.hostname, runner) {
                 println!("\n⚠ {err:#}. bunny didn't apply it; fix it after restarting.");
-                return Ok(Finished { switched: false });
+                edited_ok = false;
             }
         }
-        let switched = first_config::first_switch(choices, account, &config_path, runner)?;
+        let switched =
+            edited_ok && first_config::first_switch(choices, account, &config_path, runner)?;
+        // After the switch, so the first commit has bunny.lock too.
+        first_config::start_history(config, choices, account, runner)?;
         Ok(Finished { switched })
     })();
     let _ = system::finish(choices, runner);

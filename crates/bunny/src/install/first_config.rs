@@ -297,6 +297,48 @@ pub fn first_switch(
     Ok(true)
 }
 
+/// Makes the new system's `/etc/bunny` a git repository with a first commit,
+/// "As installed", so every change after it has a history. A repository
+/// your config came from keeps its own history. Problems here are explained
+/// and never stop the install.
+pub fn start_history(
+    source: &Source,
+    choices: &Choices,
+    account: &Account,
+    runner: &mut dyn Runner,
+) -> Result<()> {
+    let dir = choices.mnt.join(DIR);
+    if matches!(source, Source::Repo { .. }) {
+        println!(
+            "\n  /{DIR} keeps the git history of the repository it came from. To save\n  \
+             this computer's hosts/{}.toml there too: cd /{DIR} && sudo git add hosts && sudo git commit",
+            account.hostname
+        );
+        return Ok(());
+    }
+    println!("\n==> Starting your config's history (git, in /{DIR})");
+    let who = crate::config_repo::Identity::placeholder(&account.username, &account.hostname);
+    if !crate::config_repo::start(&dir, &who, "As installed", runner)? {
+        println!(
+            "\n⚠ Couldn't start the git history of /{DIR} (the message is above). Everything\n  \
+             else is installed. After restarting, `bunny publish` starts it."
+        );
+        return Ok(());
+    }
+    if !runner.dry() && !choices.mnt.join("usr/bin/git").exists() {
+        println!(
+            "  ⚠ Your config doesn't install git, so the new system can't read this history\n  \
+             yet. After restarting: bunny add dev-vcs/git"
+        );
+    }
+    println!(
+        "  ✓ First commit: \"As installed\". Commits there are made as {} <{}>\n    \
+         (a placeholder email; `bunny publish` puts it on GitHub).",
+        who.name, who.email
+    );
+    Ok(())
+}
+
 /// Removes a cloned `--config` repository from the live system.
 pub fn clean_up(source: &Source, runner: &dyn Runner) {
     if let Source::Repo { dir, .. } = source {
@@ -426,6 +468,41 @@ mod tests {
             "packages = []\n"
         );
         assert!(hosts.join("laptop.toml.from-install").is_file());
+    }
+
+    #[test]
+    fn starts_the_history_after_the_first_switch() {
+        let mnt = tempfile::tempdir().unwrap();
+        let choices = Choices {
+            disk: "/dev/vda".into(),
+            mnt: mnt.path().to_path_buf(),
+            ..Default::default()
+        };
+        std::fs::create_dir_all(mnt.path().join("etc/bunny")).unwrap();
+        let mut r = Recorded::default();
+        start_history(&Source::Starter, &choices, &account(), &mut r).unwrap();
+        let d = mnt.path().join("etc/bunny");
+        let d = d.display();
+        assert_eq!(
+            r.0,
+            [
+                format!("git -C {d} init --quiet -b main"),
+                format!("git -C {d} config user.name you"),
+                format!("git -C {d} config user.email you@laptop.local"),
+                format!("git -C {d} add --all"),
+                format!("git -C {d} commit --quiet -m As installed"),
+            ]
+        );
+        assert!(mnt.path().join("etc/bunny/.gitignore").is_file());
+
+        // A config from a repository keeps that repository's history.
+        let mut r = Recorded::default();
+        let repo = Source::Repo {
+            url: "https://example.org/x".into(),
+            dir: "/run/x".into(),
+        };
+        start_history(&repo, &choices, &account(), &mut r).unwrap();
+        assert!(r.0.is_empty(), "{:?}", r.0);
     }
 
     #[test]

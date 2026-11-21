@@ -5,6 +5,7 @@
 mod inspect;
 mod install;
 mod packages;
+mod publish;
 mod report;
 mod switch;
 mod undo;
@@ -12,6 +13,7 @@ mod undo;
 pub(crate) use inspect::{diff_cmd, explain_cmd, lock_cmd};
 pub(crate) use install::{install_cmd, Args as InstallArgs};
 pub(crate) use packages::{add_cmd, remove_cmd, search_cmd};
+pub(crate) use publish::publish;
 pub(crate) use report::report;
 pub(crate) use switch::{switch, update_cmd};
 pub(crate) use undo::{clean_cmd, generations, rollback_cmd};

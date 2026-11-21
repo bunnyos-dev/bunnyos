@@ -235,7 +235,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       sign-in belongs to your user, not root. Fix the page (`git init -b
       main`, set a name and email for the repository, sign root in with
       `sudo gh auth login` + `sudo gh auth setup-git`), or better:
-- [ ] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
+- [~] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
       (branch `main`, a first commit "As installed", identity from the
       install's answers), and a later `bunny git`/`bunny publish` connects it
       to GitHub with your own sign-in. Then the Guide's git section is one

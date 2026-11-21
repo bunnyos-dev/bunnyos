@@ -703,6 +703,25 @@ GPT
   only to the tools' standard input, never to files or the screen. On a
   failure everything is unmounted and closed, so a second run starts clean.
   `--dry-run` prints every command and file (PrintRunner).
+- **Your config's history (current behaviour):** after the first switch,
+  `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
+  main`, run with the USB's git), with a repository-only identity from the
+  install's answers (the user name and a placeholder `<user>@<host>.local`),
+  a `.gitignore` that keeps out `keys/` (the `/home` disk's key) and leftover
+  copies, and a first commit "As installed". A `--config` repository keeps
+  its own history. Failures are explained and never stop the install.
+- **`bunny publish [repo]` (current behaviour):** sends `/etc/bunny` to
+  GitHub with the invoking user's own `gh` sign-in (`SUDO_USER`/`DOAS_USER`;
+  refused when root logged in directly). It starts the history if there's
+  none, makes the repository private if it doesn't exist (`my-system` by
+  default), sets a repository-only credential helper `!runuser -u <user> --
+  env HOME=… gh auth git-credential` (after clearing any helper root has), so
+  root's git asks the user's gh each time and no token is copied, adds
+  `origin`, commits uncommitted changes ("Saved with bunny publish") and
+  pushes. It shows the steps and asks first (a public repository gets a
+  warning and defaults to No); `--dry-run` reads for real and prints the
+  rest. Named `publish` rather than `git connect` because the same command
+  is what you run after every change, not only once.
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 

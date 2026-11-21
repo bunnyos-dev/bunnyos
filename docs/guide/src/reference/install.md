@@ -88,7 +88,15 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     If the switch fails, the install still finishes (the system starts
     either way) and bunny tells you to run `sudo bunny switch` after
     restarting.
-12. **Done.** Everything is unmounted and the disk locked again. Restart,
+12. **Your config's history.** `/etc/bunny` becomes a git repository
+    (`git init -b main`) with its own name and email for commits: your user
+    name and `<user>@<computer name>.local` (a placeholder, only written on
+    commits). A `.gitignore` keeps out the `/home` disk's key (`keys/`) and
+    leftover copies, then everything else is committed as "As installed".
+    A config from a git repository (`--config github:…`) keeps that
+    repository's history instead. If this fails, the install still
+    finishes; `bunny publish` starts it later.
+13. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
 
 If a step fails, bunny says which one and why, unmounts everything and locks
@@ -109,6 +117,7 @@ the disk again. The disk is only partly set up at that point; run
 | `/etc/conf.d/dmcrypt`, `/etc/bunny/keys/home.key` | Only with `--home-disk` and encryption: unlocks the `/home` disk at boot. The key is readable only by root. |
 
 | `/etc/bunny/bunny.toml` | Your config. |
+| `/etc/bunny/.git`, `/etc/bunny/.gitignore` | The config's git history (first commit "As installed"), and what's kept out of it. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
 | `/etc/localtime`, `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone (the link in `/etc/localtime` is what's used) and keyboard layout. |
 

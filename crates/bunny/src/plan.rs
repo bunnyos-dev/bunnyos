@@ -321,7 +321,7 @@ impl Plan {
             out.push_str("Boot menu:\n");
             let _ = writeln!(
                 out,
-                "  + add an \"undo the last change\" step to the startup image (kernel {})",
+                "  + add an \"Undo the last change\" step to the startup image (kernel {})",
                 versions.join(", ")
             );
             out.push_str(
@@ -330,7 +330,7 @@ impl Plan {
             );
         }
         if self.boot.remove_entry {
-            out.push_str("Boot menu:\n  - remove the \"undo the last change\" entry\n\n");
+            out.push_str("Boot menu:\n  - remove bunny's entries (Undo the last change, Earlier versions)\n\n");
         }
         if !self.boot.problems.is_empty() {
             out.push_str("Note: the boot menu's undo entry can't be set up on this system:\n");

@@ -182,7 +182,7 @@ impl Diff<'_> {
             out.push_str("Boot menu\n  config only   the undo step in the startup image   (not added yet)\n\n");
         }
         if self.plan.boot.remove_entry {
-            out.push_str("Boot menu\n  system only   the \"undo the last change\" entry   (turned off in your config)\n\n");
+            out.push_str("Boot menu\n  system only   bunny's entries (Undo, Earlier versions)   (turned off in your config)\n\n");
         }
 
         // Versions

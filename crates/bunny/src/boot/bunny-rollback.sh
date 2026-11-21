@@ -105,9 +105,11 @@ bunny_rollback() {
 
     # The restored system brings back its own, older boot menu, whose undo
     # entry would go one change further back. Remove it: there's no "last
-    # change" to undo until the next switch.
-    bunny_cfg="$bunny_top/@/boot/grub/custom.cfg"
-    if [ -f "$bunny_cfg" ]; then
+    # change" to undo until the next switch. (Earlier versions has its own
+    # markers and stays.) bunny.cfg is where it is now; custom.cfg is where
+    # older versions of bunny put it.
+    for bunny_cfg in "$bunny_top/@/boot/grub/bunny.cfg" "$bunny_top/@/boot/grub/custom.cfg"; do
+        [ -f "$bunny_cfg" ] || continue
         bunny_skip=0
         : > "$bunny_cfg.bunny-new"
         while IFS= read -r bunny_line || [ -n "$bunny_line" ]; do
@@ -118,7 +120,7 @@ bunny_rollback() {
             [ "$bunny_skip" = 1 ] || printf '%s\n' "$bunny_line" >> "$bunny_cfg.bunny-new"
         done < "$bunny_cfg"
         mv "$bunny_cfg.bunny-new" "$bunny_cfg" || rm -f "$bunny_cfg.bunny-new"
-    fi
+    done
 
     # Notes, so `bunny rollback list` can say what happened.
     printf 'kind = "rollback"\nsummary = ""\nto = "%s"\n' "$bunny_target" \

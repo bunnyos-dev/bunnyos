@@ -44,6 +44,11 @@ a minor version can change how things work).
   when a package goes only because another one in the list does, and
   removes exactly the packages it showed. Reading emerge's text is still
   the fallback.
+- The boot menu's undo entry moved up, right under Bunny Linux's own entries
+  (it was at the bottom, under every firmware entry), and says what it
+  undoes and when, in your time zone. New: "Earlier versions" in the boot
+  menu, with the newest 10 saved versions, what came after each, and "Go
+  back to this version".
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

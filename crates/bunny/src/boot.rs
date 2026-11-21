@@ -6,12 +6,17 @@
 //!   It does nothing unless the kernel command line has
 //!   `bunny.rollback=<generation>`; then, before the system is mounted, it
 //!   does the same swap as `bunny rollback`.
-//! - After each switch, a GRUB entry (in `/boot/grub/custom.cfg`, which
-//!   GRUB reads at boot, so no `grub-mkconfig` is needed) that boots the
-//!   kernel and startup image saved *in that generation*, with
-//!   `bunny.rollback=<generation>` added. Using the generation's own kernel
-//!   means its modules match after the swap, even if the change updated the
-//!   kernel.
+//! - After each switch, GRUB entries in `/boot/grub/bunny.cfg` (read when
+//!   the menu is shown, so no `grub-mkconfig` is needed), placed right after
+//!   the system's own entries by `/etc/grub.d/11_bunny`:
+//!   - "Undo the last change", which boots the kernel and startup image
+//!     saved *in that generation* with `bunny.rollback=<generation>` added
+//!     (its own kernel, so its modules match after the swap);
+//!   - "Earlier versions", a submenu of the newest generations, each with
+//!     what came after it and "Go back to this version".
+//!
+//! Older versions of bunny wrote the undo entry to `custom.cfg` (at the
+//! bottom of the menu); it's moved on the next switch.
 
 use anyhow::{Context, Result};
 use std::fmt::Write as _;
@@ -33,10 +38,23 @@ pub const MODULE_DIR: &str = "usr/lib/dracut/modules.d/90bunny-rollback";
 pub const MODULE_SETUP: &str = include_str!("boot/module-setup.sh");
 pub const HOOK: &str = include_str!("boot/bunny-rollback.sh");
 
-/// GRUB reads this at boot (through `/etc/grub.d/41_custom`).
+/// Where older versions of bunny put the undo entry (read through
+/// `/etc/grub.d/41_custom`, at the bottom of the menu).
 pub const CUSTOM_CFG: &str = "boot/grub/custom.cfg";
+/// bunny's own entries, read through `/etc/grub.d/11_bunny`.
+pub const BUNNY_CFG: &str = "boot/grub/bunny.cfg";
+/// The grub-mkconfig script that reads `bunny.cfg` right after the
+/// system's own entries.
+pub const GRUBD_SCRIPT: &str = "etc/grub.d/11_bunny";
+pub const GRUBD_TEXT: &str = include_str!("boot/11_bunny");
 const BEGIN: &str = "### BEGIN bunny: undo entry (written by bunny; edit bunny.toml instead)";
 const END: &str = "### END bunny";
+/// The Earlier versions submenu has its own markers, so the startup hook
+/// (which removes the undo entry after an undo) leaves it alone.
+const EARLIER_BEGIN: &str = "### BEGIN bunny: earlier versions (written by bunny)";
+const EARLIER_END: &str = "### END bunny: earlier versions";
+/// How many generations the Earlier versions submenu lists.
+pub const EARLIER_SHOWN: usize = 10;
 
 /// What a switch would change for `[boot]`.
 #[derive(Debug, Default, PartialEq)]
@@ -132,6 +150,10 @@ pub fn undo_cmdline(proc_cmdline: &str, generation: &str) -> String {
                 && !w.starts_with("bunny.rollback=")
         })
         .collect();
+    // The same setting twice (GRUB's settings and the install's both add
+    // rootflags=subvol=@) is said once.
+    let mut seen = std::collections::HashSet::new();
+    words.retain(|w| seen.insert(*w));
     let arg = format!("bunny.rollback={generation}");
     words.push(&arg);
     words.join(" ")
@@ -190,7 +212,154 @@ pub fn image_has_module(generation_dir: &Path, image: &Path) -> bool {
     }
 }
 
-/// The GRUB entry that undoes the change made right after `generation`.
+/// How to start one generation from the boot menu: its kernel, startup
+/// images and command line (with `bunny.rollback=<generation>`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bootable {
+    /// GRUB's module for the filesystem the kernel is on ("btrfs" or "fat").
+    pub fs_module: &'static str,
+    pub uuid: String,
+    pub kernel: String,
+    /// Microcode images first, then the startup image, as GRUB expects.
+    pub initrds: Vec<String>,
+    pub cmdline: String,
+}
+
+impl Bootable {
+    /// The generation's own kernel inside its snapshot (when `/boot` is
+    /// part of the system).
+    pub fn in_snapshot(generation: &str, version: &str, uuid: &str, cmdline: &str) -> Bootable {
+        let dir = format!("/@snapshots/{generation}/boot");
+        Bootable {
+            fs_module: "btrfs",
+            uuid: uuid.to_string(),
+            kernel: format!("{dir}/vmlinuz-{version}"),
+            initrds: vec![format!("{dir}/initramfs-{version}.img")],
+            cmdline: cmdline.to_string(),
+        }
+    }
+
+    /// The copies bunny keeps on a separate `/boot` (usually the EFI
+    /// partition, with the system encrypted).
+    pub fn on_boot(boot_uuid: &str, kernel: &str, initrds: &[String], cmdline: &str) -> Bootable {
+        Bootable {
+            fs_module: "fat",
+            uuid: boot_uuid.to_string(),
+            kernel: kernel.to_string(),
+            initrds: initrds.to_vec(),
+            cmdline: cmdline.to_string(),
+        }
+    }
+}
+
+/// One generation in the boot menu.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MenuVersion {
+    /// Local time, like `Nov 18, 7:03 PM`.
+    pub when: String,
+    /// What came right after it, like `+ mangowm, + dejavu` (empty if not
+    /// known, or for a rollback).
+    pub summary: String,
+    pub bootable: Bootable,
+}
+
+/// GRUB titles are in single quotes; a quote in one would end it.
+fn title(text: &str) -> String {
+    text.replace('\'', "’")
+}
+
+/// `text`, cut to `max` characters with "…".
+fn shorten(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        text.to_string()
+    } else {
+        let cut: String = text.chars().take(max.saturating_sub(1)).collect();
+        format!("{}…", cut.trim_end().trim_end_matches(','))
+    }
+}
+
+fn menuentry(out: &mut String, indent: &str, label: &str, message: &str, b: &Bootable) {
+    let _ = writeln!(out, "{indent}menuentry '{}' --class bunny {{", title(label));
+    let _ = writeln!(out, "{indent}    insmod {}", b.fs_module);
+    let _ = writeln!(
+        out,
+        "{indent}    search --no-floppy --fs-uuid --set=root {}",
+        b.uuid
+    );
+    let _ = writeln!(out, "{indent}    echo '{}'", title(message));
+    let _ = writeln!(out, "{indent}    linux {} {}", b.kernel, b.cmdline);
+    let _ = writeln!(out, "{indent}    initrd {}", b.initrds.join(" "));
+    let _ = writeln!(out, "{indent}}}");
+}
+
+/// The "Undo the last change" entry, for the newest generation.
+pub fn render_undo(newest: &MenuVersion) -> String {
+    let what = if newest.summary.is_empty() {
+        newest.when.clone()
+    } else {
+        format!("{}, {}", shorten(&newest.summary, 40), newest.when)
+    };
+    let mut out = String::new();
+    let _ = writeln!(out, "{BEGIN}");
+    menuentry(
+        &mut out,
+        "",
+        &format!("Undo the last change ({what})"),
+        "Undoing the last change…",
+        &newest.bootable,
+    );
+    let _ = writeln!(out, "{END}");
+    out
+}
+
+/// The "Earlier versions" submenu, newest first. `saved` is how many
+/// generations there are in all (only the newest few are listed).
+pub fn render_earlier(versions: &[MenuVersion], saved: usize) -> String {
+    let mut out = String::new();
+    if versions.is_empty() {
+        return out;
+    }
+    let _ = writeln!(out, "{EARLIER_BEGIN}");
+    let _ = writeln!(
+        out,
+        "submenu 'Earlier versions ({saved} saved)' --class bunny {{"
+    );
+    for v in versions {
+        let label = if v.summary.is_empty() {
+            v.when.clone()
+        } else {
+            format!("{} · before {}", v.when, shorten(&v.summary, 48))
+        };
+        let _ = writeln!(out, "    submenu '{}' {{", title(&label));
+        menuentry(
+            &mut out,
+            "        ",
+            &format!("Go back to this version ({})", v.when),
+            &format!("Going back to {}…", v.when),
+            &v.bootable,
+        );
+        if !v.summary.is_empty() {
+            // GRUB can't show plain text: each line of what came after this
+            // version is an empty submenu, which does nothing when picked.
+            let mut line = |label: &str| {
+                let _ = writeln!(out, "        submenu '{}' {{", title(label));
+                let _ = writeln!(out, "            true");
+                let _ = writeln!(out, "        }}");
+            };
+            line("What came after it:");
+            for change in v.summary.split(", ") {
+                line(&format!("    {change}"));
+            }
+        }
+        let _ = writeln!(out, "    }}");
+    }
+    let _ = writeln!(out, "}}");
+    let _ = writeln!(out, "{EARLIER_END}");
+    out
+}
+
+/// The undo entry for `generation`, with no summary (for tests).
+#[cfg(test)]
 pub fn render_entry(
     generation: &str,
     when: &str,
@@ -198,67 +367,25 @@ pub fn render_entry(
     uuid: &str,
     cmdline: &str,
 ) -> String {
-    let dir = format!("/@snapshots/{generation}/boot");
-    render(
-        when,
-        "btrfs",
-        uuid,
-        &format!("{dir}/vmlinuz-{version}"),
-        &[format!("{dir}/initramfs-{version}.img")],
-        cmdline,
-    )
+    render_undo(&MenuVersion {
+        when: when.to_string(),
+        summary: String::new(),
+        bootable: Bootable::in_snapshot(generation, version, uuid, cmdline),
+    })
 }
 
-/// The undo entry when `/boot` is its own filesystem (usually the EFI
-/// partition, with the system encrypted): the generation's kernel files are
-/// the copies bunny keeps on `/boot` (see `kernels`). `initrds` lists
-/// microcode images first, then the startup image, as GRUB expects.
-pub fn render_entry_on_boot(
-    when: &str,
-    boot_uuid: &str,
-    kernel: &str,
-    initrds: &[String],
-    cmdline: &str,
-) -> String {
-    render(when, "fat", boot_uuid, kernel, initrds, cmdline)
-}
-
-fn render(
-    when: &str,
-    fs_module: &str,
-    uuid: &str,
-    kernel: &str,
-    initrds: &[String],
-    cmdline: &str,
-) -> String {
-    let mut out = String::new();
-    let _ = writeln!(out, "{BEGIN}");
-    let _ = writeln!(
-        out,
-        "menuentry 'Bunny Linux: undo the last change (back to {when})' --class bunny {{"
-    );
-    let _ = writeln!(out, "    insmod {fs_module}");
-    let _ = writeln!(out, "    search --no-floppy --fs-uuid --set=root {uuid}");
-    let _ = writeln!(out, "    echo 'Undoing the last change…'");
-    let _ = writeln!(out, "    linux {kernel} {cmdline}");
-    let _ = writeln!(out, "    initrd {}", initrds.join(" "));
-    let _ = writeln!(out, "}}");
-    let _ = writeln!(out, "{END}");
-    out
-}
-
-/// custom.cfg with bunny's block replaced by `block` (or removed if empty),
-/// keeping everything else in the file.
-pub fn merge_custom_cfg(existing: &str, block: &str) -> String {
+/// Text with the block between `begin` and `end` replaced by `block` (or
+/// removed if it's empty), keeping everything else.
+fn merge_block(existing: &str, begin: &str, end: &str, block: &str) -> String {
     let mut out = String::new();
     let mut inside = false;
     for line in existing.lines() {
-        if line == BEGIN {
+        if line == begin {
             inside = true;
             continue;
         }
         if inside {
-            if line == END {
+            if line == end {
                 inside = false;
             }
             continue;
@@ -275,22 +402,37 @@ pub fn merge_custom_cfg(existing: &str, block: &str) -> String {
     out
 }
 
+/// bunny.cfg with its Earlier versions submenu replaced by `block`.
+pub fn merge_earlier(existing: &str, block: &str) -> String {
+    merge_block(existing, EARLIER_BEGIN, EARLIER_END, block)
+}
+
+/// custom.cfg with bunny's block replaced by `block` (or removed if empty),
+/// keeping everything else in the file.
+pub fn merge_custom_cfg(existing: &str, block: &str) -> String {
+    merge_block(existing, BEGIN, END, block)
+}
+
 /// Removes bunny's undo entry from a restored system (mounted at `system`).
 /// The restored system brings back its own, older custom.cfg, whose entry
 /// would undo one change further back; picking it again and again would keep
 /// going back. After a rollback there's no "last change" to undo until the
 /// next switch, so the entry goes. Returns true if one was removed.
 pub fn drop_entry_in(system: &Path) -> Result<bool> {
-    let path = system.join(CUSTOM_CFG);
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        return Ok(false);
-    };
-    let without = merge_custom_cfg(&text, "");
-    if without == text {
-        return Ok(false);
+    let mut dropped = false;
+    for file in [BUNNY_CFG, CUSTOM_CFG] {
+        let path = system.join(file);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let without = merge_custom_cfg(&text, "");
+        if without != text {
+            std::fs::write(&path, without)
+                .with_context(|| format!("Couldn't write {}", path.display()))?;
+            dropped = true;
+        }
     }
-    std::fs::write(&path, without).with_context(|| format!("Couldn't write {}", path.display()))?;
-    Ok(true)
+    Ok(dropped)
 }
 
 /// The path of a kernel's startup image.
@@ -320,6 +462,62 @@ mod tests {
     }
 
     #[test]
+    fn says_a_setting_once() {
+        assert_eq!(
+            undo_cmdline(
+                "BOOT_IMAGE=/vmlinuz root=UUID=1 ro rootflags=subvol=@ rd.luks.uuid=2 rootflags=subvol=@",
+                "bunny-1"
+            ),
+            "root=UUID=1 ro rootflags=subvol=@ rd.luks.uuid=2 bunny.rollback=bunny-1"
+        );
+    }
+
+    #[test]
+    fn earlier_versions_lists_each_with_what_came_after_it() {
+        let b = Bootable::in_snapshot("bunny-7", "6.18", "u", "root=UUID=u bunny.rollback=bunny-7");
+        let versions = [
+            MenuVersion {
+                when: "Nov 18, 7:03 PM".into(),
+                summary: "+ repository guru, + mangowm, + dejavu".into(),
+                bootable: b.clone(),
+            },
+            MenuVersion {
+                when: "Nov 18, 4:46 PM".into(),
+                summary: String::new(),
+                bootable: b,
+            },
+        ];
+        let menu = render_earlier(&versions, 11);
+        assert!(menu.starts_with(EARLIER_BEGIN), "{menu}");
+        assert!(menu.contains("submenu 'Earlier versions (11 saved)'"));
+        assert!(menu
+            .contains("submenu 'Nov 18, 7:03 PM · before + repository guru, + mangowm, + dejavu'"));
+        assert!(menu.contains("menuentry 'Go back to this version (Nov 18, 7:03 PM)'"));
+        assert!(menu.contains("        submenu '    + mangowm' {\n            true\n        }"));
+        assert!(menu.contains("submenu 'Nov 18, 4:46 PM' {"));
+        assert!(menu.trim_end().ends_with(EARLIER_END));
+        assert_eq!(render_earlier(&[], 0), "");
+        // The hook's marker for the undo entry doesn't match these.
+        assert!(!menu.contains(BEGIN) && !menu.lines().any(|l| l == END));
+
+        // Replacing it keeps the undo entry, and the other way round.
+        let undo = render_entry("bunny-9", "now", "6.18", "u", "x");
+        let both = merge_earlier(&merge_custom_cfg("", &undo), &menu);
+        let fewer = merge_earlier(&both, &render_earlier(&versions[..1], 1));
+        assert!(fewer.contains("Undo the last change") && fewer.contains("(1 saved)"));
+        assert!(!fewer.contains("4:46 PM"));
+        let no_undo = merge_custom_cfg(&both, "");
+        assert!(!no_undo.contains("Undo the last change") && no_undo.contains("(11 saved)"));
+    }
+
+    #[test]
+    fn titles_are_safe_in_quotes_and_short() {
+        assert_eq!(title("it's"), "it’s");
+        assert_eq!(shorten("abcdef", 10), "abcdef");
+        assert_eq!(shorten("+ a, + b, + c", 9), "+ a, + b…");
+    }
+
+    #[test]
     fn the_entry_boots_the_generations_own_kernel() {
         let entry = render_entry(
             "bunny-1",
@@ -328,9 +526,10 @@ mod tests {
             "1234",
             "root=UUID=1234 bunny.rollback=bunny-1",
         );
-        assert!(entry.contains(
-            "menuentry 'Bunny Linux: undo the last change (back to 2026-11-17 09:15 UTC)'"
-        ));
+        assert!(
+            entry.contains("menuentry 'Undo the last change (2026-11-17 09:15 UTC)'"),
+            "{entry}"
+        );
         assert!(entry.contains("search --no-floppy --fs-uuid --set=root 1234"));
         assert!(entry.contains(
             "linux /@snapshots/bunny-1/boot/vmlinuz-6.12.58 root=UUID=1234 bunny.rollback=bunny-1"

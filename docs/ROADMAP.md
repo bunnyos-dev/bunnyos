@@ -52,6 +52,12 @@ the maintainer says go. Tell the maintainer when the gate looks met:
       serious.
 - [ ] No open PR older than a few days that's waiting on a fix.
 
+**When this gate is met, Bunny Linux is 0.1 alpha.** Until then it's
+pre-alpha: it installs and boots, but fresh installs still find bugs and
+nobody uses it day to day yet. At alpha: tag and release 0.1 (see
+`docs/RELEASING.md`), say "alpha" in the guide's introduction, and remind the
+maintainer about hiring the artist (`docs/ARTIST-BRIEF.md`).
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,

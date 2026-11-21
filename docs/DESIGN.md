@@ -66,8 +66,11 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
   embedded in bunny and run as `python3 -c`, answers `plan` with the install
   list as JSON, using `_emerge`'s `parse_opts` (with EMERGE_DEFAULT_OPTS),
   `backtrack_depgraph` and the vartree, and FEATURES=getbinpkg handled like
-  emerge does. The quiet install uses it first and falls back to emerge's
-  text (which also explains refusals). The weekly canary checks the helper
+  emerge does. For a rebuild it also says why (USE flags that changed, and
+  libraries whose sub-slot changes in the plan); emerge's text gives the
+  same from `--verbose`'s marked USE flags and its `r` flag. The quiet
+  install uses it first and falls back to emerge's text (which also
+  explains refusals). The weekly canary checks the helper
   agrees with emerge.
 - **Init:** OpenRC. systemd may be added later (see "Init systems").
 

@@ -22,6 +22,9 @@ a minor version can change how things work).
 - Downloading a new repository shows one line ("✓ Downloaded guru · 17.5
   MB") instead of the download tool's whole output, which is kept in
   `/var/log/bunny/` (`--verbose` still shows it all).
+- A package installed again at the same version now says why in the list
+  before a switch: "(rebuild: USE +adns)" for a USE flag change, or
+  "(rebuild: libunistring changed)" when a library it uses changed.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

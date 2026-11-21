@@ -283,6 +283,72 @@ fn switches_a_system() {
 }
 
 #[test]
+fn desktop_section_sets_up_elogind() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "etc/init.d/dbus", "");
+    write(r, "etc/init.d/elogind", "");
+    let config = Config::parse(
+        "packages = [\"app-editors/neovim\"]\nservices = [\"sshd\"]\n\
+         [desktop]\nwayland = true\n",
+    )
+    .unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = Recorder::default();
+    let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+
+    let services: Vec<&String> = runner
+        .commands
+        .iter()
+        .filter(|c| c.starts_with("rc-"))
+        .collect();
+    assert_eq!(
+        services,
+        [
+            "rc-update add dbus default",
+            "rc-service dbus start",
+            "rc-update add elogind boot",
+            "rc-service elogind start",
+            "rc-update add sshd default",
+            "rc-service sshd start",
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(r.join(portage::WORLD_FILE)).unwrap(),
+        "app-editors/neovim\nsys-apps/dbus\nsys-auth/elogind\n"
+    );
+    let bunny_file = std::fs::read_to_string(
+        r.join(portage::PACKAGE_USE_DIR)
+            .join(portage::BUNNY_USE_FILE),
+    )
+    .unwrap();
+    assert!(
+        bunny_file.contains("sys-auth/pambase elogind\n"),
+        "{bunny_file}"
+    );
+    assert!(
+        bunny_file.contains("sys-auth/seatd elogind\n"),
+        "{bunny_file}"
+    );
+    assert!(
+        outcome
+            .notes
+            .iter()
+            .any(|n| n.contains("Log out and back in")),
+        "{:#?}",
+        outcome.notes
+    );
+
+    // Afterwards there's nothing left to do for it.
+    write(r, "etc/runlevels/boot/elogind", "");
+    write(r, "etc/runlevels/default/dbus", "");
+    write(r, "etc/runlevels/default/sshd", "");
+    let after = plan::make(&config, r).unwrap();
+    assert!(after.use_changes.is_empty(), "{:#?}", after.use_changes);
+    assert!(after.enable_services.is_empty() && after.add_packages.is_empty());
+}
+
+#[test]
 fn yes_skips_emerge_questions_but_never_for_removal() {
     let root = fake_system();
     let config = Config::parse(CONFIG).unwrap();

@@ -25,6 +25,13 @@ a minor version can change how things work).
 - A package installed again at the same version now says why in the list
   before a switch: "(rebuild: USE +adns)" for a USE flag change, or
   "(rebuild: libunistring changed)" when a library it uses changed.
+- New: a `[desktop]` section. `wayland = true` sets up what a Wayland
+  desktop like Mango or Sway needs (elogind logins and seats, D-Bus), so
+  "XDG_RUNTIME_DIR must be set" and "No backend was able to open a seat"
+  don't happen. `bunny plan` and `bunny diff` mark these "(from [desktop])",
+  and your own `[pkg]` settings still win.
+- The `elogind` service is now added to the `boot` runlevel, as Gentoo
+  recommends (other services still go in `default`).
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

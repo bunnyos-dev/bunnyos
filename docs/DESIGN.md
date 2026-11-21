@@ -478,6 +478,29 @@ the others are packaged and supported, the "set it up yourself" ones on
 purpose bare. Config: `[desktop] name = "bunny" | "plasma" | "xfce" |
 "hyprland" | "mango" | "none"`, `accent = "#…"`.
 
+**Current behaviour (`[desktop] wayland = true`, November 2026):** the base
+a Wayland desktop needs on the minimal install, found in the dry run:
+`sys-auth/pambase` and `sys-auth/seatd` with `USE=elogind` (logins register
+with elogind, which makes `XDG_RUNTIME_DIR`; libseat asks elogind for the
+seat), `sys-auth/elogind` and `sys-apps/dbus` in the world set, and the
+`elogind` (boot runlevel) and `dbus` services. bunny adds them as if they
+were in the file (`Config::use_flags`, `wanted_services`, `wanted_world`),
+marks them "(from [desktop])" in `plan` and `diff`, and the user's own
+`[pkg]` entry for one of those packages wins. After a switch that changes
+pambase it says to log in again. The future `name` implies `wayland = true`
+for the Wayland desktops.
+
+Why per-package flags, not `USE="elogind"` in make.conf or Gentoo's desktop
+profile: the profile (`targets/desktop`) turns on about 70 global flags
+(`elogind` among `pulseaudio`, `cups`, `qt6`, `X`, …), and a global flag
+rebuilds every installed package that has it; both are against the minimal
+install, and bunny manages neither make.conf nor the profile (a profile
+switch is a big, separate change). Per-package flags change only what a
+session needs, show up in `plan` like any other `[pkg]` setting, and leave
+room for the user to override one. The cost: packages added later that
+also have an `elogind` flag don't get it automatically; the list can grow
+as real desktops need more (and `name = "plasma"` will bring its own).
+
 ## Look and feel
 
 Decided November 2026. Mockups: "Bunny Linux: boot and installer mockups"

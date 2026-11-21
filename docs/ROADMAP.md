@@ -255,7 +255,8 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       registered ones, and offers to add the repository, with a plain
       warning that Gentoo doesn't check community overlays. Testing-only
       packages need `[pkg] keywords` too (not in `bunny.toml` yet).
-- [ ] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
+- [~] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
+      (`[desktop] wayland = true`, PR open)
       The install uses Gentoo's base profile, where logins don't go through
       elogind (`sys-auth/pambase` without `USE=elogind`), so no
       `/run/user/<id>` is made. Fix in the Guide now (add

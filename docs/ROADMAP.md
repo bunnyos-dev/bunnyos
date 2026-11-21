@@ -362,7 +362,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       bunny writes the main entry itself instead), and every
       "(EFI BootNext)" entry (`/etc/grub.d/31_efi_bootnext`; turn it off,
       keep "UEFI Firmware Settings").
-- [ ] **`git log` in /etc/bunny fails as your user** ("detected dubious
+- [~] **`git log` in /etc/bunny fails as your user** ("detected dubious
       ownership"): `/etc/bunny` belongs to root. `bunny install` (and
       `bunny publish`) add `/etc/bunny` to git's system-wide
       `safe.directory`.

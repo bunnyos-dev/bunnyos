@@ -125,6 +125,7 @@ it after you restart. See
 
 | `/etc/bunny/bunny.toml` | Your config. |
 | `/etc/bunny/.git`, `/etc/bunny/.gitignore` | The config's git history (first commit "As installed"), and what's kept out of it. |
+| `/etc/gitconfig` | Adds `/etc/bunny` to git's `safe.directory`, so you can read its history (`git log`) as yourself, although the folder belongs to root. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
 | `/etc/localtime`, `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone (the link in `/etc/localtime` is what's used) and keyboard layout. |
 | `/usr/local/share/consolefonts/bunny.psfu`, `/etc/conf.d/consolefont` | A console font that can draw bunny's marks (✓ ✗ ⚠), set by OpenRC's `consolefont` service at boot. It's kbd's `eurlatgr`, with ⚠ drawn as `!` (no console font has a ⚠). Only the text console uses it; desktops have their own fonts. |

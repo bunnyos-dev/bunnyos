@@ -25,6 +25,9 @@ a minor version can change how things work).
   "(EFI BootNext)" entries are gone. New installs get it straight away;
   existing systems with the boot-menu undo entry get it on the next switch,
   shown in `bunny plan` first and undone by undo.
+- Fixed: `git log` in `/etc/bunny` as your own user said "detected dubious
+  ownership". `bunny install` and `bunny publish` now add `/etc/bunny` to
+  git's `safe.directory` in `/etc/gitconfig`, once.
 
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also

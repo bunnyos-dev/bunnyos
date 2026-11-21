@@ -74,16 +74,17 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     if admin_refused(status.code(), status.signal()) {
         eprintln!("{}", refused_message(admin));
     }
-    Ok(Some(passed_on(status.code())))
+    Ok(Some(passed_on(status.code(), status.signal())))
 }
 
 /// The exit code for the bunny that asked sudo or doas to run it as root:
 /// success, [`YOUR_INPUT`] (bunny as root stopped because of what you typed,
 /// or sudo or doas got no password), or a failure.
-fn passed_on(code: Option<i32>) -> ExitCode {
+fn passed_on(code: Option<i32>, signal: Option<i32>) -> ExitCode {
     match code {
         Some(0) => ExitCode::SUCCESS,
-        Some(n) if n == i32::from(YOUR_INPUT) || admin_refused(Some(n)) => your_input(),
+        Some(n) if n == i32::from(YOUR_INPUT) => your_input(),
+        _ if admin_refused(code, signal) => your_input(),
         _ => ExitCode::FAILURE,
     }
 }
@@ -332,17 +333,19 @@ mod tests {
     fn your_own_mistakes_keep_their_exit_code_through_sudo() {
         // bunny as root stopped over a name that doesn't exist: passed on.
         assert_eq!(elevated_exit(your_input(), true), your_input());
-        assert_eq!(passed_on(Some(i32::from(YOUR_INPUT))), your_input());
+        assert_eq!(passed_on(Some(i32::from(YOUR_INPUT)), None), your_input());
         // sudo got no password (Ctrl+C at its question): your input too.
-        assert_eq!(passed_on(Some(1)), your_input());
+        assert_eq!(passed_on(Some(1), None), your_input());
         // bunny's own failures and crashes stay failures.
         assert_eq!(
-            passed_on(Some(i32::from(ELEVATED_FAILURE))),
+            passed_on(Some(i32::from(ELEVATED_FAILURE)), None),
             ExitCode::FAILURE
         );
-        assert_eq!(passed_on(Some(101)), ExitCode::FAILURE);
-        assert_eq!(passed_on(None), ExitCode::FAILURE);
-        assert_eq!(passed_on(Some(0)), ExitCode::SUCCESS);
+        assert_eq!(passed_on(Some(101), None), ExitCode::FAILURE);
+        assert_eq!(passed_on(None, None), ExitCode::FAILURE);
+        assert_eq!(passed_on(Some(0), None), ExitCode::SUCCESS);
+        // doas stopped by Ctrl+C at its password question: your input, too.
+        assert_eq!(passed_on(None, Some(libc::SIGINT)), your_input());
     }
 
     #[test]

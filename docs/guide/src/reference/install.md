@@ -42,7 +42,7 @@ minimal system. It runs from a live USB.
 | `--config <file or repo>` | Install from your own config instead of the starter one: a `bunny.toml` file, or a git repository with `bunny.toml` at its top (`github:you/my-system` is short for `https://github.com/you/my-system`). It's fetched and checked **before** anything is erased. |
 | `--mounted <folder>` | Install onto partitions you made and mounted yourself, without erasing anything. See [Installing onto your own partitions](#installing-onto-your-own-partitions). |
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
-| `--dry-run` | Show everything it would do (each command, each file), without erasing or changing anything. Doesn't need root. |
+| `--dry-run` | Go through the questions, then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
 
 Sizes are written like `512M`, `2G` or `1.5G`.
 
@@ -75,8 +75,9 @@ Sizes are written like `512M`, `2G` or `1.5G`.
 8. **Settings.** bunny writes `/etc/fstab`, Portage settings (prebuilt
    packages with signatures checked), the startup image's settings (btrfs,
    encryption, hibernation), the sudo file, and copies itself in.
-9. **Inside the new system** (chroot): the package list, language and time
-   zone, the packages, services (`dhcpcd`, `sysklogd`, and `sshd` with
+9. **Inside the new system** (chroot): the package list (Gentoo's
+   announcements so far are marked read, since they're older than the
+   system), language and time zone, the packages, services (`dhcpcd`, `sysklogd`, and `sshd` with
    `--ssh`), the boot menu (GRUB, named "Bunny Linux", also at the EFI
    fallback path), the startup image, and your account.
 10. **Your config.** The starter `bunny.toml` (or yours) goes in
@@ -87,12 +88,26 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     If the switch fails, the install still finishes (the system starts
     either way) and bunny tells you to run `sudo bunny switch` after
     restarting.
-12. **Done.** Everything is unmounted and the disk locked again. Restart,
+12. **Your config's history.** `/etc/bunny` becomes a git repository
+    (`git init -b main`) with its own name and email for commits: your user
+    name and `<user>@<computer name>.local` (a placeholder, only written on
+    commits). A `.gitignore` keeps out the `/home` disk's key (`keys/`) and
+    leftover copies, then everything else is committed as "As installed".
+    A config from a git repository (`--config github:…`) keeps that
+    repository's history instead. If this fails, the install still
+    finishes; `bunny publish` starts it later.
+13. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
 
 If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run
 `bunny install` again and it starts over from the beginning.
+
+On a **preview USB** (built for testing), the install is recorded, and just
+before unmounting it copies the recording into your home folder in the new
+system ("Keeping the recording of this install"), so `bunny report` can send
+it after you restart. See
+[Developer mode](developer-mode.md#recording-an-install-preview-usbs).
 
 ## The files it writes
 
@@ -108,8 +123,9 @@ the disk again. The disk is only partly set up at that point; run
 | `/etc/conf.d/dmcrypt`, `/etc/bunny/keys/home.key` | Only with `--home-disk` and encryption: unlocks the `/home` disk at boot. The key is readable only by root. |
 
 | `/etc/bunny/bunny.toml` | Your config. |
+| `/etc/bunny/.git`, `/etc/bunny/.gitignore` | The config's git history (first commit "As installed"), and what's kept out of it. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
-| `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone and keyboard layout. |
+| `/etc/localtime`, `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone (the link in `/etc/localtime` is what's used) and keyboard layout. |
 
 Passwords are never written to a file: they're passed straight to
 `cryptsetup` and `chpasswd`.

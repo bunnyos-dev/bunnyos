@@ -13,10 +13,13 @@ that nothing else uses**:
 
 ```
 These packages aren't needed anymore (nothing you asked for uses them):
-  - media-video/mpv  0.40.0
-  - media-libs/libass  0.17.3
+  - media-libs/libass  0.17.3  (only media-video/mpv used it)
+  - media-video/mpv    0.40.0
 Remove them? [Y/n]
 ```
+
+When a package goes only because another one in the list goes, bunny says
+which. Exactly the packages listed are removed, nothing else.
 
 That question **always** appears, even with `--yes`, because removing
 packages is the one thing you want to see first.

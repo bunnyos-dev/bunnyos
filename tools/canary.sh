@@ -74,6 +74,24 @@ else
     echo "      emerge: $(echo "$emerge_names" | tr '\n' ' ')"
 fi
 
+# The same for what depclean would remove (on a fresh container, likely
+# nothing, but both must agree and the helper must answer). Checked again
+# below with packages to remove.
+check_depclean() {
+    emerge --depclean --pretend --color=n >"$work/depclean.txt" 2>&1
+    "$bunny" helper depclean >"$work/helper-depclean.json" 2>"$work/helper-depclean-err.txt"
+    helper_gone="$(grep -o '"name": "[^"]*", "version": "[^"]*"' "$work/helper-depclean.json" | sed 's/"name": "//; s/", "version": "/-/; s/"$//' | sort)"
+    emerge_gone="$(sed -n 's/^All selected packages: //p' "$work/depclean.txt" | tr ' ' '\n' | sed 's/^=//' | grep . | sort)"
+    if grep -q '"ok": true' "$work/helper-depclean.json" && [ "$helper_gone" = "$emerge_gone" ]; then
+        pass "bunny's Portage helper agrees with emerge's depclean$1 ($(echo "$helper_gone" | grep -c .) packages)"
+        echo "      helper: $(cut -c1-300 "$work/helper-depclean.json")"
+    else
+        fail "bunny's Portage helper agrees with emerge's depclean$1" "helper: $(tr '\n' ' ' < "$work/helper-depclean.json" | cut -c1-300) | $(tail -3 "$work/helper-depclean-err.txt" | tr '\n' ' ')"
+        echo "      emerge: $(echo "$emerge_gone" | tr '\n' ' ')"
+    fi
+}
+check_depclean ""
+
 # A missing package: bunny should explain it, not say it doesn't recognise it.
 emerge --pretend --color=n app-misc/bunny-canary-no-such-package >"$work/missing.txt" 2>&1
 if "$bunny" explain "$work/missing.txt" 2>&1 | grep -qi "no package"; then
@@ -111,6 +129,13 @@ if emerge --quiet --getbinpkg app-portage/gentoolkit >"$work/gentoolkit.txt" 2>&
     fi
 else
     echo "SKIP  couldn't install gentoolkit here: $(tail -1 "$work/gentoolkit.txt")"
+fi
+
+# gentoolkit taken out of the world set (still installed): now depclean has
+# something to remove, so the helper's list is checked for real.
+if [ -d /var/db/pkg/app-portage ] && ls -d /var/db/pkg/app-portage/gentoolkit-* >/dev/null 2>&1; then
+    emerge --quiet --deselect app-portage/gentoolkit >/dev/null 2>&1
+    check_depclean " with gentoolkit unneeded"
 fi
 
 echo

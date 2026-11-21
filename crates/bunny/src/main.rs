@@ -56,6 +56,10 @@ struct Cli {
     /// recorded (developer mode), so it isn't recorded twice.
     #[arg(long, global = true, hide = true)]
     in_session: bool,
+    /// Set by bunny itself when it re-runs a command through sudo or doas,
+    /// so a failure as root can be told apart from sudo or doas refusing.
+    #[arg(long, global = true, hide = true)]
+    elevated: bool,
 }
 
 /// Where bunny looks for its config unless told otherwise.
@@ -284,10 +288,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     interrupt::install();
     VERBOSE.store(cli.verbose, std::sync::atomic::Ordering::Relaxed);
+    let elevated = cli.elevated;
     if let Some(code) = dev::record_if_on(Path::new(DEFAULT_CONFIG), cli.in_session) {
-        return code;
+        return commands::elevated_exit(code, elevated);
     }
-    match run(cli) {
+    let code = match run(cli) {
         Ok(code) => code,
         Err(err) => {
             eprintln!("✗ {err}");
@@ -296,7 +301,8 @@ fn main() -> ExitCode {
             }
             ExitCode::FAILURE
         }
-    }
+    };
+    commands::elevated_exit(code, elevated)
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {

@@ -29,6 +29,9 @@ a minor version can change how things work).
   file, `hosts/<computer name>.toml`, back too, not only `bunny.toml` and
   `bunny.lock`.
 
+- Fixed: when sudo or doas doesn't give bunny admin rights (no password, a
+  wrong one, or Ctrl+C at the question), bunny now says that nothing was
+  changed and what to do, instead of stopping with only sudo's own line.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

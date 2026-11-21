@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- New installs say Bunny Linux instead of Gentoo (in `/etc/os-release`, so
+  in fastfetch too, with a placeholder logo): the starter config adds
+  `sys-apps/bunny-release` from Bunny Linux's own repository, `"bunny"`,
+  which bunny now knows by name.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

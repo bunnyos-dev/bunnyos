@@ -139,6 +139,13 @@ impl Plan {
 
         if !self.add_repositories.is_empty() {
             section(&mut out, "Repositories to add", "+", &self.add_repositories);
+        }
+        // Bunny Linux's own repository needs no warning.
+        if self
+            .add_repositories
+            .iter()
+            .any(|r| crate::overlays::built_in(r).is_none())
+        {
             out.push_str(
                 "  ⚠ Repositories besides Gentoo's own aren't checked by Gentoo's developers,\n    \
                  and their packages run build steps as root. Only add ones you trust.\n\n",

@@ -5,6 +5,7 @@
 mod inspect;
 mod install;
 mod packages;
+mod publish;
 mod report;
 mod switch;
 mod undo;
@@ -12,6 +13,7 @@ mod undo;
 pub(crate) use inspect::{diff_cmd, explain_cmd, lock_cmd};
 pub(crate) use install::{install_cmd, Args as InstallArgs};
 pub(crate) use packages::{add_cmd, remove_cmd, search_cmd};
+pub(crate) use publish::publish;
 pub(crate) use report::report;
 pub(crate) use switch::{switch, update_cmd};
 pub(crate) use undo::{clean_cmd, finish_undo_cmd, generations, rollback_cmd};
@@ -22,7 +24,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 
 use crate::config::Config;
-use crate::{apply, dev, interrupt, security};
+use crate::{apply, dev, interrupt, rollback, security};
 
 /// `confirm` in the shape apply::Options wants.
 pub(crate) fn ask(question: &str, enter_means_yes: bool) -> anyhow::Result<bool> {
@@ -39,6 +41,12 @@ pub(crate) fn ask(question: &str, enter_means_yes: bool) -> anyhow::Result<bool>
 /// Re-runs bunny through sudo or doas (whichever this system uses) when
 /// changing the real system without root, so nobody has to type
 /// `sudo bunny`. Returns the exit code if it did.
+///
+/// sudo and doas both exit with 1 when they don't run the command (no
+/// password, a wrong one, Ctrl+C at the question, or not allowed). bunny run
+/// with `--elevated` never exits with 1 (see `elevated_exit`), so a 1 here
+/// means bunny never started as root and nothing was changed: we say so in
+/// plain words instead of leaving sudo's own line as the only explanation.
 pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     if !real_system || is_root() {
         return Ok(None);
@@ -50,6 +58,7 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     let status = std::process::Command::new(admin)
         .arg(std::env::current_exe()?)
         .args(std::env::args_os().skip(1))
+        .arg("--elevated")
         .args(
             std::env::var_os(dev::SESSION_ENV)
                 .is_some()
@@ -59,11 +68,91 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
         .with_context(|| {
             format!("bunny needs to run as root to change the system, and couldn't start {admin}")
         })?;
+    if admin_refused(status.code()) {
+        eprintln!("{}", refused_message(admin));
+    }
     Ok(Some(if status.success() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }))
+}
+
+/// Held while a command changes the system: only one at a time, and none
+/// while a rollback waits for a restart.
+pub(crate) struct Changing {
+    _lock: Option<std::fs::File>,
+}
+
+/// Checks that the system can be changed now, and keeps others out until
+/// the returned value is dropped. Only on the real system. `pending_ok`:
+/// fine to run while a rollback waits for a restart (`bunny clean`).
+pub(crate) fn changing(real_system: bool, pending_ok: bool) -> anyhow::Result<Changing> {
+    if !real_system {
+        return Ok(Changing { _lock: None });
+    }
+    // A rollback swaps the system at the next start. Changes made before
+    // that would go into the system being replaced, and be lost.
+    if !pending_ok {
+        if let Ok(info) = std::fs::read_to_string("/proc/self/mountinfo") {
+            if let Ok((_, subvol)) = rollback::root_mount(&info) {
+                if subvol.starts_with("@replaced-") {
+                    return Err(apply::nothing_changed(anyhow::anyhow!(
+                        "A rollback is waiting for a restart, so nothing was changed.\n  \
+                         Changes made now would go into the system that's being replaced.\n  \
+                         Restart first: {} reboot",
+                        security::admin()
+                    )));
+                }
+            }
+        }
+    }
+    use std::os::unix::io::AsRawFd;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open("/run/bunny.lock")
+        .context("Couldn't create /run/bunny.lock")?;
+    // SAFETY: flock on a file descriptor we own.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return Err(apply::nothing_changed(anyhow::anyhow!(
+            "Another bunny command is changing this system right now, so nothing was changed.\n  \
+             Wait for it to finish, then try again."
+        )));
+    }
+    Ok(Changing { _lock: Some(file) })
+}
+
+/// The exit code bunny uses for a failure when it was re-run as root by
+/// `elevate`: anything but 1, which sudo and doas use for "didn't run it".
+pub(crate) const ELEVATED_FAILURE: u8 = 3;
+
+/// bunny's exit code when it was re-run as root (`--elevated`): a failure
+/// becomes `ELEVATED_FAILURE`, so `elevate` can tell it apart from sudo or
+/// doas refusing.
+pub(crate) fn elevated_exit(code: ExitCode, elevated: bool) -> ExitCode {
+    if elevated && code != ExitCode::SUCCESS {
+        ExitCode::from(ELEVATED_FAILURE)
+    } else {
+        code
+    }
+}
+
+/// Whether sudo or doas refused to run bunny (exit code 1), rather than bunny
+/// itself failing as root.
+fn admin_refused(code: Option<i32>) -> bool {
+    code == Some(1)
+}
+
+/// What to say when sudo or doas didn't run bunny as root.
+fn refused_message(admin: &str) -> String {
+    format!(
+        "✗ bunny needs admin rights to change the system, and {admin} didn't give them,\n  \
+         so nothing was changed.\n  \
+         Run the same command again and type your password when {admin} asks for it.\n  \
+         If your account isn't an admin on this computer, ask someone who is."
+    )
 }
 
 /// Whether we're running as root (checks who owns our own /proc entry).
@@ -197,7 +286,41 @@ pub(crate) fn read_config_text(config: &Path) -> anyhow::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_answer, Default};
+    use super::{
+        admin_refused, elevated_exit, parse_answer, refused_message, Default, ELEVATED_FAILURE,
+    };
+    use std::process::ExitCode;
+
+    #[test]
+    fn sudo_refusing_is_told_apart_from_bunny_failing() {
+        // sudo and doas exit with 1 when they don't run the command.
+        assert!(admin_refused(Some(1)));
+        // bunny as root: success, its own failure, a crash, a signal.
+        assert!(!admin_refused(Some(0)));
+        assert!(!admin_refused(Some(ELEVATED_FAILURE as i32)));
+        assert!(!admin_refused(Some(101)));
+        assert!(!admin_refused(None));
+    }
+
+    #[test]
+    fn bunny_as_root_never_fails_with_1() {
+        assert_eq!(
+            elevated_exit(ExitCode::FAILURE, true),
+            ExitCode::from(ELEVATED_FAILURE)
+        );
+        assert_eq!(elevated_exit(ExitCode::SUCCESS, true), ExitCode::SUCCESS);
+        // Run directly (not through elevate), failures stay 1.
+        assert_eq!(elevated_exit(ExitCode::FAILURE, false), ExitCode::FAILURE);
+    }
+
+    #[test]
+    fn refused_message_says_nothing_changed_and_what_to_do() {
+        let text = refused_message("sudo");
+        assert!(text.contains("sudo didn't give them"));
+        assert!(text.contains("nothing was changed"));
+        assert!(text.contains("type your password when sudo asks"));
+        assert!(refused_message("doas").contains("when doas asks"));
+    }
 
     #[test]
     fn answers() {

@@ -12,6 +12,7 @@ fn explains_a_ctrl_c_during_install() {
         Some(&(102, 102, "www-client/firefox".to_string())),
         &["www-client/firefox".to_string()],
         &outcome,
+        "bunny switch",
     );
     assert!(
         text.starts_with("Stopped with Ctrl+C while installing."),
@@ -38,7 +39,8 @@ fn explains_a_ctrl_c_during_install() {
         "{text}"
     );
 
-    let early = interrupted_message(None, &[], &Outcome::default());
+    let early = interrupted_message(None, &[], &Outcome::default(), "bunny update");
+    assert!(early.contains("`bunny update` picks up"), "{early}");
     assert!(
         early.contains("hadn't started installing anything"),
         "{early}"
@@ -281,6 +283,72 @@ fn switches_a_system() {
 }
 
 #[test]
+fn desktop_section_sets_up_elogind() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "etc/init.d/dbus", "");
+    write(r, "etc/init.d/elogind", "");
+    let config = Config::parse(
+        "packages = [\"app-editors/neovim\"]\nservices = [\"sshd\"]\n\
+         [desktop]\nwayland = true\n",
+    )
+    .unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = Recorder::default();
+    let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+
+    let services: Vec<&String> = runner
+        .commands
+        .iter()
+        .filter(|c| c.starts_with("rc-"))
+        .collect();
+    assert_eq!(
+        services,
+        [
+            "rc-update add dbus default",
+            "rc-service dbus start",
+            "rc-update add elogind boot",
+            "rc-service elogind start",
+            "rc-update add sshd default",
+            "rc-service sshd start",
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(r.join(portage::WORLD_FILE)).unwrap(),
+        "app-editors/neovim\nsys-apps/dbus\nsys-auth/elogind\n"
+    );
+    let bunny_file = std::fs::read_to_string(
+        r.join(portage::PACKAGE_USE_DIR)
+            .join(portage::BUNNY_USE_FILE),
+    )
+    .unwrap();
+    assert!(
+        bunny_file.contains("sys-auth/pambase elogind\n"),
+        "{bunny_file}"
+    );
+    assert!(
+        bunny_file.contains("sys-auth/seatd elogind\n"),
+        "{bunny_file}"
+    );
+    assert!(
+        outcome
+            .notes
+            .iter()
+            .any(|n| n.contains("Log out and back in")),
+        "{:#?}",
+        outcome.notes
+    );
+
+    // Afterwards there's nothing left to do for it.
+    write(r, "etc/runlevels/boot/elogind", "");
+    write(r, "etc/runlevels/default/dbus", "");
+    write(r, "etc/runlevels/default/sshd", "");
+    let after = plan::make(&config, r).unwrap();
+    assert!(after.use_changes.is_empty(), "{:#?}", after.use_changes);
+    assert!(after.enable_services.is_empty() && after.add_packages.is_empty());
+}
+
+#[test]
 fn yes_skips_emerge_questions_but_never_for_removal() {
     let root = fake_system();
     let config = Config::parse(CONFIG).unwrap();
@@ -357,6 +425,9 @@ fn running_twice_is_safe() {
 struct Scripted {
     commands: Vec<String>,
     replies: Vec<(&'static str, bool, String)>,
+    /// What bunny's Portage helper answers, per command (`plan`,
+    /// `depclean`). Not listed: the helper isn't available.
+    helper: Vec<(&'static str, String)>,
 }
 
 impl Scripted {
@@ -373,6 +444,21 @@ impl Scripted {
 impl Runner for Scripted {
     fn run(&mut self, cmd: &[String]) -> Result<bool> {
         Ok(self.reply(&cmd.join(" ")).0)
+    }
+
+    fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
+        // The helper's command line holds the whole script; record just
+        // what it was asked.
+        if cmd[0] == "python3" && cmd[1] == "-c" {
+            let asked = cmd[3..].join(" ");
+            self.commands.push(format!("(helper) {asked}"));
+            return Ok(self
+                .helper
+                .iter()
+                .find(|(what, _)| *what == asked)
+                .map(|(_, json)| json.clone()));
+        }
+        Ok(None)
     }
 
     fn run_quiet(
@@ -432,7 +518,13 @@ fn quiet_install_asks_emerge_first_then_installs_without_its_questions() {
         .collect();
     assert!(emerges[0].starts_with("emerge --pretend --update --deep --newuse"));
     assert!(emerges[1].contains("--quiet-build=y @world"));
-    assert!(!emerges[1].contains("--ask"), "{}", emerges[1]);
+    // emerge never asks itself, even if EMERGE_DEFAULT_OPTS says --ask.
+    assert!(emerges[1].contains("--ask=n"), "{}", emerges[1]);
+    assert!(
+        !emerges[1].replace("--ask=n", "").contains("--ask"),
+        "{}",
+        emerges[1]
+    );
     assert_eq!(
         outcome.messages,
         [(
@@ -537,7 +629,7 @@ fn quiet_removal_lists_and_always_asks() {
     assert!(!runner
         .commands
         .iter()
-        .any(|c| c == "emerge --depclean --color=n"));
+        .any(|c| c == "emerge --depclean --color=n --ask=n"));
     assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
 
     let mut runner = Scripted {
@@ -548,7 +640,94 @@ fn quiet_removal_lists_and_always_asks() {
     assert!(runner
         .commands
         .iter()
-        .any(|c| c == "emerge --depclean --color=n"));
+        .any(|c| c == "emerge --depclean --color=n --ask=n"));
+}
+
+const HELPER_DEPCLEAN: &str = r#"{"ok": true, "removals": [{"name": "acct-user/nullmail", "version": "0-r2", "slot": "0", "needed_by": ["mail-mta/nullmailer"]}, {"name": "mail-mta/nullmailer", "version": "2.2-r2", "slot": "0", "needed_by": []}], "helper": 2}"#;
+
+#[test]
+fn removal_list_comes_from_the_helper_and_only_those_are_removed() {
+    let root = fake_system();
+    let config = Config::parse("packages = []").unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Scripted {
+        helper: vec![("depclean", HELPER_DEPCLEAN.into())],
+        ..Scripted::default()
+    };
+    switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+    let c = &runner.commands;
+    assert!(c.iter().any(|l| l == "(helper) depclean"), "{c:#?}");
+    // emerge's text isn't needed.
+    assert!(
+        !c.iter().any(|l| l.contains("--depclean --pretend")),
+        "{c:#?}"
+    );
+    assert!(
+        c.iter().any(|l| l
+            == "emerge --depclean --color=n --ask=n =acct-user/nullmail-0-r2 =mail-mta/nullmailer-2.2-r2"),
+        "{c:#?}"
+    );
+
+    // Saying no removes nothing, as before.
+    let mut runner = Scripted {
+        helper: vec![("depclean", HELPER_DEPCLEAN.into())],
+        ..Scripted::default()
+    };
+    let outcome = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(true, false),
+    )
+    .unwrap();
+    assert!(!runner
+        .commands
+        .iter()
+        .any(|l| l.starts_with("emerge --depclean --color=n")));
+    assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
+}
+
+#[test]
+fn removal_falls_back_to_emerges_text_when_the_helper_cant_answer() {
+    let root = fake_system();
+    let config = Config::parse("packages = []").unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let depclean = "All selected packages: =app-text/tree-2.2.1\n\nNumber to remove:     1\n";
+    let mut runner = Scripted {
+        replies: vec![("--depclean --pretend", true, depclean.into())],
+        helper: vec![(
+            "depclean",
+            r#"{"ok": false, "reason": "portage couldn't work out what to remove", "helper": 2}"#
+                .into(),
+        )],
+        ..Scripted::default()
+    };
+    switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+    let c = &runner.commands;
+    let asked = c.iter().position(|l| l == "(helper) depclean").unwrap();
+    let pretend = c
+        .iter()
+        .position(|l| l.contains("--depclean --pretend"))
+        .unwrap();
+    assert!(asked < pretend, "{c:#?}");
+    // The text path removes as it always did: emerge's own full list.
+    assert!(
+        c.iter().any(|l| l == "emerge --depclean --color=n --ask=n"),
+        "{c:#?}"
+    );
+}
+
+#[test]
+fn removal_list_says_why_when_portage_does() {
+    let list = crate::helper::parse_depclean(HELPER_DEPCLEAN).unwrap();
+    let text = super::install::describe_removals(&list);
+    assert_eq!(
+        text,
+        "\nThese packages aren't needed anymore (nothing you asked for uses them):\n  \
+         - acct-user/nullmail   0-r2    (only mail-mta/nullmailer used it)\n  \
+         - mail-mta/nullmailer  2.2-r2\n"
+    );
 }
 
 #[test]
@@ -731,13 +910,34 @@ fn undo_entry_is_set_up_in_one_switch() {
     assert!(r.join("etc/init.d/bunny-finish-undo").is_file());
     assert!(std::fs::symlink_metadata(r.join("etc/runlevels/boot/bunny-finish-undo")).is_ok());
 
-    let cfg = std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap();
+    let cfg = std::fs::read_to_string(r.join(crate::boot::BUNNY_CFG)).unwrap();
     assert!(cfg.contains("linux /@snapshots/bunny-20261116-120000/boot/vmlinuz-6.12.58 root=UUID=1234-abcd ro rootflags=subvol=@ bunny.rollback=bunny-20261116-120000"), "{cfg}");
+    assert!(cfg.contains("menuentry 'Undo the last change ("), "{cfg}");
+    // Earlier versions lists the generation too, with Go back to it.
+    assert!(
+        cfg.contains("submenu 'Earlier versions (1 saved)'"),
+        "{cfg}"
+    );
+    assert!(
+        cfg.contains("menuentry 'Go back to this version ("),
+        "{cfg}"
+    );
+    // GRUB reads bunny.cfg right after the system's own entries.
+    let script = std::fs::read_to_string(r.join(crate::boot::GRUBD_SCRIPT)).unwrap();
+    assert!(script.contains("bunny.cfg"));
+    assert!(
+        runner
+            .commands
+            .iter()
+            .any(|c| c.starts_with("grub-mkconfig -o ")),
+        "{:?}",
+        runner.commands
+    );
     assert!(
         outcome
             .notes
             .iter()
-            .any(|n| n.contains("undo the last change")),
+            .any(|n| n.contains("Undo the last change")),
         "{:?}",
         outcome.notes
     );
@@ -805,7 +1005,7 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
         "new image with the undo step"
     );
 
-    let cfg = std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap();
+    let cfg = std::fs::read_to_string(r.join(crate::boot::BUNNY_CFG)).unwrap();
     assert!(
         cfg.contains("search --no-floppy --fs-uuid --set=root ABCD-1234"),
         "{cfg}"
@@ -819,7 +1019,7 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
         outcome
             .notes
             .iter()
-            .any(|n| n.contains("undo the last change")),
+            .any(|n| n.contains("Undo the last change")),
         "{:?}",
         outcome.notes
     );
@@ -830,6 +1030,8 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
 struct WithRepos {
     root: PathBuf,
     commands: Vec<String>,
+    /// What `emaint sync` says when run quietly, and whether it works.
+    emaint_says: Option<(bool, &'static str)>,
 }
 
 const REPO_LIST: &str = r#"<repositories version="1.0">
@@ -850,6 +1052,13 @@ impl Runner for WithRepos {
         }
         self.commands.push(line);
         Ok(true)
+    }
+    fn run_quiet(&mut self, cmd: &[String], _: &mut dyn FnMut(&str)) -> Result<(bool, String)> {
+        let ok = self.run(cmd)?;
+        Ok(match (cmd[0].as_str(), self.emaint_says) {
+            ("emaint", Some((ok, said))) => (ok, said.to_string()),
+            _ => (ok, String::new()),
+        })
     }
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
         self.commands.push(cmd.join(" "));
@@ -907,6 +1116,7 @@ fn adds_a_repository_and_testing_versions() {
     let mut runner = WithRepos {
         root: r.to_path_buf(),
         commands: Vec::new(),
+        emaint_says: None,
     };
     switch(&config, r, &plan, &mut runner, &opts()).unwrap();
     let c = &runner.commands;
@@ -955,6 +1165,74 @@ fn adds_a_repository_and_testing_versions() {
         .any(|n| n.contains("stopped using the guru repository")));
 }
 
+/// What `emaint sync --repo guru` prints for a first download.
+const EMAINT_GURU: &str = "Cloning into '/var/db/repos/guru'...\n\
+     Performing Global Updates\n\
+     (Could take a couple of minutes if you have a lot of binary packages.)\n\
+     /var/db/repos/gentoo/profiles/updates/1Q-2026\n\
+     Action: sync for repo: guru, returned code = 0\n";
+
+#[test]
+fn downloading_a_repository_keeps_emaints_output_in_the_log() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse(WITH_GURU).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+        emaint_says: Some((true, EMAINT_GURU)),
+    };
+    let opts = quiet(true, true);
+    // The rest of the switch (emerge) isn't what this test is about.
+    let _ = switch(&config, r, &plan, &mut runner, &opts);
+    assert!(runner
+        .commands
+        .iter()
+        .any(|l| l == "emaint sync --repo guru"));
+    let log = r.join(format!("var/log/bunny/{}-download-guru.log", opts.stamp));
+    let kept = std::fs::read_to_string(&log).expect("emaint's output is in the log");
+    assert!(kept.starts_with("$ emaint sync --repo guru\n"), "{kept}");
+    assert!(kept.contains("Performing Global Updates"), "{kept}");
+    assert!(kept.contains("returned code = 0"), "{kept}");
+}
+
+#[test]
+fn a_failed_repository_download_shows_the_end_and_where_the_log_is() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse(WITH_GURU).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    // emaint exits 0 here, but its summary line says the sync failed.
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+        emaint_says: Some((
+            true,
+            "fatal: unable to access 'https://anongit.gentoo.org/git/repo/proj/guru.git/': \
+             Could not resolve host: anongit.gentoo.org\n\
+             Action: sync for repo: guru, returned code = 128\n",
+        )),
+    };
+    let opts = quiet(true, true);
+    let err = switch(&config, r, &plan, &mut runner, &opts)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("Couldn't download the guru repository"),
+        "{err}"
+    );
+    assert!(err.contains("Could not resolve host"), "{err}");
+    assert!(err.contains("Check that this computer is online"), "{err}");
+    assert!(
+        err.contains(&format!("{}-download-guru.log", opts.stamp)),
+        "{err}"
+    );
+    assert!(!runner.commands.iter().any(|l| l.starts_with("emerge")));
+}
+
 #[test]
 fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
     let root = fake_system();
@@ -966,6 +1244,7 @@ fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
     let mut runner = WithRepos {
         root: r.to_path_buf(),
         commands: Vec::new(),
+        emaint_says: None,
     };
     let err = switch(&config, r, &plan, &mut runner, &opts())
         .unwrap_err()
@@ -985,6 +1264,7 @@ fn says_so_when_a_repository_isnt_in_gentoos_list() {
     let mut runner = WithRepos {
         root: r.to_path_buf(),
         commands: Vec::new(),
+        emaint_says: None,
     };
     let err = switch(&config, r, &plan, &mut runner, &opts())
         .unwrap_err()
@@ -1015,4 +1295,28 @@ fn keywords_are_put_back_when_the_switch_is_cancelled() {
         !r.join(portage::KEYWORDS_DIR).exists(),
         "no keywords file was left"
     );
+}
+
+#[test]
+fn errors_say_whether_anything_changed() {
+    let early = nothing_changed(anyhow::anyhow!("the snapshot failed"));
+    assert!(changed_nothing(&early));
+    assert_eq!(early.to_string(), "the snapshot failed");
+    assert!(changed_nothing(&anyhow::Error::new(Cancelled)));
+    assert!(!changed_nothing(&anyhow::anyhow!("emerge stopped")));
+    // Marking twice keeps the original kind.
+    assert!(nothing_changed(anyhow::Error::new(Cancelled)).is::<Cancelled>());
+}
+
+#[test]
+fn a_failed_snapshot_counts_as_nothing_changed() {
+    let root = fake_system();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Recorder {
+        fail: Some("snapshot"),
+        ..Recorder::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap_err();
+    assert!(changed_nothing(&err), "{err:#}");
 }

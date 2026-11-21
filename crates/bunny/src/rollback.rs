@@ -46,8 +46,59 @@ impl Generation {
         }
     }
 
+    /// The same moment in this computer's time zone, the way a person says
+    /// it: `Nov 18, 7:03 PM`. Falls back to [`when`](Self::when).
+    pub fn when_local(&self) -> String {
+        local_time(&self.name).unwrap_or_else(|| self.when())
+    }
+
     pub fn is_pre_rollback(&self) -> bool {
         self.name.ends_with("-before-rollback")
+    }
+}
+
+/// `bunny-YYYYMMDD-HHMMSS…` (UTC) in local time, like `Nov 18, 7:03 PM`.
+pub fn local_time(name: &str) -> Option<String> {
+    let stamp = name.trim_start_matches("bunny-");
+    let (d, rest) = stamp.split_once('-')?;
+    let t = rest.get(..6)?;
+    if d.len() != 8
+        || !d.chars().all(|c| c.is_ascii_digit())
+        || !t.chars().all(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+    let n = |s: &str| s.parse::<i32>().ok();
+    // SAFETY: tm is plain data; timegm and localtime_r only read and write
+    // the structs passed in.
+    unsafe {
+        let mut tm: libc::tm = std::mem::zeroed();
+        tm.tm_year = n(&d[..4])? - 1900;
+        tm.tm_mon = n(&d[4..6])? - 1;
+        tm.tm_mday = n(&d[6..])?;
+        tm.tm_hour = n(&t[..2])?;
+        tm.tm_min = n(&t[2..4])?;
+        tm.tm_sec = n(&t[4..])?;
+        let epoch = libc::timegm(&mut tm);
+        let mut local: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&epoch, &mut local).is_null() {
+            return None;
+        }
+        const MONTHS: [&str; 12] = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ];
+        let hour = match local.tm_hour % 12 {
+            0 => 12,
+            h => h,
+        };
+        Some(format!(
+            "{} {}, {}:{:02} {}",
+            MONTHS.get(local.tm_mon as usize)?,
+            local.tm_mday,
+            hour,
+            local.tm_min,
+            if local.tm_hour < 12 { "AM" } else { "PM" }
+        ))
     }
 }
 
@@ -113,7 +164,7 @@ pub struct Outcome {
     /// Nested subvolumes that couldn't be carried over (left in `replaced`).
     pub left_behind: Vec<String>,
     /// The config put back as it was at that generation, if any.
-    pub config_restored: Option<PathBuf>,
+    pub config_restored: Option<crate::applied::Restored>,
     /// The restored system's old "undo the last change" entry was removed.
     pub undo_entry_dropped: bool,
     /// `/boot` is its own filesystem and its kernel files were put back as
@@ -236,17 +287,36 @@ pub fn rollback(
         )? {
             bail!("Couldn't save the current system first, so nothing was changed.");
         }
-        if !run(runner, &["mv", &t(ROOT_SUBVOL), &t(&replaced)])? {
-            bail!("Couldn't move the current system aside, so nothing was changed.");
-        }
+        // The restored copy is made first, under a temporary name, so the
+        // only steps that touch @ are two renames.
+        let restoring = format!("{ROOT_SUBVOL}restoring-{stamp}");
         let source = t(&format!("{SNAPSHOTS_SUBVOL}/{generation}"));
         if !run(
             runner,
-            &["btrfs", "subvolume", "snapshot", &source, &t(ROOT_SUBVOL)],
+            &["btrfs", "subvolume", "snapshot", &source, &t(&restoring)],
         )? {
-            // Put the current system back where it was.
-            run(runner, &["mv", &t(&replaced), &t(ROOT_SUBVOL)])?;
-            bail!("Couldn't restore \"{generation}\". Your current system was put back unchanged.");
+            bail!("Couldn't copy \"{generation}\", so nothing was changed.");
+        }
+        // Ctrl+C now would stop between the renames.
+        let _careful = crate::interrupt::Careful::start();
+        if !run(runner, &["mv", "-T", &t(ROOT_SUBVOL), &t(&replaced)])? {
+            let _ = run(runner, &["btrfs", "subvolume", "delete", &t(&restoring)]);
+            bail!("Couldn't move the current system aside, so nothing was changed.");
+        }
+        if !run(runner, &["mv", "-T", &t(&restoring), &t(ROOT_SUBVOL)])? {
+            // Put the current system back where it was, and check it worked.
+            if run(runner, &["mv", "-T", &t(&replaced), &t(ROOT_SUBVOL)])? {
+                let _ = run(runner, &["btrfs", "subvolume", "delete", &t(&restoring)]);
+                bail!("Couldn't restore \"{generation}\". Your current system was put back unchanged.");
+            }
+            bail!(
+                "Couldn't restore \"{generation}\", and couldn't put the current system back either.\n  \
+                 Don't restart yet: the disk has no @ right now. Your system is safe in the\n  \
+                 subvolume {replaced}. To put it back:\n    \
+                 mount -o subvolid=5 {device} /mnt\n    \
+                 mv -T /mnt/{replaced} /mnt/{ROOT_SUBVOL}\n    \
+                 umount /mnt"
+            );
         }
         // Shallowest first, so parents are in place before their children.
         for path in nested.iter().rev() {
@@ -257,7 +327,7 @@ pub fn rollback(
             let to = t(path);
             // The snapshot has an empty folder where the subvolume was.
             let _ = run(runner, &["rmdir", &to])?;
-            if run(runner, &["mv", &from, &to])? {
+            if run(runner, &["mv", "-T", &from, &to])? {
                 carried.push(format!("/{inside}"));
             } else {
                 left_behind.push(format!("/{inside}"));
@@ -457,6 +527,24 @@ pub fn clean(
 mod tests {
     use super::*;
 
+    #[test]
+    fn says_when_in_local_time() {
+        // The test runs in whatever zone the machine has; check the shape
+        // and that an invalid name falls back.
+        let g = Generation {
+            name: "bunny-20261119-000331".into(),
+        };
+        let local = g.when_local();
+        let re_ok = local.contains(", ") && (local.ends_with(" AM") || local.ends_with(" PM"));
+        assert!(re_ok, "{local}");
+        assert!(local.starts_with("Nov ") || local.starts_with("Nov") || local.starts_with("Dec"));
+        assert_eq!(local_time("bunny-garbage"), None);
+        let odd = Generation {
+            name: "bunny-x".into(),
+        };
+        assert_eq!(odd.when_local(), "bunny-x");
+    }
+
     #[derive(Default)]
     struct Recorder {
         commands: Vec<String>,
@@ -635,12 +723,12 @@ mod tests {
         let restore = runner
             .commands
             .iter()
-            .position(|c| c.contains("snapshots/bunny-a"))
+            .position(|c| c == &format!("mv -T {top}/@restoring-X {top}/@"))
             .unwrap();
         assert_eq!(runner.commands[restore + 1], format!("rmdir {top}/@/srv"));
         assert_eq!(
             runner.commands[restore + 2],
-            format!("mv {top}/@replaced-X/srv {top}/@/srv")
+            format!("mv -T {top}/@replaced-X/srv {top}/@/srv")
         );
         assert_eq!(out.carried, ["/srv"]);
         assert!(out.left_behind.is_empty());
@@ -695,8 +783,9 @@ mod tests {
                 format!(
                     "btrfs subvolume snapshot -r {top}/@ {top}/@snapshots/bunny-X-before-rollback"
                 ),
-                format!("mv {top}/@ {top}/@replaced-X"),
-                format!("btrfs subvolume snapshot {top}/@snapshots/bunny-20261116-204336 {top}/@"),
+                format!("btrfs subvolume snapshot {top}/@snapshots/bunny-20261116-204336 {top}/@restoring-X"),
+                format!("mv -T {top}/@ {top}/@replaced-X"),
+                format!("mv -T {top}/@restoring-X {top}/@"),
                 format!("umount {top}"),
             ]
         );
@@ -706,12 +795,13 @@ mod tests {
     #[test]
     fn failed_restore_puts_the_system_back() {
         let root = system_with(&["bunny-a"]);
+        // The restored copy is made, but renaming it to @ fails.
         let mut runner = Recorder {
-            fail: Some("bunny-a"),
+            fail: Some("@restoring-X "),
             ..Default::default()
         };
         let err = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap_err();
-        assert!(err.to_string().contains("put back unchanged"));
+        assert!(err.to_string().contains("put back unchanged"), "{err}");
         let top = root
             .path()
             .join("run/bunny/top")
@@ -719,8 +809,41 @@ mod tests {
             .into_owned();
         assert!(runner
             .commands
-            .contains(&format!("mv {top}/@replaced-X {top}/@")));
+            .contains(&format!("mv -T {top}/@replaced-X {top}/@")));
+        assert!(runner
+            .commands
+            .contains(&format!("btrfs subvolume delete {top}/@restoring-X")));
         assert_eq!(runner.commands.last().unwrap(), &format!("umount {top}"));
+    }
+
+    #[test]
+    fn failed_copy_changes_nothing() {
+        let root = system_with(&["bunny-a"]);
+        let mut runner = Recorder {
+            fail: Some("bunny-a"),
+            ..Default::default()
+        };
+        let err = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap_err();
+        assert!(err.to_string().contains("nothing was changed"), "{err}");
+        assert!(
+            !runner.commands.iter().any(|c| c.starts_with("mv")),
+            "{:?}",
+            runner.commands
+        );
+    }
+
+    #[test]
+    fn says_how_to_recover_if_putting_back_fails_too() {
+        let root = system_with(&["bunny-a"]);
+        // Moving @ aside works; both renames to @ fail ("…-X /…/@").
+        let mut runner = Recorder {
+            fail: Some("X /"),
+            ..Default::default()
+        };
+        let err = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("Don't restart yet"), "{text}");
+        assert!(text.contains("mv -T /mnt/@replaced-X /mnt/@"), "{text}");
     }
 
     #[test]

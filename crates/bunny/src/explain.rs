@@ -178,10 +178,13 @@ fn from_problems(problems: &[crate::helper::Problem]) -> Vec<(Kind, Explanation)
                 let keyword = reasons
                     .iter()
                     .find_map(|r| r.strip_suffix(" keyword").filter(|k| k.starts_with('~')));
-                let e = if reasons.iter().any(|r| r == "package.mask") {
-                    masked_on_purpose(name, comment.as_deref())
-                } else if let Some(keyword) = keyword {
+                // The easiest way in first: a testing version, then a
+                // deliberate mask (a live -9999 version usually has no
+                // keyword while the releases are testing versions).
+                let e = if let Some(keyword) = keyword {
                     testing_version(name, keyword, &chain(required_by))
+                } else if reasons.iter().any(|r| r == "package.mask") {
+                    masked_on_purpose(name, comment.as_deref())
                 } else if reasons.iter().any(|r| r == "missing keyword") {
                     not_for_this_computer(name)
                 } else {

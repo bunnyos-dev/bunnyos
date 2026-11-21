@@ -63,8 +63,10 @@ Sizes are written like `512M`, `2G` or `1.5G`.
    cancels, and nothing is changed.
 5. **Your account.** A user name, a name for the computer, the time zone
    (like `America/Toronto`; Enter for UTC), the keyboard layout (like `us`,
-   `uk` or `de`; Enter for `us`), and a password (at least 8 characters,
-   typed twice, not shown). With encryption, the same password unlocks the
+   `uk` or `de`; Enter for `us`), and a password (typed twice, not shown;
+   it can't be empty). Under 8 characters gets a warning that it's easy to
+   guess, then the second question as usual: type it again to keep it, or
+   press Enter to choose another. With encryption, the same password unlocks the
    disk.
 6. **The disk.** The old partition table is cleared, and a new one written:
    the EFI partition and one for Bunny Linux. The second is encrypted

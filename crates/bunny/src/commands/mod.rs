@@ -22,7 +22,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 
 use crate::config::Config;
-use crate::{apply, dev, interrupt, security};
+use crate::{apply, dev, interrupt, rollback, security};
 
 /// `confirm` in the shape apply::Options wants.
 pub(crate) fn ask(question: &str, enter_means_yes: bool) -> anyhow::Result<bool> {
@@ -64,6 +64,52 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     } else {
         ExitCode::FAILURE
     }))
+}
+
+/// Held while a command changes the system: only one at a time, and none
+/// while a rollback waits for a restart.
+pub(crate) struct Changing {
+    _lock: Option<std::fs::File>,
+}
+
+/// Checks that the system can be changed now, and keeps others out until
+/// the returned value is dropped. Only on the real system. `pending_ok`:
+/// fine to run while a rollback waits for a restart (`bunny clean`).
+pub(crate) fn changing(real_system: bool, pending_ok: bool) -> anyhow::Result<Changing> {
+    if !real_system {
+        return Ok(Changing { _lock: None });
+    }
+    // A rollback swaps the system at the next start. Changes made before
+    // that would go into the system being replaced, and be lost.
+    if !pending_ok {
+        if let Ok(info) = std::fs::read_to_string("/proc/self/mountinfo") {
+            if let Ok((_, subvol)) = rollback::root_mount(&info) {
+                if subvol.starts_with("@replaced-") {
+                    return Err(apply::nothing_changed(anyhow::anyhow!(
+                        "A rollback is waiting for a restart, so nothing was changed.\n  \
+                         Changes made now would go into the system that's being replaced.\n  \
+                         Restart first: {} reboot",
+                        security::admin()
+                    )));
+                }
+            }
+        }
+    }
+    use std::os::unix::io::AsRawFd;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open("/run/bunny.lock")
+        .context("Couldn't create /run/bunny.lock")?;
+    // SAFETY: flock on a file descriptor we own.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return Err(apply::nothing_changed(anyhow::anyhow!(
+            "Another bunny command is changing this system right now, so nothing was changed.\n  \
+             Wait for it to finish, then try again."
+        )));
+    }
+    Ok(Changing { _lock: Some(file) })
 }
 
 /// Whether we're running as root (checks who owns our own /proc entry).

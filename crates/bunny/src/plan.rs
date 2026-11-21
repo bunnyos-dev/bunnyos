@@ -139,8 +139,10 @@ impl Plan {
 
         if !self.add_repositories.is_empty() {
             section(&mut out, "Repositories to add", "+", &self.add_repositories);
+            // A note, not a warning: "·" rather than ⚠, because ⚠ and ✗ mean
+            // "something went wrong" (developer mode's "auto" reports them).
             out.push_str(
-                "  ⚠ Repositories besides Gentoo's own aren't checked by Gentoo's developers,\n    \
+                "  · Repositories besides Gentoo's own aren't checked by Gentoo's developers,\n    \
                  and their packages run build steps as root. Only add ones you trust.\n\n",
             );
         }
@@ -631,5 +633,22 @@ mod tests {
         let plan = make(&config, root.path()).unwrap();
         assert!(plan.is_empty(), "{plan:#?}");
         assert!(plan.render().contains("already matches"));
+    }
+
+    #[test]
+    fn the_repository_trust_note_is_not_a_problem() {
+        // Developer mode's report = "auto" sends any command that shows ⚠ or ✗;
+        // a switch that adds a repository and works must not be one of them.
+        let plan = Plan {
+            add_repositories: vec!["guru".into()],
+            ..Plan::default()
+        };
+        let shown = plan.render();
+        assert!(shown.contains("Only add ones you trust"), "{shown}");
+        let worked = crate::dev::Meta {
+            exit_code: Some(0),
+            ..crate::dev::Meta::default()
+        };
+        assert!(!crate::dev::had_problem(&worked, &shown), "{shown}");
     }
 }

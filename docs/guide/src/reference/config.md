@@ -76,6 +76,17 @@ before checking and installing packages, so a package from it can be added
 in the same switch. `bunny update` keeps it up to date with the rest, and
 `bunny.lock` records its version like Gentoo's own.
 
+While it downloads you see one line per repository:
+
+```
+  ✓ Downloaded guru · 17.5 MB
+```
+
+The download tool's own output (git's lines, Portage's "Performing Global
+Updates") is saved in `/var/log/bunny/<time>-download-<name>.log`. If the
+download fails, bunny shows the end of that output and where the log is.
+With `--verbose`, the full output is shown as it comes instead.
+
 > **Only add repositories you trust.** Gentoo's developers don't check
 > them, and their packages run their build steps as root. GURU is run by a
 > Gentoo project (users look after it together); most others are run by

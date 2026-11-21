@@ -128,7 +128,7 @@ pub fn switch(
     // 1b. Repositories, so packages from new ones can be checked and installed.
     //     If this stops the switch, nothing else changed yet: the snapshot
     //     goes too, so it isn't left as a generation that changed nothing.
-    if let Err(err) = set_up_repositories(config, root, plan, runner, &mut outcome) {
+    if let Err(err) = set_up_repositories(config, root, plan, runner, opts, &mut outcome) {
         let _ = drop_snapshot(runner, &mut outcome);
         return Err(err);
     }

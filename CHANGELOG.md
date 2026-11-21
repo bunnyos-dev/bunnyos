@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- When emerge refuses a switch because a package is a testing version, is
+  masked, or needs other USE flags, bunny now explains it from Portage's own
+  answer (through bunny's Portage helper), including which packages pulled
+  it in. Other problems are still read from emerge's message.
 - Removing unused packages now asks Portage itself what can go (through
   bunny's Portage helper) instead of reading emerge's screen text, says
   when a package goes only because another one in the list does, and

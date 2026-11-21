@@ -533,6 +533,51 @@ fn a_refusal_before_installing_changes_nothing_and_is_explained() {
 }
 
 #[test]
+fn a_refusal_is_explained_from_the_helpers_data() {
+    let root = fake_system();
+    let world = portage::world_path(root.path());
+    let world_before = std::fs::read_to_string(&world).unwrap();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    // The helper says why; emerge's text is still asked for the log, and
+    // says something only it knows about (a slot conflict).
+    let text = format!(
+        "{}\n\n{}",
+        fixture("keyword-testing.txt"),
+        fixture("slot-conflict.txt")
+    );
+    let mut runner = Scripted {
+        replies: vec![("--pretend --update", false, text)],
+        helper: vec![(
+            "plan",
+            r#"{"ok": false, "reason": "portage couldn't work out a plan", "problems": [{"kind": "keywords", "name": "dev-qt/qtbase", "version": "6.10.1", "keyword": "~amd64", "required_by": ["gui-apps/quickshell", "gui-wm/hyprland"]}], "helper": 3}"#
+                .into(),
+        )],
+        ..Scripted::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true))
+        .unwrap_err()
+        .to_string();
+    assert!(runner.commands.iter().any(|c| c == "(helper) plan"));
+    assert!(
+        err.contains("before installing anything, so nothing was changed"),
+        "{err}"
+    );
+    // From the data: the chain the text doesn't have, and only once.
+    assert!(err.contains("quickshell → hyprland"), "{err}");
+    assert_eq!(
+        err.matches("only available as a testing version").count(),
+        1,
+        "{err}"
+    );
+    // From the text: the kind the helper didn't report.
+    for e in crate::explain::explain(&fixture("slot-conflict.txt")) {
+        assert!(err.contains(&e.title), "{err}");
+    }
+    assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
+}
+
+#[test]
 fn quiet_removal_lists_and_always_asks() {
     let root = fake_system();
     let config = Config::parse("packages = []").unwrap();

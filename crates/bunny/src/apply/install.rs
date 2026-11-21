@@ -32,6 +32,10 @@ pub(super) fn install_quietly(
         "--ask=n",
     ];
     let (list, dry_run_log) = ask_portage(root, runner, opts, outcome, &update)?;
+    let left_out = left_out(plan, &list);
+    if !left_out.is_empty() {
+        return explain_left_out(root, &left_out, runner, opts, outcome);
+    }
     if list.is_empty() {
         println!("emerge has nothing to install.");
         return Ok(());
@@ -96,6 +100,49 @@ fn ask_portage(
             (list, format!("$ {}\n{output}", pretend.join(" ")))
         }
     })
+}
+
+/// Packages you added that emerge's plan doesn't install. Updating
+/// `@world`, emerge skips a package it can't install (only a testing
+/// version, masked) with a warning instead of failing, so the plan alone
+/// would say there's nothing to do.
+fn left_out(plan: &Plan, list: &[Merge]) -> Vec<String> {
+    plan.add_packages
+        .iter()
+        .filter(|p| !list.iter().any(|m| &m.name == *p))
+        .cloned()
+        .collect()
+}
+
+/// Asks emerge about the left-out packages by name, which fails with the
+/// reason instead of skipping them, and explains it. Nothing is changed.
+fn explain_left_out(
+    root: &Path,
+    left_out: &[String],
+    runner: &mut dyn Runner,
+    opts: &Options,
+    outcome: &mut Outcome,
+) -> Result<()> {
+    let mut pretend = cmd(&["emerge", "--pretend", "--verbose", "--color=n", "--ask=n"]);
+    pretend.extend(left_out.iter().cloned());
+    let (_ok, raw) = runner.run_quiet(&pretend, &mut |_| {})?;
+    let output = explain::strip_ansi(&raw);
+    discard(root, runner, outcome)?;
+    let log = save_log(
+        root,
+        &opts.stamp,
+        "emerge",
+        &format!("$ {}\n{raw}", pretend.join(" ")),
+    );
+    let mut text = refusal_message(&output, log);
+    if explain::explain(&output).is_empty() {
+        text = format!(
+            "emerge's plan leaves out {}, although your config asks for {}.\n{text}",
+            left_out.join(", "),
+            if left_out.len() == 1 { "it" } else { "them" },
+        );
+    }
+    Err(Refused(text).into())
 }
 
 /// Explains why emerge refused before installing anything.

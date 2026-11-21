@@ -486,7 +486,9 @@ fn quiet(yes: bool, answer: bool) -> Options {
 }
 
 const PRETEND: &str = "[binary   N     ] acct-group/nullmail-0-r2::gentoo\n\
-                       [binary   N     ] app-misc/tmux-3.6a::gentoo\n";
+                       [binary   N     ] app-misc/tmux-3.6a::gentoo\n\
+                       [binary   N     ] app-editors/neovim-0.11.5::gentoo\n\
+                       [binary   N     ] app-shells/zsh-5.9-r6::gentoo\n";
 const INSTALL: &str = ">>> Emerging binary (1 of 2) acct-group/nullmail-0-r2::gentoo\n\
                        >>> Emerging binary (2 of 2) app-misc/tmux-3.6a::gentoo\n\
                        \n * Messages for package app-misc/tmux-3.6a:\n\n * Read the manual.\n";
@@ -536,6 +538,47 @@ fn quiet_install_asks_emerge_first_then_installs_without_its_questions() {
     assert!(std::fs::read_to_string(log)
         .unwrap()
         .contains(">>> Emerging binary (2 of 2)"));
+}
+
+/// emerge's answer for a package that only has a testing version, asked
+/// about by name.
+const MASKED: &str = "!!! All ebuilds that could satisfy \"app-shells/zsh\" have been masked.\n\
+                      !!! One of the following masked packages is required to complete your request:\n\
+                      - app-shells/zsh-5.9-r6::gentoo (masked by: ~amd64 keyword)\n";
+
+#[test]
+fn a_package_emerge_quietly_leaves_out_is_explained_not_ignored() {
+    // Updating @world, emerge skips a package it can't install (only a
+    // testing version) with a warning, and plans nothing for it. bunny
+    // must not then say the system matches the config.
+    let root = fake_system();
+    let world = portage::world_path(root.path());
+    let world_before = std::fs::read_to_string(&world).unwrap();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert!(plan.add_packages.contains(&"app-shells/zsh".to_string()));
+    let mut runner = Scripted {
+        replies: vec![
+            (
+                "--pretend --update",
+                true,
+                "[binary   N     ] app-editors/neovim-0.11.5::gentoo\n".into(),
+            ),
+            (
+                "--pretend --verbose --color=n --ask=n app-shells/zsh",
+                false,
+                MASKED.into(),
+            ),
+        ],
+        ..Scripted::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("nothing was changed"), "{err}");
+    assert!(err.contains("app-shells/zsh"), "{err}");
+    assert!(!runner.commands.iter().any(|c| c.contains("--quiet-build")));
+    assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
 }
 
 #[test]

@@ -68,6 +68,8 @@ a minor version can change how things work).
   connection…"), checks the internet and names (DNS) separately, so
   "online, but names don't work" has its own message, and `welcome` checks
   again.
+- Live USB: "Welcome to your new account!" no longer appears above the
+  welcome each time it starts.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

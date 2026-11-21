@@ -1,0 +1,568 @@
+// Bunny Linux's installer. Black, one centered column, one question per
+// screen. It only collects answers: `bunny install` checks them, shows the
+// preview and does the work.
+
+import { LineEdit, ScrollView } from "std-widgets.slint";
+
+export struct DiskItem {
+    name: string,
+    describe: string,
+    contents: string,
+    usable: bool,
+    why: string,
+}
+
+export struct StepItem {
+    title: string,
+    done: bool,
+}
+
+global Look {
+    out property <color> text: #f2f2f2;
+    out property <color> dim: #9a9aa2;
+    out property <color> faint: #5c5c64;
+    out property <color> line: #2a2a30;
+    out property <color> card: #111114;
+    out property <color> chosen: #1d1d24;
+    out property <color> accent: #c9b8ff;
+    out property <color> danger: #ff8a80;
+    out property <length> width: 560px;
+    // On the USB from media-fonts/dejavu.
+    out property <string> mono: "DejaVu Sans Mono";
+}
+
+component Title inherits Text {
+    color: Look.text;
+    font-size: 28px;
+    font-weight: 600;
+    horizontal-alignment: center;
+    wrap: word-wrap;
+}
+
+component Body inherits Text {
+    color: Look.dim;
+    font-size: 15px;
+    horizontal-alignment: center;
+    wrap: word-wrap;
+}
+
+component Primary inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <bool> danger: false;
+    callback clicked;
+    height: 44px;
+    min-width: 180px;
+    border-radius: 22px;
+    background: !root.enabled ? Look.line : root.danger ? Look.danger : touch.pressed ? #e4dcff : Look.accent;
+    Text {
+        text: root.label;
+        color: root.enabled ? #000000 : Look.faint;
+        font-size: 15px;
+        font-weight: 600;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Quiet inherits Rectangle {
+    in property <string> label;
+    callback clicked;
+    height: 44px;
+    min-width: 120px;
+    border-radius: 22px;
+    background: touch.pressed ? Look.chosen : transparent;
+    Text {
+        text: root.label;
+        color: Look.dim;
+        font-size: 15px;
+    }
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// A choice drawn as a card: title, a line or two, ticked when chosen.
+component Choice inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <bool> chosen;
+    in property <bool> enabled: true;
+    callback clicked;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: root.chosen ? Look.accent : Look.line;
+    background: root.chosen ? Look.chosen : Look.card;
+    VerticalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+        spacing: 4px;
+        Text {
+            text: root.title;
+            color: root.enabled ? Look.text : Look.faint;
+            font-size: 16px;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+        if root.detail != "": Text {
+            text: root.detail;
+            color: root.enabled ? Look.dim : Look.faint;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+    }
+    TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> hint;
+    in-out property <string> value;
+    in property <string> placeholder;
+    in property <InputType> input-type: InputType.text;
+    spacing: 6px;
+    Text {
+        text: root.label;
+        color: Look.text;
+        font-size: 14px;
+        font-weight: 600;
+    }
+    LineEdit {
+        text <=> root.value;
+        placeholder-text: root.placeholder;
+        input-type: root.input-type;
+        font-size: 15px;
+    }
+    Text {
+        text: root.hint;
+        color: Look.faint;
+        font-size: 12px;
+        wrap: word-wrap;
+        visible: root.hint != "";
+    }
+}
+
+// The row of buttons at the bottom of a screen.
+component Buttons inherits HorizontalLayout {
+    in property <string> back: "Back";
+    in property <string> next: "Continue";
+    in property <bool> next-enabled: true;
+    in property <bool> danger: false;
+    in property <bool> show-back: true;
+    callback go-back;
+    callback go-next;
+    spacing: 12px;
+    alignment: center;
+    if root.show-back: Quiet {
+        label: root.back;
+        clicked => { root.go-back(); }
+    }
+    Primary {
+        label: root.next;
+        enabled: root.next-enabled;
+        danger: root.danger;
+        clicked => { root.go-next(); }
+    }
+}
+
+// One screen: a title, a line under it, its content, then the buttons.
+component Screen inherits VerticalLayout {
+    in property <string> title;
+    in property <string> body;
+    alignment: center;
+    spacing: 22px;
+    padding: 40px;
+    Title { text: root.title; }
+    if root.body != "": HorizontalLayout {
+        alignment: center;
+        Body {
+            width: Look.width + 80px;
+            text: root.body;
+        }
+    }
+    @children
+}
+
+export component Installer inherits Window {
+    title: "Install Bunny Linux";
+    background: #000000;
+    preferred-width: 1024px;
+    preferred-height: 768px;
+    default-font-size: 15px;
+
+    // 0 welcome · 1 disk · 2 setup · 3 account · 4 password · 5 review ·
+    // 6 installing · 7 done · 8 failed
+    in-out property <int> page: 0;
+    in property <bool> demo: false;
+
+    in property <[DiskItem]> disks;
+    // Each disk's path (/dev/…), for bunny; same order as `disks`.
+    in property <[string]> disk-paths;
+    in-out property <int> disk: 0;
+
+    in-out property <bool> recommended: true;
+    in-out property <bool> encrypt: true;
+    // 0 zram · 1 zram and a file on disk · 2 hibernate · 3 none
+    in-out property <int> swap-mode: 0;
+    in-out property <string> swap-size: "8G";
+
+    in-out property <string> user;
+    in-out property <string> hostname;
+    in-out property <string> timezone: "UTC";
+    in-out property <string> keymap: "us";
+    in-out property <string> password;
+    in-out property <string> password-again;
+
+    // From bunny: the preview, a problem with the answers, progress.
+    in property <string> preview;
+    in property <string> problem;
+    in property <bool> checking;
+    in-out property <string> confirm-name;
+    in property <[StepItem]> steps;
+    in property <string> log;
+    in-out property <bool> show-log;
+
+    callback quit-to-terminal();
+    callback check-answers();
+    callback start-install();
+    callback restart();
+
+    property <length> column: Look.width;
+
+    // The bunny, small, top left: where you are.
+    Text {
+        x: 28px;
+        y: 22px;
+        text: root.demo ? "Bunny Linux · demo, nothing is changed" : "Bunny Linux";
+        color: Look.faint;
+        font-size: 13px;
+    }
+
+    if root.page == 0: Screen {
+        title: "Welcome to Bunny Linux";
+        body: "This puts Bunny Linux on this computer. It takes about 20 minutes,\nand you can change your mind until the last step.";
+        HorizontalLayout {
+            alignment: center;
+            Text {
+                text: "   /\\   /\\\n  |  | |  |\n  |  | |  |\n   \\  V  /\n  /      \\\n |  o  o  |\n  \\  ^^  /\n   '----'";
+                color: Look.text;
+                font-family: Look.mono;
+                font-size: 15px;
+            }
+        }
+        Buttons {
+            back: "Use the terminal instead";
+            next: "Install Bunny Linux";
+            go-back => { root.quit-to-terminal(); }
+            go-next => { root.page = 1; }
+        }
+    }
+
+    if root.page == 1: Screen {
+        title: "Where should Bunny Linux go?";
+        body: "The disk you pick is erased. Disks that are in use can't be picked.";
+        VerticalLayout {
+            alignment: center;
+            spacing: 10px;
+            for d[i] in root.disks: HorizontalLayout {
+                alignment: center;
+                Choice {
+                    width: root.column;
+                    title: d.describe;
+                    detail: d.usable ? "Has now: " + d.contents : "Can't use: " + d.why;
+                    chosen: d.usable && root.disk == i;
+                    enabled: d.usable;
+                    clicked => { root.disk = i; }
+                }
+            }
+        }
+        Buttons {
+            next-enabled: root.disks.length > 0 && root.disks[root.disk].usable;
+            go-back => { root.page = 0; }
+            go-next => { root.page = 2; }
+        }
+    }
+
+    if root.page == 2: Screen {
+        title: "How should it be set up?";
+        VerticalLayout {
+            alignment: center;
+            spacing: 10px;
+            HorizontalLayout {
+                alignment: center;
+                Choice {
+                    width: root.column;
+                    title: "Recommended";
+                    detail: "The disk encrypted: if the computer is lost or stolen, nobody can read your files without the password. Swap compressed in memory (zram), so the computer slows down instead of closing apps when memory runs out.";
+                    chosen: root.recommended;
+                    clicked => {
+                        root.recommended = true;
+                        root.encrypt = true;
+                        root.swap-mode = 0;
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: center;
+                Choice {
+                    width: root.column;
+                    title: "Let me choose";
+                    detail: "Encryption and swap, one at a time.";
+                    chosen: !root.recommended;
+                    clicked => { root.recommended = false; }
+                }
+            }
+            if !root.recommended: HorizontalLayout {
+                alignment: center;
+                VerticalLayout {
+                    width: root.column;
+                    spacing: 8px;
+                    padding-top: 8px;
+                    Text { text: "Encryption"; color: Look.text; font-weight: 600; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Choice {
+                            title: "Encrypted";
+                            detail: "Recommended";
+                            chosen: root.encrypt;
+                            clicked => { root.encrypt = true; }
+                        }
+                        Choice {
+                            title: "Not encrypted";
+                            detail: "Anyone with the computer can read it";
+                            chosen: !root.encrypt;
+                            clicked => { root.encrypt = false; }
+                        }
+                    }
+                    Text { text: "Swap"; color: Look.text; font-weight: 600; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Choice {
+                            title: "In memory";
+                            detail: "zram · recommended";
+                            chosen: root.swap-mode == 0;
+                            clicked => { root.swap-mode = 0; }
+                        }
+                        Choice {
+                            title: "And on disk";
+                            detail: "a swap file too";
+                            chosen: root.swap-mode == 1;
+                            clicked => { root.swap-mode = 1; }
+                        }
+                        Choice {
+                            title: "Hibernate";
+                            detail: "sleep to disk";
+                            chosen: root.swap-mode == 2;
+                            clicked => { root.swap-mode = 2; }
+                        }
+                        Choice {
+                            title: "None";
+                            detail: "";
+                            chosen: root.swap-mode == 3;
+                            clicked => { root.swap-mode = 3; }
+                        }
+                    }
+                    if root.swap-mode == 1: Field {
+                        label: "Swap file size";
+                        hint: "Like 8G or 512M.";
+                        value <=> root.swap-size;
+                    }
+                }
+            }
+        }
+        Buttons {
+            go-back => { root.page = 1; }
+            go-next => { root.page = 3; }
+        }
+    }
+
+    if root.page == 3: Screen {
+        title: "About you and this computer";
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                width: root.column;
+                spacing: 14px;
+                Field {
+                    label: "Your user name";
+                    hint: "Lowercase letters, digits, - and _, like you.";
+                    placeholder: "you";
+                    value <=> root.user;
+                }
+                Field {
+                    label: "A name for this computer";
+                    hint: "Like laptop or my-desktop.";
+                    placeholder: "laptop";
+                    value <=> root.hostname;
+                }
+                HorizontalLayout {
+                    spacing: 12px;
+                    Field {
+                        label: "Time zone";
+                        hint: "Region/City, like America/Toronto.";
+                        value <=> root.timezone;
+                    }
+                    Field {
+                        label: "Keyboard";
+                        hint: "Like us, uk, de or fr.";
+                        value <=> root.keymap;
+                    }
+                }
+            }
+        }
+        Buttons {
+            next-enabled: root.user != "" && root.hostname != "";
+            go-back => { root.page = 2; }
+            go-next => { root.page = 4; }
+        }
+    }
+
+    if root.page == 4: Screen {
+        title: "Choose a password";
+        body: root.encrypt ? "One password, for your account and for unlocking the disk each time the computer starts. If it's lost, the disk can't be read." : "The password for your account.";
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                width: root.column;
+                spacing: 14px;
+                Field {
+                    label: "Password";
+                    hint: root.password != "" && root.password.character-count < 8 ? "⚠ That's short, so it's easy to guess. A few words together is safer, and easy to remember." : "A few words together is easy to remember and hard to guess.";
+                    input-type: InputType.password;
+                    value <=> root.password;
+                }
+                Field {
+                    label: "Again";
+                    hint: root.password-again != "" && root.password-again != root.password ? "They don't match yet." : "";
+                    input-type: InputType.password;
+                    value <=> root.password-again;
+                }
+            }
+        }
+        Buttons {
+            next: root.checking ? "Checking…" : "Continue";
+            next-enabled: root.password != "" && root.password == root.password-again && !root.checking;
+            go-back => { root.page = 3; }
+            go-next => { root.check-answers(); }
+        }
+        if root.problem != "": Text {
+            text: root.problem;
+            color: Look.danger;
+            font-size: 14px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    if root.page == 5: Screen {
+        title: "Ready to install";
+        body: "Here's exactly what happens. Nothing has changed yet.";
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.column + 160px;
+                height: 300px;
+                background: Look.card;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: Look.line;
+                ScrollView {
+                    Text {
+                        x: 16px;
+                        y: 12px;
+                        text: root.preview;
+                        color: Look.text;
+                        font-family: Look.mono;
+                        font-size: 12px;
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            Field {
+                width: root.column;
+                label: "To erase " + root.disks[root.disk].name + " and install, type its name";
+                placeholder: root.disks[root.disk].name;
+                value <=> root.confirm-name;
+            }
+        }
+        Buttons {
+            next: "Erase and install";
+            danger: true;
+            next-enabled: root.confirm-name == root.disks[root.disk].name;
+            go-back => { root.page = 4; root.confirm-name = ""; }
+            go-next => { root.start-install(); }
+        }
+    }
+
+    if root.page == 6 || root.page == 7 || root.page == 8: Screen {
+        title: root.page == 6 ? "Installing Bunny Linux" : root.page == 7 ? "Bunny Linux is installed" : "The install stopped";
+        body: root.page == 6 ? "This takes 15 to 30 minutes, depending on your internet." : root.page == 7 ? (root.encrypt ? "Restart, take out the USB stick when the screen goes dark, then type your password to unlock the disk." : "Restart, and take out the USB stick when the screen goes dark.") : "Nothing more will change. What happened is below; you can go back and try again.";
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                width: root.column;
+                spacing: 6px;
+                for s in root.steps: HorizontalLayout {
+                    spacing: 10px;
+                    Text {
+                        width: 18px;
+                        text: s.done ? "✓" : "›";
+                        color: Look.accent;
+                        font-size: 15px;
+                    }
+                    Text {
+                        text: s.title;
+                        color: s.done ? Look.dim : Look.text;
+                        font-size: 15px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            Quiet {
+                label: root.show-log ? "Hide the details" : "Show the details";
+                clicked => { root.show-log = !root.show-log; }
+            }
+        }
+        if root.show-log || root.page == 8: HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.column + 160px;
+                height: 220px;
+                background: Look.card;
+                border-radius: 14px;
+                ScrollView {
+                    Text {
+                        x: 16px;
+                        y: 12px;
+                        text: root.log;
+                        color: Look.dim;
+                        font-family: Look.mono;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+        if root.page == 7: Buttons {
+            show-back: false;
+            next: "Restart";
+            go-next => { root.restart(); }
+        }
+        if root.page == 8: Buttons {
+            show-back: false;
+            next: "Back";
+            go-next => { root.page = 5; root.confirm-name = ""; }
+        }
+    }
+}

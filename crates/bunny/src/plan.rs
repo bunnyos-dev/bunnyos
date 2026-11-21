@@ -534,7 +534,15 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             .map(|(name, _)| name.clone())
             .collect(),
         check_after_sync,
-        add_packages: wanted_world.difference(&current_world).cloned().collect(),
+        // In the config but not installed, even if the world file lists it
+        // (emerge can leave a package out and still record it there).
+        add_packages: wanted_world
+            .iter()
+            .filter(|a| {
+                !current_world.contains(*a) || portage::is_installed(root, a) == Some(false)
+            })
+            .cloned()
+            .collect(),
         remove_packages: current_world.difference(&wanted_world).cloned().collect(),
         use_changes,
         enable_services: wanted_services.difference(&enabled).cloned().collect(),
@@ -727,6 +735,26 @@ mod tests {
         assert!(text.contains("  + dbus   (from [desktop])\n"));
         // elogind is in `services` too, so it's yours, not [desktop]'s.
         assert!(!plan.from_desktop.contains("elogind"));
+    }
+
+    #[test]
+    fn a_package_in_the_world_file_but_not_installed_is_still_to_add() {
+        // emerge can leave a package out (only a testing version) and still
+        // write it in the world file; the plan mustn't call that done.
+        let root = fake_root();
+        let r = root.path();
+        let config =
+            Config::parse("packages = [\"app-editors/neovim\", \"gui-wm/dwl\"]\n").unwrap();
+        std::fs::write(portage::world_path(r), "app-editors/neovim\ngui-wm/dwl\n").unwrap();
+        std::fs::create_dir_all(r.join("var/db/pkg/app-editors/neovim-0.11.5")).unwrap();
+        let plan = make(&config, r).unwrap();
+        assert_eq!(plan.add_packages, ["gui-wm/dwl"]);
+        assert!(plan.remove_packages.is_empty());
+        // Installed under another name prefix doesn't count (dwl vs dwlb).
+        std::fs::create_dir_all(r.join("var/db/pkg/gui-wm/dwlb-0.2")).unwrap();
+        assert_eq!(make(&config, r).unwrap().add_packages, ["gui-wm/dwl"]);
+        std::fs::create_dir_all(r.join("var/db/pkg/gui-wm/dwl-0.7-r1")).unwrap();
+        assert!(make(&config, r).unwrap().add_packages.is_empty());
     }
 
     #[test]

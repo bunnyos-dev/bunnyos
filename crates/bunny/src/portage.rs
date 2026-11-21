@@ -34,6 +34,28 @@ pub fn package_use_dir(root: &Path) -> PathBuf {
     root.join(PACKAGE_USE_DIR)
 }
 
+/// Whether `atom` (`category/name`, maybe with `:slot`) is installed, from
+/// Portage's database. `None` when there's no database to read (a fake root
+/// in tests, or a system that isn't Gentoo).
+pub fn is_installed(root: &Path, atom: &str) -> Option<bool> {
+    let db = root.join("var/db/pkg");
+    if !db.is_dir() {
+        return None;
+    }
+    let atom = atom.split(':').next().unwrap_or(atom);
+    let (category, name) = atom.split_once('/')?;
+    let Ok(entries) = std::fs::read_dir(db.join(category)) else {
+        return Some(false);
+    };
+    Some(entries.flatten().any(|e| {
+        e.file_name()
+            .to_string_lossy()
+            .strip_prefix(name)
+            .and_then(|rest| rest.strip_prefix('-'))
+            .is_some_and(|version| version.starts_with(|c: char| c.is_ascii_digit()))
+    }))
+}
+
 /// bunny's own packages, from the Bunny Linux overlay: the prebuilt release and
 /// the one built from git.
 pub const BUNNY_PACKAGES: [&str; 2] = ["app-admin/bunny-bin", "app-admin/bunny"];

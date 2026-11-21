@@ -779,6 +779,14 @@ testing and decisions.
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
   `"auto"` sends any command that fails or shows ⚠/✗. Daily sessions read
   new reports first.
+- **Recording the install:** the live USB has no config, so preview images
+  (CI builds that aren't releases, `PREVIEW=1 tools/build-iso.sh`) ship
+  `/etc/bunny-preview.toml` with `[dev] report = true`, which bunny uses when
+  the config doesn't turn recording on. Just before it unmounts, a recorded
+  `bunny install` copies its recording so far, with notes (exit code 0), to
+  `/home/<user>/.local/state/bunny/sessions/` in the new system (owned by the
+  user), so `bunny report` there sends it. A failed install leaves it on the
+  USB. Release images record nothing.
 
 ## Testing
 

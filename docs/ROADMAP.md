@@ -35,6 +35,23 @@ The **whole vision** (all 9 phases) is roughly **two fifths done**.
 5. The maintainer's laptop
 6. The rest of the Portage helper
 
+**Stability first (decided November 21, 2026).** The graphical installer
+(#96) stays at part 1, plain, while everything gets as stable as possible.
+Its next parts (Wi-Fi, the top bar and step counter, the map, the
+`bunny.toml` panel) wait for this gate, and sessions don't start them before
+the maintainer says go. Tell the maintainer when the gate looks met:
+
+- [ ] Every "Fixes from the …" list above is empty (or only has items the
+      maintainer moved to later).
+- [ ] Two fresh installs from the USB in a row with nothing new found: one
+      with the terminal, one with the graphical installer.
+- [ ] The encrypted laptop-shaped VM passes (#47, #74, undo from the boot
+      menu with `/boot` on the EFI partition).
+- [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
+      with developer mode on, and the reports show nothing new that's
+      serious.
+- [ ] No open PR older than a few days that's waiting on a fix.
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,

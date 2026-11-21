@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- When emerge refuses a switch because a package is a testing version, is
+  masked, or needs other USE flags, bunny now explains it from Portage's own
+  answer (through bunny's Portage helper), including which packages pulled
+  it in. Other problems are still read from emerge's message.
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.

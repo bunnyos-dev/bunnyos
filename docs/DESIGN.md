@@ -68,10 +68,26 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
   `backtrack_depgraph` and the vartree, and FEATURES=getbinpkg handled like
   emerge does. For a rebuild it also says why (USE flags that changed, and
   libraries whose sub-slot changes in the plan); emerge's text gives the
-  same from `--verbose`'s marked USE flags and its `r` flag. The quiet
-  install uses it first and falls back to emerge's text (which also
-  explains refusals). The weekly canary checks the helper
-  agrees with emerge.
+  same from `--verbose`'s marked USE flags and its `r` flag. The quiet install uses it first and falls back to emerge's
+  text (which also explains refusals). The weekly canary checks the helper
+  agrees with emerge. **Part 3 (error explanations, one kind at a time):**
+  when there's no plan, `plan` also lists `problems` from the depgraph's
+  own records: `keywords` (`_needed_unstable_keywords`; `~ARCH` if the
+  version has that testing keyword, else `**`), `use`
+  (`_needed_use_config_changes`, flag → on/off), and `masked`
+  (`_needed_p_mask_changes`, and `_unsatisfied_deps_for_display` entries
+  where every matching version has a reason from
+  `portage.getmaskingstatus`, with `getmaskingreason`'s comment), each with
+  the chain of packages that pulled it in. The helper exits 0 for this
+  answer. bunny still runs `emerge --pretend` (for the log, and for kinds
+  the helper doesn't report yet: slot conflicts, blockers, missing
+  packages, fetch failures), then explains each kind the helper reported
+  from its data, and the rest from the text. Exception: when emerge's text
+  says its USE suggestion breaks a package's REQUIRED_USE rules, the
+  text's explanation is kept (the helper doesn't report those rules yet).
+  Data and text use the same wording. These depgraph fields are internal
+  to Portage, so each is read defensively and an empty list means "use the
+  text".
 - **Init:** OpenRC. systemd may be added later (see "Init systems").
 
 ## The `bunny` tool

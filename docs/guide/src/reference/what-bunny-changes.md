@@ -60,7 +60,13 @@ installing it shows one progress line; emerge's full output is saved to
 `/var/log/bunny/<time>-emerge.log`. With `--verbose`, emerge runs with
 `--verbose --ask` and its output is shown live instead, as it used to be.
 
-Either way, bunny reads emerge's output to explain any problem, turns its
+When Portage can't work out a plan, bunny's Portage helper also says why,
+as data, for three kinds of problem: a package that's only available as a
+testing version, a package Gentoo has masked, and a package that needs other
+USE flags. bunny explains those from Portage's own answer (including which
+packages pulled it in), and everything else from emerge's message.
+
+Either way, bunny reads emerge's output to explain any other problem, turns its
 notices (news, reminders) into short tips, and shows the messages packages
 leave after installing.
 

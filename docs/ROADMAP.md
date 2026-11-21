@@ -412,6 +412,9 @@ Portage for structured answers instead.
       repo (personal details swapped out); `"auto"` sends problems by
       themselves. Daily sessions read the reports and turn bugs into PRs.
 - [~] **Portage helper:** (part 1, the install list, done in #18; part 2,
+      depclean, PR #66 open; part 3, error explanations from data:
+      keywords, masks and USE changes, PR open; next: slot conflicts and
+      blockers) a small Python script shipped with bunny that uses
       depclean, PR open; next: error explanations) a small Python script shipped with bunny that uses
       Portage's own library (the code emerge uses) and prints JSON: what a
       switch would install or remove (with versions, prebuilt or compile),

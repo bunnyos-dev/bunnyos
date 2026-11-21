@@ -43,10 +43,12 @@ pub(crate) fn ask(question: &str, enter_means_yes: bool) -> anyhow::Result<bool>
 /// `sudo bunny`. Returns the exit code if it did.
 ///
 /// sudo and doas both exit with 1 when they don't run the command (no
-/// password, a wrong one, Ctrl+C at the question, or not allowed). bunny run
-/// with `--elevated` never exits with 1 (see `elevated_exit`), so a 1 here
-/// means bunny never started as root and nothing was changed: we say so in
-/// plain words instead of leaving sudo's own line as the only explanation.
+/// password, a wrong one, or not allowed; sudo also for Ctrl+C at the
+/// question). doas is stopped by Ctrl+C at its question instead. bunny run
+/// with `--elevated` never exits with 1 (see `elevated_exit`) and handles
+/// Ctrl+C itself, so either means bunny never started as root and nothing was
+/// changed: we say so in plain words instead of leaving sudo's or doas's own
+/// line (or nothing) as the only explanation.
 pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     if !real_system || is_root() {
         return Ok(None);
@@ -68,7 +70,8 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
         .with_context(|| {
             format!("bunny needs to run as root to change the system, and couldn't start {admin}")
         })?;
-    if admin_refused(status.code()) {
+    use std::os::unix::process::ExitStatusExt;
+    if admin_refused(status.code(), status.signal()) {
         eprintln!("{}", refused_message(admin));
     }
     Ok(Some(if status.success() {
@@ -139,10 +142,10 @@ pub(crate) fn elevated_exit(code: ExitCode, elevated: bool) -> ExitCode {
     }
 }
 
-/// Whether sudo or doas refused to run bunny (exit code 1), rather than bunny
-/// itself failing as root.
-fn admin_refused(code: Option<i32>) -> bool {
-    code == Some(1)
+/// Whether sudo or doas refused to run bunny (exit code 1, or doas stopped by
+/// Ctrl+C at its password question), rather than bunny itself failing as root.
+fn admin_refused(code: Option<i32>, signal: Option<i32>) -> bool {
+    code == Some(1) || signal == Some(libc::SIGINT)
 }
 
 /// What to say when sudo or doas didn't run bunny as root.
@@ -294,12 +297,15 @@ mod tests {
     #[test]
     fn sudo_refusing_is_told_apart_from_bunny_failing() {
         // sudo and doas exit with 1 when they don't run the command.
-        assert!(admin_refused(Some(1)));
-        // bunny as root: success, its own failure, a crash, a signal.
-        assert!(!admin_refused(Some(0)));
-        assert!(!admin_refused(Some(ELEVATED_FAILURE as i32)));
-        assert!(!admin_refused(Some(101)));
-        assert!(!admin_refused(None));
+        assert!(admin_refused(Some(1), None));
+        // doas is stopped by Ctrl+C at its password question.
+        assert!(admin_refused(None, Some(libc::SIGINT)));
+        // bunny as root: success, its own failure, a crash, killed.
+        assert!(!admin_refused(Some(0), None));
+        assert!(!admin_refused(Some(ELEVATED_FAILURE as i32), None));
+        assert!(!admin_refused(Some(101), None));
+        assert!(!admin_refused(None, Some(libc::SIGKILL)));
+        assert!(!admin_refused(None, Some(libc::SIGTERM)));
     }
 
     #[test]

@@ -306,7 +306,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `x`, e.g. "v Dry run finished"). Check which symbols the console font
       has (✓ ✗ ⚠ ·) and load a font that has them on the USB (or fall back
       to plain text when the terminal is the Linux console).
-- [ ] **"Welcome to your new account!"** appears above the welcome on the
+- [~] **"Welcome to your new account!"** appears above the welcome on the
       live USB, which is confusing there (it isn't a new account). Find what
       prints it at the first login and turn it off on the USB.
 - [ ] **`bunny install --dry-run` is a wall of commands.** Every

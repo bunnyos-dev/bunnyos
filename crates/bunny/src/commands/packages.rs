@@ -8,7 +8,7 @@ use anyhow::Context;
 
 use super::switch::{switch_inner, Switched};
 use super::{elevate, read_config_text};
-use crate::{edit, lock, repo, security};
+use crate::{apply, edit, lock, repo, security};
 
 pub(crate) fn search_cmd(query: &str, root: &Path) -> anyhow::Result<ExitCode> {
     let packages = repo::all(root);
@@ -270,6 +270,12 @@ pub(crate) fn edit_then_switch(
             put_back()?;
             println!("{} wasn't changed either.", config.display());
             Ok(code)
+        }
+        Err(err) if apply::changed_nothing(&err) => {
+            put_back()?;
+            eprintln!("✗ {err:#}");
+            println!("{} wasn't changed either.", config.display());
+            Ok(ExitCode::FAILURE)
         }
         Err(err) => Err(err),
     }

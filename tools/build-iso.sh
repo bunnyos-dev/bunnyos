@@ -3,6 +3,11 @@
 # USB stick, or boot in the VM).
 #
 #   doas tools/build-iso.sh <bunny binary> [output.iso]
+#   doas env PREVIEW=1 tools/build-iso.sh ...   (a preview image, for testing)
+#
+# A preview image records every bunny command (developer mode, without
+# sending anything), and bunny install copies its recording into the new
+# system so `bunny report` can send it from there. Release images don't.
 #
 # Needs root (it unpacks a system and runs commands inside it with chroot),
 # a Linux computer, and: wget, tar, xz, sha512sum, mksquashfs
@@ -34,6 +39,7 @@ fail() { printf '\n✗ %s\n' "$*" >&2; exit 1; }
 [ $# -ge 1 ] || fail "Usage: $0 <bunny binary> [output.iso]"
 bunny="$1"
 out="${2:-bunny-linux-live.iso}"
+preview="${PREVIEW:-0}"
 [ "$(id -u)" = 0 ] || fail "Run this as root (doas $0 …): it unpacks a system and uses chroot."
 [ -x "$bunny" ] || fail "$bunny isn't a bunny binary you can run. Build one first (cargo build --release)."
 "$bunny" --version >/dev/null 2>&1 \
@@ -82,6 +88,16 @@ install -D -m 0755 "$bunny" "$root/usr/local/bin/bunny"
 install -D -m 0755 "$here/iso/welcome.sh" "$root/usr/local/bin/welcome"
 install -D -m 0644 "$here/iso/bash_profile" "$root/root/.bash_profile"
 install -D -m 0755 "$here/iso/inside.sh" "$root/root/build-inside.sh"
+if [ "$preview" = 1 ]; then
+    # Read by bunny (dev::PREVIEW): record every command on this USB.
+    cat > "$root/etc/bunny-preview.toml" <<'EOF'
+# Bunny Linux preview USB: bunny records every command here (developer
+# mode). Nothing is sent from the USB; bunny install copies its recording
+# into the new system, where `bunny report` shows it and asks before sending.
+[dev]
+report = true
+EOF
+fi
 
 cp --dereference /etc/resolv.conf "$root/etc/"
 mount --types proc /proc "$root/proc"; mounted="proc $mounted"
@@ -103,8 +119,10 @@ mv "$root/boot/vmlinuz-live" "$iso/boot/vmlinuz"
 mv "$root/boot/initramfs-live.img" "$iso/boot/initramfs.img"
 cp "$here/iso/grub.cfg" "$iso/boot/grub/grub.cfg"
 version="$("$bunny" --version | awk '{print $NF}')"
-printf 'Bunny Linux live USB, bunny %s, built %s from %s\n' \
-    "$version" "$(date -u +%Y-%m-%d)" "$file" > "$iso/bunny-live.txt"
+kind="live USB"
+[ "$preview" = 1 ] && kind="live USB (preview)"
+printf 'Bunny Linux %s, bunny %s, built %s from %s\n' \
+    "$kind" "$version" "$(date -u +%Y-%m-%d)" "$file" > "$iso/bunny-live.txt"
 cp "$iso/bunny-live.txt" "$root/etc/bunny-live"
 
 mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp zstd -Xcompression-level 19 \

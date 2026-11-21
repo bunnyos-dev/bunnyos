@@ -45,6 +45,14 @@ say "Start-up: log in as root on the screen, with the welcome"
 passwd -d root >/dev/null
 sed -i 's|^c1:12345:respawn:/sbin/agetty .*|c1:12345:respawn:/sbin/agetty --autologin root --noclear 38400 tty1 linux|' /etc/inittab
 grep -q -- '--autologin root' /etc/inittab || { echo "Couldn't set up the automatic login." >&2; exit 1; }
+# Every start of the USB is a first login (its records are in memory), so
+# PAM's lastlog module said "Welcome to your new account!" above the welcome
+# each time. That's Gentoo's pambase (`pam_lastlog.so never` in
+# system-login); on the USB, "Last login" means nothing either, so it goes.
+sed -i '/^session[[:space:]].*pam_lastlog\.so/d' /etc/pam.d/system-login
+if grep -q 'pam_lastlog' /etc/pam.d/system-login; then
+    echo "Couldn't turn off the \"new account\" message." >&2; exit 1
+fi
 echo 'hostname="bunny-live"' > /etc/conf.d/hostname
 # The live system's root is in memory; an fstab with something in it keeps
 # OpenRC from warning about an empty one at start-up.

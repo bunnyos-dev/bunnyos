@@ -16,7 +16,9 @@ command -v getuto >/dev/null && getuto
 
 say "Language, time zone and keyboard"
 echo "$TIMEZONE" > /etc/timezone
-emerge -q --config sys-libs/timezone-data
+# Current Gentoo reads the zone from this link (/etc/timezone alone no
+# longer sets it).
+ln -sf "../usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen -q
 eselect locale set en_US.utf8 >/dev/null
@@ -47,6 +49,10 @@ fi
 say "Installing the system (prebuilt packages; this takes a while)"
 # shellcheck disable=SC2086  # a list of package names
 emerge -q --noreplace $PACKAGES
+
+# Gentoo's announcements so far are older than this system: mark them read,
+# so bunny only mentions new ones.
+eselect news read --quiet all >/dev/null 2>&1 || true
 
 say "Host name, services and the boot menu"
 echo "hostname=\"$HOST\"" > /etc/conf.d/hostname

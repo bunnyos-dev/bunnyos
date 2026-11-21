@@ -48,20 +48,28 @@ pub fn install() {
 
 /// While one of these is alive, Ctrl+C sets a flag instead of stopping bunny.
 pub struct Careful {
+    flag: &'static AtomicBool,
     was: bool,
 }
 
 impl Careful {
     pub fn start() -> Careful {
+        Self::start_on(&CAREFUL)
+    }
+
+    /// The same, on another flag (so tests don't share bunny's own, which
+    /// other tests running at the same time set and clear).
+    fn start_on(flag: &'static AtomicBool) -> Careful {
         Careful {
-            was: CAREFUL.swap(true, Ordering::SeqCst),
+            flag,
+            was: flag.swap(true, Ordering::SeqCst),
         }
     }
 }
 
 impl Drop for Careful {
     fn drop(&mut self) {
-        CAREFUL.store(self.was, Ordering::SeqCst);
+        self.flag.store(self.was, Ordering::SeqCst);
     }
 }
 
@@ -109,18 +117,20 @@ mod tests {
 
     #[test]
     fn careful_stretches_nest() {
-        assert!(!CAREFUL.load(Ordering::SeqCst));
+        // Its own flag: switch tests running in parallel use CAREFUL.
+        static FLAG: AtomicBool = AtomicBool::new(false);
+        assert!(!FLAG.load(Ordering::SeqCst));
         {
-            let _outer = Careful::start();
+            let _outer = Careful::start_on(&FLAG);
             {
-                let _inner = Careful::start();
-                assert!(CAREFUL.load(Ordering::SeqCst));
+                let _inner = Careful::start_on(&FLAG);
+                assert!(FLAG.load(Ordering::SeqCst));
             }
             assert!(
-                CAREFUL.load(Ordering::SeqCst),
+                FLAG.load(Ordering::SeqCst),
                 "the outer stretch is still careful"
             );
         }
-        assert!(!CAREFUL.load(Ordering::SeqCst));
+        assert!(!FLAG.load(Ordering::SeqCst));
     }
 }

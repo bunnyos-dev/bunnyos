@@ -35,6 +35,9 @@ pub struct Config {
     /// Developer mode: recording commands and sending reports.
     #[serde(default)]
     pub dev: crate::dev::Dev,
+    /// What a graphical desktop needs from the base system.
+    #[serde(default)]
+    pub desktop: crate::desktop::Desktop,
     /// The host file read on top of this config, if there was one.
     #[serde(skip)]
     pub host: Option<HostLayer>,
@@ -176,8 +179,9 @@ impl fmt::Display for Problem {
 
 impl Config {
     /// USE flags per package as they should be applied: the config's own,
-    /// plus Bunny Linux defaults for packages bunny installs itself. A package's
-    /// own `[pkg]` entry always wins over a default.
+    /// plus Bunny Linux defaults for packages bunny installs itself and the
+    /// ones `[desktop]` needs. A package's own `[pkg]` entry always wins over
+    /// a default.
     pub fn use_flags(&self) -> BTreeMap<String, Vec<String>> {
         let mut flags: BTreeMap<String, Vec<String>> = self
             .pkg
@@ -185,6 +189,14 @@ impl Config {
             .filter(|(_, s)| !s.use_flags.is_empty())
             .map(|(atom, s)| (atom.clone(), s.use_flags.clone()))
             .collect();
+        for (atom, defaults) in self.desktop.use_flags() {
+            if !self.pkg.contains_key(*atom) {
+                flags.insert(
+                    atom.to_string(),
+                    defaults.iter().map(|f| f.to_string()).collect(),
+                );
+            }
+        }
         if let Some(sec) = &self.security {
             for (atom, defaults) in sec.privilege.default_use() {
                 if !self.pkg.contains_key(*atom) {
@@ -196,6 +208,30 @@ impl Config {
             }
         }
         flags
+    }
+
+    /// Services to start at boot: `services`, plus the ones `[desktop]` needs.
+    pub fn wanted_services(&self) -> Vec<String> {
+        let mut all = self.services.clone();
+        for service in self.desktop.services() {
+            if !all.iter().any(|s| s == service) {
+                all.push(service.to_string());
+            }
+        }
+        all
+    }
+
+    /// Whether a package, service or package's USE flags are in effect only
+    /// because of `[desktop]` (not also written in the config itself), so
+    /// `plan` and `diff` can say where they come from.
+    pub fn added_by_desktop(&self, name: &str) -> bool {
+        let package =
+            self.desktop.packages().contains(&name) && !self.packages.iter().any(|p| p == name);
+        let service =
+            self.desktop.services().contains(&name) && !self.services.iter().any(|s| s == name);
+        let flags = self.desktop.use_flags().iter().any(|(a, _)| *a == name)
+            && !self.pkg.contains_key(name);
+        package || service || flags
     }
 
     /// Accepted keywords per package, from `[pkg] keywords`.
@@ -643,6 +679,41 @@ mod tests {
         assert!(is_use_flag("python_targets_python3_12"));
         assert!(!is_use_flag("-"));
         assert!(!is_use_flag("bad flag"));
+    }
+
+    #[test]
+    fn desktop_adds_flags_services_and_packages_unless_set() {
+        let c = Config::parse(
+            "services = [\"sshd\", \"dbus\"]\n[desktop]\nwayland = true\n\
+             [pkg.\"sys-auth/seatd\"]\nuse = [\"-elogind\", \"server\"]\n",
+        )
+        .unwrap();
+        assert!(c.problems().is_empty(), "{:?}", c.problems());
+        let flags = c.use_flags();
+        assert_eq!(flags["sys-auth/pambase"], ["elogind"]);
+        // Your own [pkg] entry wins.
+        assert_eq!(flags["sys-auth/seatd"], ["-elogind", "server"]);
+        assert_eq!(c.wanted_services(), ["sshd", "dbus", "elogind"]);
+        assert!(c.added_by_desktop("sys-auth/pambase"));
+        assert!(!c.added_by_desktop("sys-auth/seatd"));
+        assert!(c.added_by_desktop("elogind"));
+        assert!(!c.added_by_desktop("dbus"), "also in `services`");
+        assert!(c.added_by_desktop("sys-auth/elogind"));
+        assert!(!c.added_by_desktop("sshd"));
+
+        // Without the section (or with it off): nothing extra.
+        for text in ["", "[desktop]\nwayland = false\n"] {
+            let c = Config::parse(text).unwrap();
+            assert!(c.use_flags().is_empty());
+            assert!(c.wanted_services().is_empty());
+            assert!(!c.added_by_desktop("elogind"));
+        }
+        assert!(Config::parse("[desktop]\nwm = \"mango\"\n").is_err());
+        // The section trap still explains a top-level key below [desktop].
+        let err = Config::parse("[desktop]\nwayland = true\nservices = []")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("move `services` above"), "{err}");
     }
 
     #[test]

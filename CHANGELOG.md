@@ -63,6 +63,11 @@ a minor version can change how things work).
   with your own GitHub sign-in (no need to sign root in), and sends new
   changes each time you run it again. The Guide's git steps are now just
   this command.
+- Live USB: the welcome no longer says "Not online yet" while the network is
+  still starting. It waits up to about 15 seconds ("Checking the
+  connection…"), checks the internet and names (DNS) separately, so
+  "online, but names don't work" has its own message, and `welcome` checks
+  again.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

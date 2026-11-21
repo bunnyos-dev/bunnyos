@@ -15,7 +15,10 @@ exit status 0 when Portage answered, even with "no plan"):
           (default atom: @world), with the same options emerge would use
           (EMERGE_DEFAULT_OPTS and FEATURES=getbinpkg included).
           {"ok": true, "merges": [{"name", "version", "from", "action",
-                                    "binary", "slot"}]}
+                                    "binary", "slot", "why"}]}
+          "why" (rebuilds only): {"use": ["+flag", "-flag"], "libraries":
+          ["cat/pkg"]}: the USE flags that changed, and the libraries it
+          uses whose sub-slot changes in this plan (emerge's `r`).
           {"ok": false, "reason": "...", "problems": [...]} when Portage
           can't work out a plan. bunny then still asks emerge (for the log
           and for kinds of problem the helper doesn't report yet), and
@@ -33,6 +36,7 @@ exit status 0 when Portage answered, even with "no plan"):
              flag to true (on) or false (off).
           `required_by`: the packages that pull it in, nearest first (may
           be empty). Kinds bunny doesn't know are ignored.
+
 
     depclean: what `emerge --depclean` would remove (nothing is removed),
           with EMERGE_DEFAULT_OPTS.
@@ -125,13 +129,15 @@ def plan(atoms):
 
     # What's installed, to tell new packages from updates and rebuilds.
     vardb = trees[settings["EROOT"]]["vartree"].dbapi
+    tasks = [t for t in graph.altlist() if isinstance(t, Package) and t.operation == "merge"]
+    # The sub-slot each package in the plan will have, for "a library it
+    # uses changed" (Gentoo's slot operator rebuilds).
+    new_sub_slots = {t.cp: t.sub_slot for t in tasks}
     merges = []
     # The merge list in install order, as `emerge --pretend` would print it.
     # It also holds other kinds of tasks (uninstalls, blockers); only
     # packages being merged are kept.
-    for task in graph.altlist():
-        if not isinstance(task, Package) or task.operation != "merge":
-            continue
+    for task in tasks:
         # The installed version in the same slot, if any (`cat/pkg:slot`).
         installed = vardb.match(task.slot_atom)
         if not installed:
@@ -140,6 +146,9 @@ def plan(atoms):
             old = portage.versions.cpv_getversion(installed[-1])
             diff = vercmp(task.version, old)
             action = "update" if diff > 0 else "downgrade" if diff < 0 else "rebuild"
+        entry = {}
+        if action == "rebuild":
+            entry["why"] = why_rebuild(task, installed[-1], vardb, new_sub_slots)
         merges.append(
             {
                 "name": task.cp,
@@ -148,6 +157,7 @@ def plan(atoms):
                 "action": action,
                 "binary": task.type_name == "binary",
                 "slot": task.slot,
+                **entry,
             }
         )
     return {"ok": True, "merges": merges}
@@ -273,6 +283,47 @@ def masked_problem(cp, atom, cpvs, settings, portdb, chain, reasons=None):
         "comment": comment,
         "required_by": chain,
     }
+
+
+def why_rebuild(task, installed_cpv, vardb, new_sub_slots):
+    """Why the same version is installed again: USE flags that changed, and
+    libraries it was built against whose sub-slot changes in this plan.
+    Never fails the plan: an empty answer just means "(rebuild)"."""
+    why = {"use": [], "libraries": []}
+    try:
+        old_use, old_iuse = vardb.aux_get(installed_cpv, ["USE", "IUSE"])
+        old_enabled = set(old_use.split())
+        old_iuse = {f.lstrip("+-") for f in old_iuse.split()}
+        new_enabled = set(task.use.enabled)
+        new_iuse = set(task.iuse.all)
+        for flag in sorted(new_iuse | old_iuse):
+            was = flag in old_iuse and flag in old_enabled
+            now = flag in new_iuse and flag in new_enabled
+            if was != now:
+                why["use"].append(("+" if now else "-") + flag)
+    except Exception:
+        pass
+    try:
+        from portage.dep import Atom
+
+        # The installed package's dependencies, with the sub-slot each
+        # library had when it was built (`dev-libs/openssl:0/3=`).
+        deps = " ".join(vardb.aux_get(installed_cpv, ["DEPEND", "RDEPEND", "BDEPEND", "PDEPEND"]))
+        seen = set()
+        for token in deps.split():
+            try:
+                atom = Atom(token)
+            except Exception:
+                continue  # "||", "(", "flag?" and the like
+            if atom.slot_operator != "=" or atom.sub_slot is None or atom.cp in seen:
+                continue
+            new = new_sub_slots.get(atom.cp)
+            if new is not None and new != atom.sub_slot:
+                seen.add(atom.cp)
+                why["libraries"].append(atom.cp)
+    except Exception:
+        pass
+    return why
 
 
 def depclean():

@@ -45,6 +45,10 @@ pub fn services(account: &Account) -> Vec<&'static str> {
     out
 }
 
+/// Services the base system (stage3) already starts, listed in the config
+/// so `bunny status` doesn't call them "changed outside bunny".
+pub const BASE_SERVICES: [&str; 2] = ["local", "netmount"];
+
 fn list(items: &[&str]) -> String {
     let mut out = String::from("[\n");
     for item in items {
@@ -85,7 +89,7 @@ undo_entry = true
 ",
         host = account.hostname,
         packages = list(&BASE_PACKAGES),
-        services = list(&services(account)),
+        services = list(&[services(account), BASE_SERVICES.to_vec()].concat()),
         user = account.username,
     )
 }
@@ -155,7 +159,10 @@ mod tests {
         let c = Config::parse(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
         assert!(c.problems().is_empty(), "{:?}", c.problems());
         assert_eq!(c.packages, BASE_PACKAGES);
-        assert_eq!(c.services, ["dhcpcd", "sysklogd", "sshd"]);
+        assert_eq!(
+            c.services,
+            ["dhcpcd", "sysklogd", "sshd", "local", "netmount"]
+        );
         assert_eq!(c.security.unwrap().admins, ["you"]);
         assert!(c.boot.undo_entry);
         assert!(text.contains("hosts/laptop.toml"));

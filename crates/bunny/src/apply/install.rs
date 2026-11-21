@@ -21,7 +21,16 @@ pub(super) fn install_quietly(
     opts: &Options,
     outcome: &mut Outcome,
 ) -> Result<()> {
-    let update = ["emerge", "--update", "--deep", "--newuse", "--color=n"];
+    // --ask=n: EMERGE_DEFAULT_OPTS may say --ask, but bunny asks itself and
+    // emerge has no terminal here, so it would refuse.
+    let update = [
+        "emerge",
+        "--update",
+        "--deep",
+        "--newuse",
+        "--color=n",
+        "--ask=n",
+    ];
     let (list, dry_run_log) = ask_portage(root, runner, opts, outcome, &update)?;
     if list.is_empty() {
         println!("emerge has nothing to install.");
@@ -54,6 +63,9 @@ fn ask_portage(
     println!("\nAsking Portage what it needs to do…");
     let mut pretend = cmd(update);
     pretend.insert(1, "--pretend".into());
+    // --verbose shows each package's USE flags, with the changed ones
+    // marked, so a rebuild can say why it happens.
+    pretend.push("--verbose".into());
     pretend.push("@world".into());
     // Portage's own answer, as data. emerge's screen text only when that
     // isn't available (and to explain a refusal).
@@ -215,7 +227,16 @@ fn run_install(
         );
         bail!(
             "{}",
-            interrupted_message(reached.as_ref(), &plan.add_packages, outcome)
+            interrupted_message(
+                reached.as_ref(),
+                &plan.add_packages,
+                outcome,
+                if opts.update_all {
+                    "bunny update"
+                } else {
+                    "bunny switch"
+                },
+            )
         );
     }
     let log_text = format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" "));
@@ -285,7 +306,7 @@ pub(super) fn remove_quietly(
             progress.step(&format!("[{n}/{total}] Removing {name}"), None, None);
         }
     };
-    let mut remove = cmd(&["emerge", "--depclean", "--color=n"]);
+    let mut remove = cmd(&["emerge", "--depclean", "--color=n", "--ask=n"]);
     if from_helper {
         // Only what was shown and agreed to. emerge checks again that
         // nothing needs them, so a difference between the helper and emerge
@@ -316,7 +337,7 @@ enum Removals {
 /// The fallback when the helper can't answer: emerge's own text.
 fn depclean_from_emerge(runner: &mut dyn Runner) -> Result<Removals> {
     let (ok, output) = runner.run_quiet(
-        &cmd(&["emerge", "--depclean", "--pretend", "--color=n"]),
+        &cmd(&["emerge", "--depclean", "--pretend", "--color=n", "--ask=n"]),
         &mut |_| {},
     )?;
     if !ok {
@@ -374,6 +395,7 @@ pub(super) fn interrupted_message(
     reached: Option<&(usize, usize, String)>,
     asked: &[String],
     outcome: &Outcome,
+    command: &str,
 ) -> String {
     let mut text = String::from("Stopped with Ctrl+C while installing.\n");
     match reached {
@@ -401,7 +423,9 @@ pub(super) fn interrupted_message(
             snapshot.display()
         ));
     }
-    text.push_str("  • Finish it later: `bunny switch` picks up where this stopped.");
+    text.push_str(&format!(
+        "  • Finish it later: `{command}` picks up where this stopped."
+    ));
     if let Some(log) = &outcome.log {
         text.push_str(&format!(
             "\nemerge's output so far is in {}.",
@@ -452,6 +476,12 @@ pub(super) fn is_tip(e: &explain::Explanation) -> bool {
 /// doesn't show up as a generation that changed nothing.
 pub(super) fn discard(root: &Path, runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
     restore_files(root, &outcome.backup_dir)?;
+    drop_snapshot(runner, outcome)
+}
+
+/// Deletes the snapshot taken for this switch (and its note), for a switch
+/// that stopped before changing anything.
+pub(super) fn drop_snapshot(runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
     if let Some(snapshot) = outcome.snapshot.take() {
         let (ok, _) = runner.run_quiet(
             &cmd(&["btrfs", "subvolume", "delete", &snapshot.to_string_lossy()]),

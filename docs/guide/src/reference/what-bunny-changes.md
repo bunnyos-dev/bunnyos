@@ -13,7 +13,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/etc/portage/package.mask/zz-bunny-lock` | The [version pins](lock-and-pins.md) from `bunny.lock`. |
 | `/etc/sudoers.d/bunny` or `/etc/doas.conf` | Admin rights for the `wheel` group, from [`[security]`](config.md#security). Only if that section is in your config. |
 | `/etc/group` (`wheel` only) | `admins` from `[security]` are added with `gpasswd`. Nobody is ever removed. |
-| `/etc/runlevels/default/*` | Services from `services`, added with `rc-update`. |
+| `/etc/runlevels/default/*` | Services from `services` (and `[desktop]`), added with `rc-update`. `elogind` goes in `/etc/runlevels/boot/`. |
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
 | `/usr/lib/dracut/modules.d/90bunny-rollback/` | The boot menu's undo step, with [`[boot] undo_entry`](config.md#boot). Added to the startup image (`/boot/initramfs-<version>.img`), which is rebuilt once; the old image goes to the backup folder. |
@@ -22,6 +22,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/var/lib/bunny/news-seen` | How many unread Gentoo news items bunny last told you about, so the tip only comes back when there's something new. |
 | `/var/lib/bunny/applied/` | A copy of the config and lock from the last successful switch, so undoing a later change can put them back. Part of the system, so each generation carries its own. |
 | `/var/log/bunny/<time>-emerge.log` | emerge's full output from each switch or update. |
+| `/var/log/bunny/<time>-download-<name>.log` | `emaint sync`'s full output when a new repository is downloaded. |
 | `/var/lib/bunny/backups/<time>/` | Copies of the files above, from before each switch. |
 
 ## The package.use takeover
@@ -43,12 +44,12 @@ config, nothing is lost:
 | Step | Command |
 |---|---|
 | Snapshot | `btrfs subvolume snapshot -r / /.snapshots/bunny-<time>` |
-| See what would be installed | bunny's Portage helper (`bunny-portage.py plan`, Portage's own library); `emerge --pretend --update --deep --newuse @world` if it can't answer |
+| See what would be installed | bunny's Portage helper (`bunny-portage.py plan`, Portage's own library); `emerge --pretend --update --deep --newuse --verbose @world` if it can't answer |
 | Install / update | `emerge --update --deep --newuse --quiet-build=y @world` |
 | See what's unused | bunny's Portage helper (`bunny-portage.py depclean`); `emerge --depclean --pretend` if it can't answer |
 | Remove unused | `emerge --depclean =<each package shown>` (after bunny asks, always); plain `emerge --depclean` when the list came from emerge's text |
 | New repositories | `wget -qO- https://api.gentoo.org/overlays/repositories.xml` (Gentoo's list), then `emaint sync --repo <name>`, right after the snapshot |
-| Services | `rc-update add <name> default`, `rc-service <name> start` |
+| Services | `rc-update add <name> default` (`boot` for elogind), `rc-service <name> start` |
 | Admin rights | `visudo -cf <file>` or `doas -C <file>` to check, `gpasswd -a <user> wheel` |
 | Update | `emerge --sync` first |
 

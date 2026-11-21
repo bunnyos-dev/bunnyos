@@ -14,11 +14,69 @@ a minor version can change how things work).
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled
   it in. Other problems are still read from emerge's message.
+- Fixed: with a user name like `bunny`, `bunny report` swapped the word
+  everywhere, turning `bunny update` into `you update`. Names that are also
+  bunny's own words are now only swapped where they're used as names.
+- Fixed: a switch that stopped while setting up a repository (before
+  changing anything) left its snapshot behind as a generation that changed
+  nothing. It's deleted now, like a cancelled switch's.
+- The reminder to only add repositories you trust is now marked `·`
+  instead of ⚠, so with developer mode's `report = "auto"` a switch that
+  adds a repository and works isn't sent as a problem.
+- Downloading a new repository shows one line ("✓ Downloaded guru · 17.5
+  MB") instead of the download tool's whole output, which is kept in
+  `/var/log/bunny/` (`--verbose` still shows it all).
+- A package installed again at the same version now says why in the list
+  before a switch: "(rebuild: USE +adns)" for a USE flag change, or
+  "(rebuild: libunistring changed)" when a library it uses changed.
+- Undo (`bunny rollback` and the boot menu) now puts this computer's host
+  file, `hosts/<computer name>.toml`, back too, not only `bunny.toml` and
+  `bunny.lock`.
+
+- Fixed: when sudo or doas doesn't give bunny admin rights (no password, a
+  wrong one, or Ctrl+C at the question), bunny now says that nothing was
+  changed and what to do, instead of stopping with only sudo's own line.
+- New: a `[desktop]` section. `wayland = true` sets up what a Wayland
+  desktop like Mango or Sway needs (elogind logins and seats, D-Bus), so
+  "XDG_RUNTIME_DIR must be set" and "No backend was able to open a seat"
+  don't happen. `bunny plan` and `bunny diff` mark these "(from [desktop])",
+  and your own `[pkg]` settings still win.
+- The `elogind` service is now added to the `boot` runlevel, as Gentoo
+  recommends (other services still go in `default`).
 - Removing unused packages now asks Portage itself what can go (through
   bunny's Portage helper) instead of reading emerge's screen text, says
   when a package goes only because another one in the list does, and
   removes exactly the packages it showed. Reading emerge's text is still
   the fallback.
+- The boot menu's undo entry moved up, right under Bunny Linux's own entries
+  (it was at the bottom, under every firmware entry), and says what it
+  undoes and when, in your time zone. New: "Earlier versions" in the boot
+  menu, with the newest 10 saved versions, what came after each, and "Go
+  back to this version".
+- Fixed: `bunny install` now really sets your time zone (`date` showed `-00`
+  before), lists the services the base system starts (`local`, `netmount`)
+  so `bunny status` doesn't warn right after installing, and marks Gentoo's
+  older announcements as read.
+- Guide: the git steps in "What to do first" work as written (branch
+  `main`, a name for root's commits, signing root in to GitHub), and
+  "Helping test" signs in to GitHub before turning on developer mode.
+- `bunny install` makes `/etc/bunny` a git repository, with a first commit
+  "As installed", so your config has a history from the start (the `/home`
+  disk's key is kept out of it).
+- New: `bunny publish` sends `/etc/bunny` to a private GitHub repository
+  with your own GitHub sign-in (no need to sign root in), and sends new
+  changes each time you run it again. The Guide's git steps are now just
+  this command.
+- Live USB: the welcome no longer says "Not online yet" while the network is
+  still starting. It waits up to about 15 seconds ("Checking the
+  connection…"), checks the internet and names (DNS) separately, so
+  "online, but names don't work" has its own message, and `welcome` checks
+  again.
+- Live USB: "Welcome to your new account!" no longer appears above the
+  welcome each time it starts.
+- `bunny install --dry-run` now shows each step in plain words (its name
+  and what it does) instead of a wall of commands. `--dry-run --verbose`
+  shows every command and file, as before.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in
@@ -55,6 +113,21 @@ a minor version can change how things work).
   packages, services and USE flags for one computer only, so the main config
   works everywhere. `bunny install` writes one with what the computer needs
   to start and a record of its disk.
+- Safety fixes from the code review:
+  - Only one bunny command changes the system at a time, and none while a
+    rollback waits for a restart (their changes would have been lost).
+  - A `bunny update` that stops partway keeps what finished and records it
+    in `bunny.lock`, instead of setting things up for a downgrade. The Ctrl+C
+    message now says to run `bunny update` again.
+  - Rolling back makes the restored copy first, then swaps with two renames,
+    checks that putting things back worked, and holds off Ctrl+C meanwhile.
+  - `switch` and `update` work when `EMERGE_DEFAULT_OPTS` has `--ask`.
+  - `add` and `remove` put the config back when something fails before the
+    system was touched.
+  - Undo no longer writes through a config that's a link into `/home`.
+  - With doas, your own rules in `/etc/doas.conf` are kept after bunny's.
+  - The guide says to push a config repository in `/etc/bunny` to a remote,
+    since undo takes `/etc/bunny` back too.
 - Undo now puts the kernel back on systems where `/boot` is its own partition
   (usually encrypted ones). Each generation keeps a copy of its kernel on
   `/boot`, shared when nothing changed; `bunny rollback` restores it and says
@@ -90,6 +163,9 @@ a minor version can change how things work).
 - A switch with nothing else to do records packages installed outside bunny
   in `bunny.lock`, and `bunny status` says so instead of suggesting a fix
   that didn't apply.
+- Preview USBs (the test builds, not releases) record `bunny install`, and
+  copy the recording into the new system, so `bunny report` can send it
+  after the first start. The welcome says so; nothing is sent from the USB.
 
 ## [0.1.0] - 2026-11-17
 

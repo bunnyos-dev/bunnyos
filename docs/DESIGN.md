@@ -66,7 +66,9 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
   embedded in bunny and run as `python3 -c`, answers `plan` with the install
   list as JSON, using `_emerge`'s `parse_opts` (with EMERGE_DEFAULT_OPTS),
   `backtrack_depgraph` and the vartree, and FEATURES=getbinpkg handled like
-  emerge does. The quiet install uses it first and falls back to emerge's
+  emerge does. For a rebuild it also says why (USE flags that changed, and
+  libraries whose sub-slot changes in the plan); emerge's text gives the
+  same from `--verbose`'s marked USE flags and its `r` flag. The quiet install uses it first and falls back to emerge's
   text (which also explains refusals). The weekly canary checks the helper
   agrees with emerge. **Part 3 (error explanations, one kind at a time):**
   when there's no plan, `plan` also lists `problems` from the depgraph's
@@ -105,8 +107,8 @@ config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
 kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
 plus a `[machine]` record from `bunny install` that's read but never acted on
 (the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
-main file. Rollback restores the main config and lock, not host files (known
-limit). The Baseline layer is still planned.
+main file. Rollback restores the main config, its lock and this computer's
+host file. The Baseline layer is still planned.
 
 Modules expand one line into packages + services + config files, for example
 `[desktop] wm = "hyprland"` or `[security] encryption = true`.
@@ -198,11 +200,13 @@ isolated = false       # compile inside a clean container
 - `clean` never removes the generation you're running a copy of.
 - **The config goes back too:** after every successful switch or update (and
   a switch with nothing to do), bunny copies the config, its lock and the
-  config's path to `/var/lib/bunny/applied/`. That's inside `@`, so each later
+  config's path to `/var/lib/bunny/applied/`, plus this computer's host file
+  (`host.toml`, with its path in `host-path`; dropped when there's none). That's inside `@`, so each later
   snapshot carries the config that matches it. Rollback (and the boot-menu
   hook) copies it back over the config in the restored `@`, only for a config
   under `/etc` (one in `/home` is on its own subvolume and isn't rolled
-  back).
+  back). The host file goes back under the same rule; other computers' host
+  files aren't touched, and older generations without a copy leave it as is.
 - Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
   right after it (a switch with a short summary, or a rollback and its
   target), and `/.snapshots/bunny-state.toml` remembers the last action, so
@@ -217,8 +221,13 @@ isolated = false       # compile inside a clean container
   `bunny.rollback=<generation>`, and nothing otherwise. bunny installs it and
   rebuilds `/boot/initramfs-<ver>.img` once (staged as `.bunny-new`, old image
   backed up), *before* the switch's snapshot so that generation already has
-  it. After each switch it writes a block in `/boot/grub/custom.cfg` (read at
-  boot via `41_custom`, so no `grub-mkconfig`) that boots the kernel and
+  it. After each switch it writes `/boot/grub/bunny.cfg` (read via bunny's
+  `/etc/grub.d/11_bunny`, right after `10_linux`'s entries; installed once
+  with one `grub-mkconfig`, then read at boot so later changes need none):
+  "Undo the last change" (summary and local time) plus an "Earlier versions"
+  submenu (newest 10 bootable generations, each with "Go back to this
+  version" and its summary as do-nothing lines), in separate markers so the
+  hook only drops the undo entry. That undo block that boots the kernel and
   initramfs **from the generation's snapshot** (`/@snapshots/<gen>/boot/…`)
   with the running system's command line plus `bunny.rollback=<gen>`, so
   kernel modules match after the swap. Only added when the generation's
@@ -328,6 +337,8 @@ when nothing is set and both are installed).
 
 1. Shows the plan and asks before changing anything (`--yes` skips this).
    Re-runs itself through sudo or doas (see `[security]`) when not root.
+   If sudo or doas refuses (exit code 1; bunny run as root never uses 1),
+   bunny says nothing was changed and to run the command again.
 2. Takes a read-only btrfs snapshot of `/` in `/.snapshots/bunny-<time>`. If
    that fails, nothing is changed.
 3. Backs up the world file and package.use to `/var/lib/bunny/backups/<time>/`.
@@ -491,6 +502,29 @@ init system. Bunny Desktop is the one that gets the polish and testing;
 the others are packaged and supported, the "set it up yourself" ones on
 purpose bare. Config: `[desktop] name = "bunny" | "plasma" | "xfce" |
 "hyprland" | "mango" | "none"`, `accent = "#…"`.
+
+**Current behaviour (`[desktop] wayland = true`, November 2026):** the base
+a Wayland desktop needs on the minimal install, found in the dry run:
+`sys-auth/pambase` and `sys-auth/seatd` with `USE=elogind` (logins register
+with elogind, which makes `XDG_RUNTIME_DIR`; libseat asks elogind for the
+seat), `sys-auth/elogind` and `sys-apps/dbus` in the world set, and the
+`elogind` (boot runlevel) and `dbus` services. bunny adds them as if they
+were in the file (`Config::use_flags`, `wanted_services`, `wanted_world`),
+marks them "(from [desktop])" in `plan` and `diff`, and the user's own
+`[pkg]` entry for one of those packages wins. After a switch that changes
+pambase it says to log in again. The future `name` implies `wayland = true`
+for the Wayland desktops.
+
+Why per-package flags, not `USE="elogind"` in make.conf or Gentoo's desktop
+profile: the profile (`targets/desktop`) turns on about 70 global flags
+(`elogind` among `pulseaudio`, `cups`, `qt6`, `X`, …), and a global flag
+rebuilds every installed package that has it; both are against the minimal
+install, and bunny manages neither make.conf nor the profile (a profile
+switch is a big, separate change). Per-package flags change only what a
+session needs, show up in `plan` like any other `[pkg]` setting, and leave
+room for the user to override one. The cost: packages added later that
+also have an `elogind` flag don't get it automatically; the list can grow
+as real desktops need more (and `name = "plasma"` will bring its own).
 
 ## Look and feel
 
@@ -684,7 +718,28 @@ GPT
   key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
   only to the tools' standard input, never to files or the screen. On a
   failure everything is unmounted and closed, so a second run starts clean.
-  `--dry-run` prints every command and file (PrintRunner).
+  `--dry-run` shows each step's name and what it does in plain words
+  (StepsRunner); `--dry-run --verbose` prints every command and file
+  (PrintRunner).
+- **Your config's history (current behaviour):** after the first switch,
+  `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
+  main`, run with the USB's git), with a repository-only identity from the
+  install's answers (the user name and a placeholder `<user>@<host>.local`),
+  a `.gitignore` that keeps out `keys/` (the `/home` disk's key) and leftover
+  copies, and a first commit "As installed". A `--config` repository keeps
+  its own history. Failures are explained and never stop the install.
+- **`bunny publish [repo]` (current behaviour):** sends `/etc/bunny` to
+  GitHub with the invoking user's own `gh` sign-in (`SUDO_USER`/`DOAS_USER`;
+  refused when root logged in directly). It starts the history if there's
+  none, makes the repository private if it doesn't exist (`my-system` by
+  default), sets a repository-only credential helper `!runuser -u <user> --
+  env HOME=… gh auth git-credential` (after clearing any helper root has), so
+  root's git asks the user's gh each time and no token is copied, adds
+  `origin`, commits uncommitted changes ("Saved with bunny publish") and
+  pushes. It shows the steps and asks first (a public repository gets a
+  warning and defaults to No); `--dry-run` reads for real and prints the
+  rest. Named `publish` rather than `git connect` because the same command
+  is what you run after every change, not only once.
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 
@@ -796,6 +851,14 @@ testing and decisions.
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
   `"auto"` sends any command that fails or shows ⚠/✗. Daily sessions read
   new reports first.
+- **Recording the install:** the live USB has no config, so preview images
+  (CI builds that aren't releases, `PREVIEW=1 tools/build-iso.sh`) ship
+  `/etc/bunny-preview.toml` with `[dev] report = true`, which bunny uses when
+  the config doesn't turn recording on. Just before it unmounts, a recorded
+  `bunny install` copies its recording so far, with notes (exit code 0), to
+  `/home/<user>/.local/state/bunny/sessions/` in the new system (owned by the
+  user), so `bunny report` there sends it. A failed install leaves it on the
+  USB. Release images record nothing.
 
 ## Testing
 

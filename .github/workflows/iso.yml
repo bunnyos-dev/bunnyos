@@ -40,15 +40,19 @@ jobs:
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             echo "iso=bunny-linux-live-${GITHUB_REF_NAME#v}.iso" >> "$GITHUB_OUTPUT"
+            echo "preview=0" >> "$GITHUB_OUTPUT"
           else
             echo "iso=bunny-linux-live-preview.iso" >> "$GITHUB_OUTPUT"
+            echo "preview=1" >> "$GITHUB_OUTPUT"
           fi
       - name: Build the image
         env:
           WORK: ${{ runner.temp }}/iso-work
+          # Preview images record bunny install (see tools/build-iso.sh).
+          PREVIEW: ${{ steps.name.outputs.preview }}
         run: |
           mkdir -p dist
-          sudo --preserve-env=WORK tools/build-iso.sh \
+          sudo --preserve-env=WORK,PREVIEW tools/build-iso.sh \
             target/x86_64-unknown-linux-musl/release/bunny \
             "dist/${{ steps.name.outputs.iso }}"
           sudo chown -R "$(id -u):$(id -g)" dist
@@ -75,6 +79,10 @@ jobs:
             # "Starting local" is the last service of the default runlevel.
             if grep -qE "Starting (local|DHCP Client Daemon)" boot.log; then
               echo "✓ The live system started (OpenRC is starting services)."
+              if [ "${{ steps.name.outputs.preview }}" = 1 ]; then
+                sudo test -f "$WORK/root/etc/bunny-preview.toml" \
+                  || { echo "✗ A preview image without /etc/bunny-preview.toml"; exit 1; }
+              fi
               kill "$qemu" 2>/dev/null || true
               exit 0
             fi

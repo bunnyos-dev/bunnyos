@@ -483,22 +483,7 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         }
         println!("Use a layout name like us, uk, de or fr.");
     };
-    if choices.encrypt {
-        println!(
-            "\nOne password, for your account and for unlocking the disk when the computer starts."
-        );
-    }
-    let password = loop {
-        let first = ask_secret("Password: ")?;
-        if first.len() < 8 {
-            println!("Use at least 8 characters.");
-            continue;
-        }
-        if ask_secret("Again: ")? == first {
-            break first;
-        }
-        println!("Those didn't match. Try again.");
-    };
+    let password = ask_password(args.dry_run, choices.encrypt, &mut ask_secret)?;
 
     let account = Account {
         username,
@@ -543,9 +528,80 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// Stands in for the password on a dry run, which encrypts nothing and sets
+/// no password (and never shows or writes it).
+const DRY_RUN_PASSWORD: &str = "dry-run";
+
+/// The account's (and the disk's) password, asked twice. A dry run doesn't
+/// ask: nothing is encrypted and no account is made.
+fn ask_password(
+    dry_run: bool,
+    encrypt: bool,
+    ask: &mut dyn FnMut(&str) -> anyhow::Result<String>,
+) -> anyhow::Result<String> {
+    if dry_run {
+        println!(
+            "\nPassword: not asked on a dry run (nothing is encrypted and no account is made)."
+        );
+        return Ok(DRY_RUN_PASSWORD.to_string());
+    }
+    if encrypt {
+        println!(
+            "\nOne password, for your account and for unlocking the disk when the computer starts."
+        );
+    }
+    loop {
+        let first = ask("Password: ")?;
+        if first.len() < 8 {
+            println!("Use at least 8 characters.");
+            continue;
+        }
+        if ask("Again: ")? == first {
+            return Ok(first);
+        }
+        println!("Those didn't match. Try again.");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dry_run_doesnt_ask_for_a_password() {
+        let mut never = |q: &str| -> anyhow::Result<String> {
+            panic!("a dry run asked \"{q}\"");
+        };
+        assert_eq!(
+            ask_password(true, true, &mut never).unwrap(),
+            DRY_RUN_PASSWORD
+        );
+        assert_eq!(
+            ask_password(true, false, &mut never).unwrap(),
+            DRY_RUN_PASSWORD
+        );
+    }
+
+    #[test]
+    fn a_real_install_asks_twice() {
+        let mut answers = vec![
+            "different",
+            "a good password",
+            "a good password",
+            "a good password",
+        ]
+        .into_iter();
+        let mut asked = Vec::new();
+        let mut ask = |q: &str| -> anyhow::Result<String> {
+            asked.push(q.to_string());
+            Ok(answers.next().unwrap().to_string())
+        };
+        assert_eq!(
+            ask_password(false, true, &mut ask).unwrap(),
+            "a good password"
+        );
+        assert_eq!(asked, ["Password: ", "Again: ", "Password: ", "Again: "]);
+    }
 
     #[test]
     fn checks_names() {

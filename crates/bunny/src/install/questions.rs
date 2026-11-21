@@ -14,6 +14,9 @@ use super::layout::{self, Choices};
 /// What the command line already answered.
 #[derive(Default)]
 pub struct Given {
+    /// `--recommended` or `--yes`: anything not given takes its
+    /// recommended answer, without asking.
+    pub recommended: bool,
     pub no_encrypt: bool,
     /// `--swap`, `--hibernate` or `--no-zram` was given.
     pub swap: bool,
@@ -27,7 +30,7 @@ pub fn ask(
     ram_mib: Option<u64>,
     ask: &mut dyn FnMut(&str) -> Result<String>,
 ) -> Result<()> {
-    if given.no_encrypt && given.swap {
+    if given.recommended || (given.no_encrypt && given.swap) {
         return Ok(());
     }
     if !given.no_encrypt && !given.swap {
@@ -266,6 +269,7 @@ mod tests {
         let given = Given {
             no_encrypt: true,
             swap: true,
+            ..Given::default()
         };
         let (mut ask_fn, asked) = answers(&[]);
         ask(&mut c, &given, Some(8192), &mut ask_fn).unwrap();
@@ -275,12 +279,25 @@ mod tests {
         // question.
         let mut c = Choices::default();
         let given = Given {
-            no_encrypt: false,
             swap: true,
+            ..Given::default()
         };
         let (mut ask_fn, asked) = answers(&[""]);
         ask(&mut c, &given, Some(8192), &mut ask_fn).unwrap();
         assert_eq!(*asked.borrow(), ["Encrypt? [Y/n] "]);
+    }
+
+    #[test]
+    fn recommended_or_yes_asks_nothing() {
+        let mut c = Choices::default();
+        let given = Given {
+            recommended: true,
+            ..Given::default()
+        };
+        let (mut ask_fn, asked) = answers(&[]);
+        ask(&mut c, &given, Some(8192), &mut ask_fn).unwrap();
+        assert!(asked.borrow().is_empty());
+        assert!(c.encrypt && c.zram);
     }
 
     #[test]

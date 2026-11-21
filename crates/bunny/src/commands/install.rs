@@ -31,6 +31,21 @@ pub(crate) struct Args {
     /// Your own config: a bunny.toml, or a git repository.
     pub config: Option<String>,
     pub dry_run: bool,
+    /// Take the recommended setup without asking.
+    pub recommended: bool,
+    /// The account's answers, given instead of asked (the graphical
+    /// installer gives them all).
+    pub user: Option<String>,
+    pub hostname: Option<String>,
+    pub timezone: Option<String>,
+    pub keymap: Option<String>,
+    /// Read the password from standard input instead of asking.
+    pub password_stdin: bool,
+    /// Ask nothing: no typing the disk's name, recommended answers for
+    /// anything not given, and the account's answers must be given.
+    pub yes: bool,
+    /// Print the disks as JSON and stop.
+    pub list_disks: bool,
     /// Read the list of disks from this file instead of lsblk (for testing).
     pub lsblk: Option<PathBuf>,
     /// Install onto what's mounted here instead of erasing a disk.
@@ -310,18 +325,7 @@ fn erase_disk_flow(
     args: &Args,
     source: &first_config::Source,
 ) -> anyhow::Result<Option<(Choices, String)>> {
-    let json = match &args.lsblk {
-        Some(file) => std::fs::read_to_string(file)
-            .with_context(|| format!("Couldn't read {}", file.display()))?,
-        None => apply::SystemRunner
-            .output(
-                &disks::LSBLK
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>(),
-            )?
-            .context("Couldn't list the disks (lsblk failed)")?,
-    };
+    let json = disks_json(args)?;
     let all = disks::parse(&json)?;
 
     let disk = match &args.disk {
@@ -382,6 +386,7 @@ fn erase_disk_flow(
     // The questions the options above didn't answer: use the recommended
     // setup, or encrypt and swap one at a time.
     let given = questions::Given {
+        recommended: args.recommended || args.yes,
         no_encrypt: args.no_encrypt,
         swap: args.swap.is_some() || args.hibernate || args.no_zram,
     };
@@ -432,6 +437,8 @@ fn erase_disk_flow(
 
     if args.dry_run {
         println!("{}", dry_run_note(true));
+    } else if args.yes {
+        println!("\n--yes: not asking to type the disk's name.");
     } else {
         println!("\nThis can't be undone.");
         let answer = ask_line(&format!(
@@ -447,7 +454,99 @@ fn erase_disk_flow(
     Ok(Some((choices, disk.path.clone())))
 }
 
+/// One of the account's answers: the option's value if given (checked),
+/// otherwise asked until it's valid. With `--yes` nothing is asked: a
+/// missing answer takes `default`, or is an error if there's none.
+fn answer(
+    given: Option<&str>,
+    yes: bool,
+    option: &str,
+    question: &str,
+    default: Option<&str>,
+    valid: impl Fn(&str) -> bool,
+    hint: &str,
+) -> anyhow::Result<String> {
+    if let Some(value) = given {
+        if valid(value) {
+            return Ok(value.to_string());
+        }
+        bail!("{option} \"{value}\": {hint}");
+    }
+    if yes {
+        return match default {
+            Some(d) => Ok(d.to_string()),
+            None => bail!("--yes needs {option} too."),
+        };
+    }
+    loop {
+        let name = ask_line(question)?;
+        let name = match (name.is_empty(), default) {
+            (true, Some(d)) => d.to_string(),
+            _ => name,
+        };
+        if valid(&name) {
+            return Ok(name);
+        }
+        println!("{hint}");
+    }
+}
+
+/// The password, as one line on standard input (`--password-stdin`, used by
+/// the graphical installer). The same rules as typed: not empty; short is
+/// allowed.
+fn password_from_stdin() -> anyhow::Result<String> {
+    let mut line = String::new();
+    std::io::stdin()
+        .read_line(&mut line)
+        .context("Couldn't read the password from standard input")?;
+    let password = line.trim_end_matches(['\n', '\r']).to_string();
+    if password.is_empty() {
+        bail!("The password can't be empty.");
+    }
+    Ok(password)
+}
+
+/// The disks as JSON, for the graphical installer: each one's name, path,
+/// a description, and why it can't be used (or null).
+fn list_disks_json(args: &Args) -> anyhow::Result<String> {
+    let all = disks::parse(&disks_json(args)?)?;
+    let list: Vec<serde_json::Value> = all
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "name": d.name,
+                "path": d.path,
+                "describe": d.describe(),
+                "size": d.size,
+                "contents": d.contents(),
+                "unusable": d.unusable(),
+            })
+        })
+        .collect();
+    Ok(serde_json::to_string_pretty(&list)?)
+}
+
+/// lsblk's answer, or `--lsblk`'s file.
+fn disks_json(args: &Args) -> anyhow::Result<String> {
+    match &args.lsblk {
+        Some(file) => std::fs::read_to_string(file)
+            .with_context(|| format!("Couldn't read {}", file.display())),
+        None => apply::SystemRunner
+            .output(
+                &disks::LSBLK
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
+            )?
+            .context("Couldn't list the disks (lsblk failed)"),
+    }
+}
+
 pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
+    if args.list_disks {
+        println!("{}", list_disks_json(&args)?);
+        return Ok(ExitCode::SUCCESS);
+    }
     if !args.dry_run {
         if !is_root() {
             bail!(
@@ -476,48 +575,52 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     };
 
-    // The account.
+    // The account: asked, or given as options.
     println!();
-    let username = loop {
-        let name = ask_line("Your user name (lowercase, e.g. you): ")?;
-        if valid_username(&name) {
-            break name;
-        }
-        println!("Use lowercase letters, digits, - and _, starting with a letter (and not root).");
-    };
-    let hostname = loop {
-        let name = ask_line("A name for this computer (e.g. laptop): ")?;
-        if valid_hostname(&name) {
-            break name;
-        }
-        println!("Use letters, digits and -, like laptop or my-desktop.");
-    };
+    let username = answer(
+        args.user.as_deref(),
+        args.yes,
+        "--user",
+        "Your user name (lowercase, e.g. you): ",
+        None,
+        valid_username,
+        "Use lowercase letters, digits, - and _, starting with a letter (and not root).",
+    )?;
+    let hostname = answer(
+        args.hostname.as_deref(),
+        args.yes,
+        "--hostname",
+        "A name for this computer (e.g. laptop): ",
+        None,
+        valid_hostname,
+        "Use letters, digits and -, like laptop or my-desktop.",
+    )?;
     let zoneinfo = std::path::Path::new("/usr/share/zoneinfo");
-    let timezone = loop {
-        let name = ask_line("Time zone (e.g. America/Toronto, Europe/London; Enter for UTC): ")?;
-        let name = if name.is_empty() {
-            "UTC".to_string()
-        } else {
-            name
-        };
-        if valid_timezone(&name, zoneinfo) {
-            break name;
-        }
-        println!("That isn't a time zone name. Use Region/City, like America/Toronto.");
+    let timezone = answer(
+        args.timezone.as_deref(),
+        args.yes,
+        "--timezone",
+        "Time zone (e.g. America/Toronto, Europe/London; Enter for UTC): ",
+        Some("UTC"),
+        |name| valid_timezone(name, zoneinfo),
+        "That isn't a time zone name. Use Region/City, like America/Toronto.",
+    )?;
+    let keymap = answer(
+        args.keymap.as_deref(),
+        args.yes,
+        "--keymap",
+        "Keyboard layout (e.g. us, uk, de, fr; Enter for us): ",
+        Some("us"),
+        valid_keymap,
+        "Use a layout name like us, uk, de or fr.",
+    )?;
+    let password = if args.password_stdin && !args.dry_run {
+        password_from_stdin()?
+    } else if args.yes && !args.dry_run {
+        bail!("--yes needs the password too: give it on standard input with --password-stdin.");
+    } else {
+        ask_password(args.dry_run, choices.encrypt, &mut ask_secret)?
     };
-    let keymap = loop {
-        let name = ask_line("Keyboard layout (e.g. us, uk, de, fr; Enter for us): ")?;
-        let name = if name.is_empty() {
-            "us".to_string()
-        } else {
-            name
-        };
-        if valid_keymap(&name) {
-            break name;
-        }
-        println!("Use a layout name like us, uk, de or fr.");
-    };
-    let password = ask_password(args.dry_run, choices.encrypt, &mut ask_secret)?;
 
     let account = Account {
         username,
@@ -640,6 +743,40 @@ fn ask_password(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_given_answer_is_checked_and_never_asked() {
+        let ok = |n: &str| n == "you";
+        assert_eq!(
+            answer(Some("you"), false, "--user", "?", None, ok, "hint").unwrap(),
+            "you"
+        );
+        let err = answer(
+            Some("Root"),
+            true,
+            "--user",
+            "?",
+            None,
+            ok,
+            "Use lowercase.",
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(err, "--user \"Root\": Use lowercase.");
+    }
+
+    #[test]
+    fn yes_takes_defaults_and_needs_the_rest() {
+        let any = |_: &str| true;
+        assert_eq!(
+            answer(None, true, "--timezone", "?", Some("UTC"), any, "").unwrap(),
+            "UTC"
+        );
+        let err = answer(None, true, "--user", "?", None, any, "")
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err, "--yes needs --user too.");
+    }
 
     #[test]
     fn a_short_password_is_a_warning_not_a_refusal() {

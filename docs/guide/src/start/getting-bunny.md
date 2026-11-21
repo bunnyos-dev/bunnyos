@@ -12,7 +12,7 @@
   recommended layout is in [The disk layout](../reference/disk-layout.md).
 - **sudo** or **doas** set up for your user. bunny asks for your password
   through whichever one you have when it needs to change the system. If no
-  password is given (or a wrong one), bunny says nothing was changed; run the
+  password is given (a wrong one, or Ctrl+C at the question), bunny says nothing was changed; run the
   command again. (bunny can also manage this for you: see [`[security]`](../reference/config.md#security).)
 
 > **Try it in a virtual machine first.** The repository has a script that

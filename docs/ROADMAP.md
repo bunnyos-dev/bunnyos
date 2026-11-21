@@ -555,6 +555,8 @@ is tested first in a VM with the same layout.
 
 ## Known issues / small fixes
 
+- [~] Ctrl+C at doas's password question stopped bunny with no words of its
+      own (sudo got "nothing was changed"). Now doas gets it too.
 - [x] Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
 - [x] When sudo didn't give bunny admin rights (no password typed), bunny
       stopped with only sudo's "a password is required" and no word of its

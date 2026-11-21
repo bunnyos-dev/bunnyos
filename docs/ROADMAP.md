@@ -280,7 +280,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       plus a system-wide fastfetch setting that uses it; later, offer the
       logo to fastfetch itself. It replaces a file from Gentoo's baselayout,
       so it's the first entry in OVERRIDES.md. Needs the logo (design work).
-- [ ] **Downloading a repository prints emaint's raw output** (git clone
+- [~] **Downloading a repository prints emaint's raw output** (git clone
       lines, "Performing Global Updates", every `profiles/updates` file,
       "Action: sync … returned code = 0"). Show one line per repository
       ("Downloading guru… ✓ 17.5 MB") and keep the rest in the log, like

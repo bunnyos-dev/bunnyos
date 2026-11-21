@@ -24,6 +24,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/var/lib/bunny/news-seen` | How many unread Gentoo news items bunny last told you about, so the tip only comes back when there's something new. |
 | `/var/lib/bunny/applied/` | A copy of the config and lock from the last successful switch, so undoing a later change can put them back. Part of the system, so each generation carries its own. |
 | `/var/log/bunny/<time>-emerge.log` | emerge's full output from each switch or update. |
+| `/var/log/bunny/<time>-download-<name>.log` | `emaint sync`'s full output when a new repository is downloaded. |
 | `/var/lib/bunny/backups/<time>/` | Copies of the files above, from before each switch. |
 
 ## The package.use takeover

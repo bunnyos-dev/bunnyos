@@ -38,6 +38,9 @@ that makes it easier and safer to use.
 
 ## Where it is today
 
-bunny runs on an existing Gentoo install that uses OpenRC and a btrfs
-filesystem (btrfs is what makes undo possible). An installer that sets all of
-this up for you is planned.
+Bunny Linux installs from a live USB with `bunny install`, which sets up
+encryption, OpenRC and a btrfs filesystem (btrfs is what makes undo
+possible) and gives you a minimal system with a terminal: see
+[Install Bunny Linux](installing.md). bunny also runs on an existing Gentoo
+install that uses OpenRC and btrfs. A graphical installer and a ready-made
+desktop are planned.

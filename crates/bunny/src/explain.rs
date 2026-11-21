@@ -525,11 +525,16 @@ fn keyword_changes(lines: &[&str]) -> Vec<Explanation> {
                 if !because.is_empty() {
                     e = e.detail(because);
                 }
+                let keyword = if keyword.is_empty() {
+                    "~amd64"
+                } else {
+                    keyword
+                };
                 found.push(e.fix(format!(
-                    "bunny can't manage testing versions yet. To allow this one, run:\n\
-                     echo '{line}' | {} tee /etc/portage/package.accept_keywords/{}",
-                    crate::security::admin(),
-                    short(&package)
+                    "to allow testing versions of it, add this to bunny.toml, then run\n\
+                     the command again:\n\
+                     [pkg.\"{package}\"]\n\
+                     keywords = [\"{keyword}\"]"
                 )));
             }
         }
@@ -561,6 +566,12 @@ fn masked(lines: &[&str]) -> Vec<Explanation> {
             .collect();
 
         let e = if reason.contains("keyword") && reason.contains('~') {
+            let keyword = reason
+                .split_whitespace()
+                .find(|w| w.starts_with('~'))
+                .map(|w| w.trim_matches(|c: char| c == ')' || c == ','))
+                .unwrap_or("~amd64")
+                .to_string();
             Explanation::new(
                 Severity::Problem,
                 format!(
@@ -568,6 +579,13 @@ fn masked(lines: &[&str]) -> Vec<Explanation> {
                     short(&package)
                 ),
             )
+            .detail("Testing versions work for most people but haven't been declared stable by Gentoo yet.")
+            .fix(format!(
+                "to allow testing versions of it, add this to bunny.toml, then run\n\
+                 the command again:\n\
+                 [pkg.\"{package}\"]\n\
+                 keywords = [\"{keyword}\"]"
+            ))
         } else if reason.contains("missing keyword") {
             Explanation::new(
                 Severity::Problem,
@@ -905,11 +923,11 @@ mod tests {
             found[0].title,
             "qtbase is only available as a testing version (~amd64) right now."
         );
-        assert!(found[0]
-            .fix
-            .as_deref()
-            .unwrap()
-            .contains("package.accept_keywords/qtbase"));
+        let fix = found[0].fix.as_deref().unwrap();
+        assert!(
+            fix.contains("[pkg.\"dev-qt/qtbase\"]\nkeywords = [\"~amd64\"]"),
+            "{fix}"
+        );
     }
 
     #[test]

@@ -19,6 +19,10 @@ pub struct Config {
     /// Services to enable at boot, by plain name.
     #[serde(default)]
     pub services: Vec<String>,
+    /// Package repositories (overlays) besides Gentoo's own, by the names in
+    /// Gentoo's list of repositories, e.g. `["guru"]`.
+    #[serde(default)]
+    pub repositories: Vec<String>,
     /// Per-package settings, keyed by `category/name`.
     #[serde(default)]
     pub pkg: BTreeMap<String, PkgSettings>,
@@ -31,6 +35,89 @@ pub struct Config {
     /// Developer mode: recording commands and sending reports.
     #[serde(default)]
     pub dev: crate::dev::Dev,
+    /// The host file read on top of this config, if there was one.
+    #[serde(skip)]
+    pub host: Option<HostLayer>,
+}
+
+/// `hosts/<host name>.toml` next to the config: what belongs to one
+/// computer only, so the main config works on any machine. Its packages,
+/// services and `[pkg]` settings are added to the main config's (its `[pkg]`
+/// wins for the same package). `[machine]` records how `bunny install` set
+/// up this computer's disk; bunny reads it but never changes disks from it.
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Host {
+    #[serde(default)]
+    pub packages: Vec<String>,
+    #[serde(default)]
+    pub services: Vec<String>,
+    #[serde(default)]
+    pub pkg: BTreeMap<String, PkgSettings>,
+    #[serde(default)]
+    pub machine: Option<Machine>,
+}
+
+/// How this computer was set up (written by `bunny install`).
+#[derive(Debug, Default, Deserialize, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Machine {
+    pub disk: Option<String>,
+    #[serde(default)]
+    pub encrypted: bool,
+    pub efi_uuid: Option<String>,
+    pub root_uuid: Option<String>,
+    pub luks_uuid: Option<String>,
+    pub home_disk: Option<String>,
+    pub swap: Option<String>,
+    #[serde(default)]
+    pub hibernate: bool,
+    pub timezone: Option<String>,
+    pub keymap: Option<String>,
+}
+
+/// The host file that was read, and what it held.
+#[derive(Debug, PartialEq)]
+pub struct HostLayer {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub machine: Option<Machine>,
+}
+
+/// This computer's name: OpenRC's setting first (so it's right inside a
+/// new system during install, too), then the running kernel's.
+pub fn this_host(root: &Path) -> Option<String> {
+    let from_conf = std::fs::read_to_string(root.join("etc/conf.d/hostname"))
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .filter_map(|l| l.trim().strip_prefix("hostname="))
+                .map(|v| v.trim().trim_matches('"').trim_matches('\'').to_string())
+                .next_back()
+        });
+    let from_etc = || {
+        std::fs::read_to_string(root.join("etc/hostname"))
+            .ok()
+            .map(|t| t.trim().to_string())
+    };
+    let from_kernel = || {
+        std::fs::read_to_string("/proc/sys/kernel/hostname")
+            .ok()
+            .map(|t| t.trim().to_string())
+    };
+    from_conf
+        .filter(|h| !h.is_empty())
+        .or_else(|| from_etc().filter(|h| !h.is_empty()))
+        .or_else(|| from_kernel().filter(|h| !h.is_empty()))
+}
+
+/// Where the host file for `host` lives, for a config at `config`.
+pub fn host_path(config: &Path, host: &str) -> std::path::PathBuf {
+    config
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("hosts")
+        .join(format!("{host}.toml"))
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -68,6 +155,10 @@ pub struct PkgSettings {
     /// USE flags, e.g. `["pgo", "-telemetry"]`.
     #[serde(default, rename = "use")]
     pub use_flags: Vec<String>,
+    /// Versions to accept beyond stable ones, e.g. `["~amd64"]` for testing
+    /// versions (Portage's package.accept_keywords).
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 /// Something wrong with the config, explained for humans.
@@ -107,10 +198,64 @@ impl Config {
         flags
     }
 
+    /// Accepted keywords per package, from `[pkg] keywords`.
+    pub fn keywords(&self) -> BTreeMap<String, Vec<String>> {
+        self.pkg
+            .iter()
+            .filter(|(_, s)| !s.keywords.is_empty())
+            .map(|(atom, s)| (atom.clone(), s.keywords.clone()))
+            .collect()
+    }
+
+    /// Reads the config and, if there is one, this computer's host file.
     pub fn load(path: &Path) -> Result<Self> {
+        let host = this_host(Path::new("/"));
+        Self::load_for_host(path, host.as_deref())
+    }
+
+    /// Reads the config and the host file for `host` (if it exists).
+    pub fn load_for_host(path: &Path, host: Option<&str>) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("Couldn't read {}", path.display()))?;
-        Self::parse(&text).with_context(|| format!("{} has a mistake in it", path.display()))
+        let mut config = Self::parse(&text)
+            .with_context(|| format!("{} has a mistake in it", path.display()))?;
+        if let Some(name) = host {
+            let host_file = host_path(path, name);
+            if host_file.is_file() {
+                let text = std::fs::read_to_string(&host_file)
+                    .with_context(|| format!("Couldn't read {}", host_file.display()))?;
+                let layer: Host = toml::from_str(&text).with_context(|| {
+                    format!(
+                        "{} (the settings for this computer) has a mistake in it",
+                        host_file.display()
+                    )
+                })?;
+                config.add_host(name, host_file, layer);
+            }
+        }
+        Ok(config)
+    }
+
+    /// Adds a host file's settings on top of this config.
+    pub fn add_host(&mut self, name: &str, path: std::path::PathBuf, host: Host) {
+        for atom in host.packages {
+            if !self.packages.contains(&atom) {
+                self.packages.push(atom);
+            }
+        }
+        for service in host.services {
+            if !self.services.contains(&service) {
+                self.services.push(service);
+            }
+        }
+        for (atom, settings) in host.pkg {
+            self.pkg.insert(atom, settings);
+        }
+        self.host = Some(HostLayer {
+            name: name.to_string(),
+            path,
+            machine: host.machine,
+        });
     }
 
     pub fn parse(text: &str) -> Result<Self> {
@@ -169,14 +314,42 @@ impl Config {
                 }
             }
             check_use_conflicts(atom, &settings.use_flags, &mut problems);
+            for keyword in &settings.keywords {
+                if !is_keyword(keyword) {
+                    problems.push(Problem {
+                        what: format!("\"{keyword}\" in the keywords for {atom} isn't a keyword."),
+                        fix: "Use \"~amd64\" for testing versions (or \"**\" for any version, \
+                              including unreleased ones from git)."
+                            .into(),
+                    });
+                }
+            }
         }
+
+        for name in &self.repositories {
+            if !is_repository_name(name) {
+                problems.push(Problem {
+                    what: format!("\"{name}\" in `repositories` isn't a repository name."),
+                    fix: "Use the name from Gentoo's list, like \"guru\" \
+                          (see https://repos.gentoo.org)."
+                        .into(),
+                });
+            } else if name == "gentoo" {
+                problems.push(Problem {
+                    what: "\"gentoo\" is in `repositories`, but Gentoo's own is always there."
+                        .into(),
+                    fix: "Remove it from the list.".into(),
+                });
+            }
+        }
+        check_duplicates(&self.repositories, "repositories", &mut problems);
 
         problems
     }
 }
 
 /// Top-level keys that are easy to accidentally put below a `[section]`.
-const TOP_LEVEL_KEYS: [&str; 2] = ["packages", "services"];
+const TOP_LEVEL_KEYS: [&str; 3] = ["packages", "services", "repositories"];
 
 /// If a TOML error is a top-level key that landed inside a section, returns it.
 fn misplaced_top_level_key(message: &str) -> Option<&'static str> {
@@ -208,6 +381,26 @@ pub fn is_package_name(s: &str) -> bool {
                 .all(|c| c.is_ascii_alphanumeric() || "+_.-".contains(c))
     };
     ok(cat) && ok(name) && !name.contains('/') && slot.is_none_or(ok)
+}
+
+/// A keyword for package.accept_keywords: `amd64`, `~amd64`, `**`, `~*`, `*`.
+fn is_keyword(s: &str) -> bool {
+    if matches!(s, "**" | "~*" | "*") {
+        return true;
+    }
+    let arch = s.strip_prefix('~').unwrap_or(s);
+    let mut chars = arch.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// A repository name as Portage allows: letters, digits, `_` and `-`, not
+/// starting with `-`.
+pub fn is_repository_name(s: &str) -> bool {
+    !s.is_empty()
+        && !s.starts_with('-')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// A USE flag, optionally prefixed with `-` to disable it.
@@ -244,6 +437,117 @@ fn check_use_conflicts(atom: &str, flags: &[String], problems: &mut Vec<Problem>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checks_keywords_and_repositories() {
+        let c = Config::parse(
+            "repositories = [\"guru\", \"hyproverlay\"]\n\
+             [pkg.\"gui-wm/dwl\"]\nkeywords = [\"~amd64\"]\n\
+             [pkg.\"gui-libs/scenefx\"]\nkeywords = [\"**\"]\n",
+        )
+        .unwrap();
+        assert!(c.problems().is_empty(), "{:?}", c.problems());
+        assert_eq!(c.keywords()["gui-wm/dwl"], ["~amd64"]);
+        assert!(!c.use_flags().contains_key("gui-wm/dwl"));
+
+        let bad = Config::parse(
+            "repositories = [\"guru\", \"guru\", \"my repo\", \"gentoo\"]\n\
+             [pkg.\"gui-wm/dwl\"]\nkeywords = [\"amd64~\"]\n",
+        )
+        .unwrap();
+        let text: Vec<String> = bad.problems().iter().map(|p| p.what.clone()).collect();
+        assert!(
+            text.iter()
+                .any(|t| t.contains("\"amd64~\" in the keywords")),
+            "{text:?}"
+        );
+        assert!(text
+            .iter()
+            .any(|t| t.contains("\"my repo\" in `repositories`")));
+        assert!(text.iter().any(|t| t.contains("\"guru\" is listed twice")));
+        assert!(text
+            .iter()
+            .any(|t| t.contains("Gentoo's own is always there")));
+
+        // The section trap catches `repositories` too.
+        let err = Config::parse("[system]\nrepositories = []")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("`repositories` ended up inside a [section]"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn adds_the_host_file_on_top() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("bunny.toml");
+        std::fs::write(
+            &config,
+            "packages = [\"app-misc/tmux\", \"sys-fs/btrfs-progs\"]\nservices = [\"sshd\"]\n\
+             [pkg.\"app-misc/tmux\"]\nuse = [\"vim-syntax\"]\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("hosts")).unwrap();
+        std::fs::write(
+            dir.path().join("hosts/laptop.toml"),
+            "packages = [\"sys-fs/btrfs-progs\", \"sys-fs/cryptsetup\"]\nservices = [\"tlp\"]\n\
+             [pkg.\"app-misc/tmux\"]\nuse = [\"-vim-syntax\"]\n\
+             [machine]\ndisk = \"/dev/vda\"\nencrypted = true\ntimezone = \"UTC\"\n",
+        )
+        .unwrap();
+
+        let c = Config::load_for_host(&config, Some("laptop")).unwrap();
+        assert_eq!(
+            c.packages,
+            ["app-misc/tmux", "sys-fs/btrfs-progs", "sys-fs/cryptsetup"]
+        );
+        assert_eq!(c.services, ["sshd", "tlp"]);
+        assert_eq!(c.pkg["app-misc/tmux"].use_flags, ["-vim-syntax"]);
+        let host = c.host.as_ref().unwrap();
+        assert_eq!(host.name, "laptop");
+        assert!(host.machine.as_ref().unwrap().encrypted);
+        // Listed in both files: not a duplicate.
+        assert!(c.problems().is_empty(), "{:?}", c.problems());
+
+        // Another computer: just the main config.
+        let c = Config::load_for_host(&config, Some("desktop")).unwrap();
+        assert_eq!(c.packages.len(), 2);
+        assert!(c.host.is_none());
+    }
+
+    #[test]
+    fn explains_a_mistake_in_the_host_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("bunny.toml");
+        std::fs::write(&config, "").unwrap();
+        std::fs::create_dir_all(dir.path().join("hosts")).unwrap();
+        std::fs::write(dir.path().join("hosts/laptop.toml"), "pakages = []\n").unwrap();
+        let err = format!(
+            "{:#}",
+            Config::load_for_host(&config, Some("laptop")).unwrap_err()
+        );
+        assert!(
+            err.contains("hosts/laptop.toml (the settings for this computer)"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn finds_the_host_name() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("etc/conf.d")).unwrap();
+        std::fs::write(root.path().join("etc/hostname"), "other\n").unwrap();
+        std::fs::write(
+            root.path().join("etc/conf.d/hostname"),
+            "# Set to the hostname of this machine\nhostname=\"laptop\"\n",
+        )
+        .unwrap();
+        assert_eq!(this_host(root.path()).as_deref(), Some("laptop"));
+        std::fs::remove_file(root.path().join("etc/conf.d/hostname")).unwrap();
+        assert_eq!(this_host(root.path()).as_deref(), Some("other"));
+    }
 
     #[test]
     fn empty_config_uses_defaults() {

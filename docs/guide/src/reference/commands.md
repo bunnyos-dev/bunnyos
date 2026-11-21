@@ -39,6 +39,12 @@ That's useful for testing.
 - `-v` / `--verbose`: show emerge's full output as it runs, and let emerge ask
   its own questions, instead of bunny's list and progress line.
 
+## Installing
+
+| Command | What it does |
+|---|---|
+| `bunny install` | Erases a disk and installs Bunny Linux on it, from a live USB. Shows exactly what will be erased and asks you to type the disk's name, then sets up your config (a starter one, or yours with `--config`) and applies it. Options and every step: [bunny install, in detail](install.md). |
+
 ## Developer mode
 
 | Command | What it does |
@@ -51,4 +57,6 @@ That's useful for testing.
   is taken first).
 - **`[y/N]`**: Enter means no. Used when it can't be undone (`clean`, or a
   switch on a system without `/.snapshots`).
+- **Erasing a disk** (`bunny install`) asks you to type the disk's name
+  instead, so it can't happen by pressing Enter.
 - Anything other than yes or no is asked again rather than guessed.

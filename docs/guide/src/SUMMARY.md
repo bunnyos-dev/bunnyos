@@ -6,8 +6,11 @@
 
 - [What Bunny Linux is](start/what-is-bunny-linux.md)
 - [The big idea: one file describes your computer](start/the-big-idea.md)
-- [Getting bunny](start/getting-bunny.md)
-- [Your first five minutes](start/first-five-minutes.md)
+- [Install Bunny Linux](start/installing.md)
+- [What to do first](start/after-installing.md)
+- [Helping test: send what confused you](start/helping-test.md)
+- [Already on Gentoo? Getting bunny](start/getting-bunny.md)
+- [Your first five minutes (on an existing Gentoo)](start/first-five-minutes.md)
 
 # Everyday tasks
 
@@ -29,6 +32,7 @@
 - [What bunny changes on your system](reference/what-bunny-changes.md)
 - [The disk layout](reference/disk-layout.md)
 - [Moving an existing install to the layout](reference/converting.md)
+- [bunny install, in detail](reference/install.md)
 - [Testing Bunny Linux in a virtual machine](reference/testing-in-a-vm.md)
 - [Developer mode: sending reports](reference/developer-mode.md)
 

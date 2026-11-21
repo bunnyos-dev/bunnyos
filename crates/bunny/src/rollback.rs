@@ -116,6 +116,12 @@ pub struct Outcome {
     pub config_restored: Option<PathBuf>,
     /// The restored system's old "undo the last change" entry was removed.
     pub undo_entry_dropped: bool,
+    /// `/boot` is its own filesystem and its kernel files were put back as
+    /// they were for that generation.
+    pub kernel_restored: Option<crate::kernels::Restore>,
+    /// Something to tell about the kernel (couldn't restore it, or the
+    /// restored system lacks modules for what /boot will start).
+    pub kernel_note: Option<String>,
 }
 
 /// Parses `btrfs subvolume list` output into paths relative to the top level.
@@ -176,6 +182,17 @@ pub fn rollback(
         );
     }
 
+    // /boot on its own filesystem isn't in the snapshots. Keep the current
+    // kernel files first (so this rollback can be undone completely), then
+    // put the generation's back after the swap.
+    let before = format!("bunny-{stamp}-before-rollback");
+    let separate_boot = crate::kernels::separate_boot(mountinfo);
+    if separate_boot && !runner.dry() {
+        if let Some(why) = crate::apply::save_kernels(root, &before) {
+            bail!("{why}\n  So nothing was changed. Free some space on /boot (bunny clean), then try again.");
+        }
+    }
+
     let top: PathBuf = root.join("run/bunny/top");
     std::fs::create_dir_all(&top).context("Couldn't create a temporary mount point")?;
     let t = |p: &str| top.join(p).to_string_lossy().into_owned();
@@ -195,7 +212,6 @@ pub fn rollback(
         bail!("Couldn't open the btrfs volume, so nothing was changed.");
     }
 
-    let before = format!("bunny-{stamp}-before-rollback");
     let replaced = format!("{ROOT_SUBVOL}replaced-{stamp}");
     // Subvolumes inside @ (like /srv) aren't part of snapshots. Carry them
     // over to the restored system afterwards, like /home, so nothing is lost.
@@ -204,6 +220,7 @@ pub fn rollback(
     let mut left_behind = Vec::new();
     let mut config_restored = None;
     let mut undo_entry_dropped = false;
+    let mut no_modules_for: Vec<String> = Vec::new();
     let result = (|| -> Result<()> {
         let before_path = t(&format!("{SNAPSHOTS_SUBVOL}/{before}"));
         if !run(
@@ -256,11 +273,64 @@ pub fn rollback(
             Ok(dropped) => undo_entry_dropped = dropped,
             Err(e) => eprintln!("  Note: couldn't tidy the boot menu ({e:#})."),
         }
+        if separate_boot {
+            no_modules_for = crate::kernels::missing_modules(root, &top.join(ROOT_SUBVOL));
+        }
         Ok(())
     })();
 
     run(runner, &["umount", &top_str])?;
+    if result.is_err() && separate_boot {
+        // Nothing was swapped: forget the kernel list saved above.
+        let _ = crate::kernels::tidy(root);
+    }
     result?;
+
+    let mut kernel_restored = None;
+    let mut kernel_note = None;
+    if separate_boot && !runner.dry() {
+        // The boot menu's files are on /boot, not in the restored system, so
+        // the undo entry is removed here instead.
+        match crate::boot::drop_entry_in(root) {
+            Ok(dropped) => undo_entry_dropped |= dropped,
+            Err(e) => eprintln!("  Note: couldn't tidy the boot menu ({e:#})."),
+        }
+        match crate::kernels::restore_plan(root, generation) {
+            Some(plan) if plan.is_empty() => {}
+            Some(_) => match crate::kernels::restore(root, generation) {
+                Ok(done) => {
+                    // The boot menu lists the kernels in /boot; rebuild it.
+                    if root.join("boot/grub/grub.cfg").is_file() {
+                        let cfg = root.join("boot/grub/grub.cfg");
+                        if !run(runner, &["grub-mkconfig", "-o", &cfg.to_string_lossy()])? {
+                            kernel_note = Some(
+                                "The kernel files are back, but the boot menu couldn't be rebuilt. \
+                                 Run `grub-mkconfig -o /boot/grub/grub.cfg` before rebooting."
+                                    .to_string(),
+                            );
+                        }
+                    }
+                    kernel_restored = Some(done);
+                }
+                Err(e) => {
+                    kernel_note = Some(format!(
+                        "Couldn't put the kernel back as it was ({e:#}). The restored system may \
+                         start without some drivers; `bunny rollback` to the newest version undoes this."
+                    ))
+                }
+            },
+            None if !no_modules_for.is_empty() => {
+                kernel_note = Some(format!(
+                    "This version was saved before bunny kept a copy of each kernel, so /boot \
+                     keeps the kernel it has now, and the restored system has no drivers for \
+                     kernel {}. If it starts without network or graphics, hold Esc while \
+                     starting and pick an older kernel under \"Advanced options\".",
+                    no_modules_for.join(", ")
+                ));
+            }
+            None => {}
+        }
+    }
 
     notes::write_note(
         root,
@@ -286,6 +356,8 @@ pub fn rollback(
         left_behind,
         config_restored,
         undo_entry_dropped,
+        kernel_restored,
+        kernel_note,
     })
 }
 
@@ -662,5 +734,58 @@ mod tests {
         let err = rollback(root.path(), "bunny-a", &rolled, &mut runner, "X").unwrap_err();
         assert!(err.to_string().contains("reboot first"));
         assert!(runner.commands.is_empty());
+    }
+
+    #[test]
+    fn puts_the_kernel_back_when_boot_is_separate() {
+        let root = system_with(&["bunny-old"]);
+        let r = root.path();
+        let write = |path: &str, text: &str| {
+            let p = r.join(path);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        write("boot/vmlinuz-6.1", "kernel 6.1");
+        write("boot/initramfs-6.1.img", "image 6.1");
+        write("boot/grub/grub.cfg", "menu");
+        write(
+            crate::boot::CUSTOM_CFG,
+            "### BEGIN bunny: undo entry (written by bunny; edit bunny.toml instead)\nmenuentry x {\n}\n### END bunny\n",
+        );
+        crate::kernels::save(r, "bunny-old").unwrap();
+        // Then a kernel update replaced 6.1 with 6.2.
+        std::fs::remove_file(r.join("boot/vmlinuz-6.1")).unwrap();
+        std::fs::remove_file(r.join("boot/initramfs-6.1.img")).unwrap();
+        write("boot/vmlinuz-6.2", "kernel 6.2");
+        write("boot/initramfs-6.2.img", "image 6.2");
+
+        let mountinfo = "\
+22 1 0:21 /@ / rw shared:1 - btrfs /dev/mapper/root rw,subvol=/@
+24 22 259:1 / /boot rw shared:3 - vfat /dev/vda1 rw
+";
+        let mut runner = Recorder::default();
+        let out = rollback(r, "bunny-old", mountinfo, &mut runner, "X").unwrap();
+
+        assert_eq!(
+            crate::kernels::current_files(r),
+            ["initramfs-6.1.img", "vmlinuz-6.1"]
+        );
+        let done = out.kernel_restored.unwrap();
+        assert_eq!(done.versions_now, ["6.2"]);
+        assert_eq!(done.versions_then, ["6.1"]);
+        assert!(out.kernel_note.is_none(), "{:?}", out.kernel_note);
+        assert!(out.undo_entry_dropped);
+        assert_eq!(
+            std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap(),
+            ""
+        );
+        assert!(runner
+            .commands
+            .last()
+            .unwrap()
+            .starts_with("grub-mkconfig -o "));
+        // The kernel it had before the rollback is kept, so it can be undone.
+        let before = crate::kernels::load(r, "bunny-X-before-rollback").unwrap();
+        assert!(before.contains_key("vmlinuz-6.2"), "{before:?}");
     }
 }

@@ -27,6 +27,9 @@ bunny clean --keep 10
 bunny clean --keep 2
 ```
 
+If `/boot` is its own partition, `clean` also removes the kernel copies that
+only the removed generations used.
+
 bunny always keeps:
 
 - at least the newest one

@@ -7,6 +7,9 @@ Everything bunny writes, so nothing is a mystery.
 | `/var/lib/portage/world` | Gentoo's list of wanted packages. bunny writes it from `packages`, plus the `[security]` tool and bunny's own package. |
 | `/etc/portage/package.use/zz-bunny` | USE flags from your config. Named so Portage reads it **last**, so it wins. |
 | `/etc/portage/package.use/00-bunny-kept` | package.use lines bunny can't manage yet (version ranges like `<pkg-2`, wildcards), copied word for word. |
+| `/etc/portage/package.accept_keywords/zz-bunny` | Testing versions allowed by `[pkg] keywords`. Only when your config has some. Other files in the folder are left alone; a single-file `package.accept_keywords` is moved into the folder as `00-yours`. |
+| `/etc/portage/repos.conf/bunny-<name>.conf` | One per repository in [`repositories`](config.md#repositories), with its git address from Gentoo's list. Removed when the repository leaves your config. A single-file `repos.conf` is moved into the folder as `00-yours.conf`. |
+| `/var/db/repos/<name>` | The repositories' files, downloaded with `emaint sync`. |
 | `/etc/portage/package.mask/zz-bunny-lock` | The [version pins](lock-and-pins.md) from `bunny.lock`. |
 | `/etc/sudoers.d/bunny` or `/etc/doas.conf` | Admin rights for the `wheel` group, from [`[security]`](config.md#security). Only if that section is in your config. |
 | `/etc/group` (`wheel` only) | `admins` from `[security]` are added with `gpasswd`. Nobody is ever removed. |
@@ -14,6 +17,7 @@ Everything bunny writes, so nothing is a mystery.
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
 | `/usr/lib/dracut/modules.d/90bunny-rollback/` | The boot menu's undo step, with [`[boot] undo_entry`](config.md#boot). Added to the startup image (`/boot/initramfs-<version>.img`), which is rebuilt once; the old image goes to the backup folder. |
+| `/boot/bunny/` | Only when `/boot` is its own partition: a copy of each generation's kernel files, so undo can put the kernel back. See [Generations](generations.md#when-boot-is-its-own-partition). `bunny clean` removes copies nothing uses. |
 | `/boot/grub/custom.cfg` | The boot menu's undo entry, between `### BEGIN bunny` and `### END bunny`. The rest of the file is kept. |
 | `/var/lib/bunny/news-seen` | How many unread Gentoo news items bunny last told you about, so the tip only comes back when there's something new. |
 | `/var/lib/bunny/applied/` | A copy of the config and lock from the last successful switch, so undoing a later change can put them back. Part of the system, so each generation carries its own. |
@@ -43,6 +47,7 @@ config, nothing is lost:
 | Install / update | `emerge --update --deep --newuse --quiet-build=y @world` |
 | See what's unused | `emerge --depclean --pretend` |
 | Remove unused | `emerge --depclean` (after bunny asks, always) |
+| New repositories | `wget -qO- https://api.gentoo.org/overlays/repositories.xml` (Gentoo's list), then `emaint sync --repo <name>`, right after the snapshot |
 | Services | `rc-update add <name> default`, `rc-service <name> start` |
 | Admin rights | `visudo -cf <file>` or `doas -C <file>` to check, `gpasswd -a <user> wheel` |
 | Update | `emerge --sync` first |
@@ -64,5 +69,6 @@ dependencies that nothing needs anymore.
 
 ## What bunny leaves alone
 
-`/etc/portage/make.conf`, `package.accept_keywords`, `repos.conf`, the
-kernel config, and everything in `/etc` outside the files above.
+`/etc/portage/make.conf`, other files in `package.accept_keywords` and
+`repos.conf`, the kernel config, and everything in `/etc` outside the files
+above.

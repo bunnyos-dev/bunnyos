@@ -93,9 +93,9 @@ boot menu.
 It says so, and says which new subvolumes to delete before trying again. The
 old system is untouched either way.
 
-## Not yet
+## The kernel and undo
 
-With `/boot` on its own partition (common on encrypted systems), undo puts
-back the system but not the kernel. That's fine until a change updates the
-kernel. Keeping a kernel for each saved version is the next step on the
-roadmap.
+With `/boot` on its own partition, saved versions don't include the kernel.
+bunny keeps a copy of each version's kernel on `/boot` instead, so undo puts
+the kernel back too (see
+[Generations](generations.md#when-boot-is-its-own-partition)).

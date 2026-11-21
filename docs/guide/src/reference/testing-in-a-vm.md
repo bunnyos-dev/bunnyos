@@ -20,6 +20,23 @@ doas usermod -aG kvm $USER
 
 Log out and back in. Check `ls -l /dev/kvm` exists.
 
+## Trying the Bunny Linux live USB
+
+To try the installer the way a new user would, boot the live USB image
+(from a [release](https://github.com/bunnyos-dev/bunnyos/releases/latest), or
+built with `tools/build-iso.sh`) in a fresh VM:
+
+```sh
+VM=fresh tools/bunny-vm.sh run ~/Downloads/bunny-linux-live-*.iso
+```
+
+(`ISO=… tools/bunny-vm.sh run` does the same.) Then follow
+[Install Bunny Linux](../start/installing.md) from step 4. Afterwards, start
+it without the ISO: `VM=fresh tools/bunny-vm.sh run`.
+
+The rest of this page sets up a plain Gentoo in the VM instead, for trying
+bunny on an existing install.
+
 ## 2. Install Gentoo in the VM
 
 Download the amd64 **Minimal Installation CD** from
@@ -65,6 +82,7 @@ tools/bunny-vm.sh snap clean-install
 | Command | What it does |
 |---|---|
 | `tools/bunny-vm.sh run` | Start the VM |
+| `tools/bunny-vm.sh stop` | Shut the VM down (asks for your password in the VM) |
 | `tools/bunny-vm.sh ssh` | Log in from your terminal (copy and paste work here) |
 | `tools/bunny-vm.sh put <file>` | Copy a file into the VM's home folder |
 | `tools/bunny-vm.sh restore clean-install` | Go back to the clean install (VM off) |

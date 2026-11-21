@@ -85,6 +85,7 @@ pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<E
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, true)?;
     let keep = keep.max(1);
     let (device, running) = if real_system {
         let info = std::fs::read_to_string("/proc/self/mountinfo")
@@ -179,6 +180,10 @@ pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<E
             if let Err(e) = kernels::tidy(root) {
                 println!("Note: couldn't remove old kernel copies from /boot ({e:#}).");
             }
+            // The boot menu's Earlier versions shouldn't list removed ones.
+            if let Err(e) = crate::apply::refresh_earlier(root) {
+                println!("Note: couldn't update the boot menu's Earlier versions ({e:#}).");
+            }
         }
         if failed.is_empty() {
             println!("✓ Removed.");
@@ -205,6 +210,7 @@ pub(crate) fn rollback_cmd(
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, false)?;
     let gens = rollback::list(root)?;
     let name = match name {
         Some(input) => rollback::resolve(&gens, &input).unwrap_or(input),
@@ -288,11 +294,18 @@ pub(crate) fn rollback_cmd(
         .map(|i| (i + 1).to_string())
         .unwrap_or_else(|| outcome.before.clone());
     println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
-    if let Some(config) = &outcome.config_restored {
-        println!(
-            "  {} is put back as it was then, so it matches the restored system.",
-            config.display()
-        );
+    if let Some(restored) = &outcome.config_restored {
+        match &restored.host {
+            Some(host) => println!(
+                "  {} and {} are put back as they were then,\n  so they match the restored system.",
+                restored.config.display(),
+                host.display()
+            ),
+            None => println!(
+                "  {} is put back as it was then, so it matches the restored system.",
+                restored.config.display()
+            ),
+        }
     }
     if let Some(done) = &outcome.kernel_restored {
         if done.versions_now != done.versions_then {
@@ -309,7 +322,7 @@ pub(crate) fn rollback_cmd(
     }
     if outcome.undo_entry_dropped {
         println!(
-            "  The boot menu's \"undo the last change\" entry is gone until your next change,\n  \
+            "  The boot menu's \"Undo the last change\" entry is gone until your next change,\n  \
              so picking it can't take you further back by accident."
         );
     }

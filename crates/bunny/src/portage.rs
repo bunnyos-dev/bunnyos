@@ -58,10 +58,11 @@ pub fn bunny_itself(root: &Path) -> Option<&'static str> {
 }
 
 /// The packages the config asks for, sorted and de-duplicated, plus the ones
-/// bunny keeps by itself: the admin tool from `[security]`, and bunny's own
-/// package, so a switch never removes bunny.
+/// bunny keeps by itself: the admin tool from `[security]`, what `[desktop]`
+/// needs, and bunny's own package, so a switch never removes bunny.
 pub fn wanted_world(config: &Config, root: &Path) -> BTreeSet<String> {
     let mut world: BTreeSet<String> = config.packages.iter().cloned().collect();
+    world.extend(config.desktop.packages().iter().map(|p| p.to_string()));
     if let Some(sec) = &config.security {
         world.insert(sec.privilege.package().to_string());
     }

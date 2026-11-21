@@ -5,9 +5,25 @@ it's confusing. **Developer mode** records every bunny command exactly as you
 saw it, and sends recordings with problems to the developers by itself, so
 you don't have to copy and paste anything.
 
-Turn it on right after installing, before you start changing things.
+Set it up right after installing, before you start changing things: sign
+in to GitHub first, so the first report can be sent.
 
-## 1. Turn it on
+## 1. Sign in to GitHub
+
+Reports are sent as issues in a private repository, with your own GitHub
+account. Install GitHub's command-line tool and sign in once:
+
+```sh
+bunny add dev-util/github-cli
+gh auth login
+```
+
+Pick GitHub.com, HTTPS, and "Login with a web browser". Without a desktop,
+it then says it can't copy the code or open a browser: that's expected.
+Open `github.com/login/device` on another device (your phone works) and
+type the code it shows.
+
+## 2. Turn it on
 
 ```sh
 sudo nano /etc/bunny/bunny.toml
@@ -26,20 +42,6 @@ Save (Ctrl+O, Enter), close (Ctrl+X), and check:
 ```sh
 bunny check
 ```
-
-## 2. Sign in to GitHub
-
-Reports are sent as issues in a private repository, with your own GitHub
-account. Install GitHub's command-line tool and sign in once:
-
-```sh
-bunny add dev-util/github-cli
-gh auth login
-```
-
-Pick GitHub.com, HTTPS, and "Login with a web browser". It shows a code to
-type at `github.com/login/device`, which you can open on your phone if this
-computer has no desktop yet.
 
 ## 3. Use Bunny Linux
 

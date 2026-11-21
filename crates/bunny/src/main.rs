@@ -5,6 +5,8 @@ mod apply;
 mod boot;
 mod commands;
 mod config;
+mod config_repo;
+mod desktop;
 mod dev;
 mod diff;
 mod edit;
@@ -56,6 +58,10 @@ struct Cli {
     /// recorded (developer mode), so it isn't recorded twice.
     #[arg(long, global = true, hide = true)]
     in_session: bool,
+    /// Set by bunny itself when it re-runs a command through sudo or doas,
+    /// so a failure as root can be told apart from sudo or doas refusing.
+    #[arg(long, global = true, hide = true)]
+    elevated: bool,
 }
 
 /// Where bunny looks for its config unless told otherwise.
@@ -223,6 +229,23 @@ enum Command {
         #[arg(default_value = DEFAULT_CONFIG)]
         config: PathBuf,
     },
+    /// Send your config folder (/etc/bunny) to a private GitHub repository, with your own GitHub sign-in (shows what it will do and asks first)
+    Publish {
+        /// The GitHub repository: a name (my-system, the default) or you/my-system
+        repo: Option<String>,
+        /// Don't ask first
+        #[arg(short, long)]
+        yes: bool,
+        /// Show what it would do, without changing or sending anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Path to the config (its folder is what's sent)
+        #[arg(long, default_value = DEFAULT_CONFIG)]
+        config: PathBuf,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Install Bunny Linux on this computer, from the live USB (erases a disk; shows exactly what first)
     Install {
         /// The disk to install on, e.g. /dev/nvme0n1 (asks if not given)
@@ -252,7 +275,7 @@ enum Command {
         /// Install from your own config: a bunny.toml, or a git repository (github:you/my-system)
         #[arg(long, value_name = "FILE OR REPO")]
         config: Option<String>,
-        /// Show everything it would do, without erasing or changing anything
+        /// Show each step and what it does, without erasing or changing anything (with --verbose: every command)
         #[arg(long)]
         dry_run: bool,
         /// Read the list of disks from this file (lsblk --json output) instead of lsblk
@@ -284,10 +307,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     interrupt::install();
     VERBOSE.store(cli.verbose, std::sync::atomic::Ordering::Relaxed);
+    let elevated = cli.elevated;
     if let Some(code) = dev::record_if_on(Path::new(DEFAULT_CONFIG), cli.in_session) {
-        return code;
+        return commands::elevated_exit(code, elevated);
     }
-    match run(cli) {
+    let code = match run(cli) {
         Ok(code) => code,
         Err(err) => {
             eprintln!("✗ {err}");
@@ -296,7 +320,8 @@ fn main() -> ExitCode {
             }
             ExitCode::FAILURE
         }
-    }
+    };
+    commands::elevated_exit(code, elevated)
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
@@ -306,6 +331,13 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             yes,
             config,
         } => report(&config, dry_run, yes),
+        Command::Publish {
+            repo,
+            yes,
+            dry_run,
+            config,
+            root,
+        } => commands::publish(&config, repo.as_deref(), yes, dry_run, &root),
         Command::Check { config } => {
             let cfg = Config::load(&config)?;
             Ok(report_problems(&cfg, &config))

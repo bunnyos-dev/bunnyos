@@ -50,7 +50,13 @@ pub struct Plan {
     pub security: crate::security::Changes,
     /// The boot menu's undo entry (`[boot]`).
     pub boot: crate::boot::Changes,
+    /// Packages, services and packages' USE flags that are only in effect
+    /// because of `[desktop]`, so they can be marked "from [desktop]".
+    pub from_desktop: BTreeSet<String>,
 }
+
+/// The note shown after something `[desktop]` adds.
+pub const FROM_DESKTOP: &str = "(from [desktop])";
 
 #[derive(Debug, PartialEq)]
 pub struct UseChange {
@@ -62,6 +68,19 @@ pub struct UseChange {
 }
 
 impl Plan {
+    /// `name`, marked "(from [desktop])" when that's where it comes from.
+    pub fn label(&self, name: &str) -> String {
+        if self.from_desktop.contains(name) {
+            format!("{name}   {FROM_DESKTOP}")
+        } else {
+            name.to_string()
+        }
+    }
+
+    fn labels(&self, names: &[String]) -> Vec<String> {
+        names.iter().map(|n| self.label(n)).collect()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.add_packages.is_empty()
             && self.remove_packages.is_empty()
@@ -139,8 +158,10 @@ impl Plan {
 
         if !self.add_repositories.is_empty() {
             section(&mut out, "Repositories to add", "+", &self.add_repositories);
+            // A note, not a warning: "·" rather than ⚠, because ⚠ and ✗ mean
+            // "something went wrong" (developer mode's "auto" reports them).
             out.push_str(
-                "  ⚠ Repositories besides Gentoo's own aren't checked by Gentoo's developers,\n    \
+                "  · Repositories besides Gentoo's own aren't checked by Gentoo's developers,\n    \
                  and their packages run build steps as root. Only add ones you trust.\n\n",
             );
         }
@@ -178,7 +199,12 @@ impl Plan {
             .filter(|p| !self.unknown_packages.contains(p))
             .cloned()
             .collect();
-        section(&mut out, "Packages to install", "+", &installable);
+        section(
+            &mut out,
+            "Packages to install",
+            "+",
+            &self.labels(&installable),
+        );
         if !self.remove_packages.is_empty() {
             section(
                 &mut out,
@@ -202,9 +228,14 @@ impl Plan {
                         flags.join(" ")
                     }
                 };
+                let mark = if self.from_desktop.contains(&change.atom) {
+                    format!("   {FROM_DESKTOP}")
+                } else {
+                    String::new()
+                };
                 let _ = writeln!(
                     out,
-                    "  ~ {}: {} → {}",
+                    "  ~ {}: {} → {}{mark}",
                     change.atom,
                     show(&change.from),
                     show(&change.to)
@@ -235,12 +266,12 @@ impl Plan {
         }
 
         let heading = format!("Services to start at boot ({})", self.init_name);
-        section(&mut out, &heading, "+", &self.enable_services);
+        section(&mut out, &heading, "+", &self.labels(&self.enable_services));
 
         if !self.missing_services.is_empty() {
             out.push_str("Note: these services aren't installed yet:\n");
             for name in &self.missing_services {
-                let _ = writeln!(out, "  ? {name}");
+                let _ = writeln!(out, "  ? {}", self.label(name));
             }
             out.push_str(
                 "  If a package in your config provides them, they'll be enabled after it's installed.\n\n",
@@ -272,13 +303,21 @@ impl Plan {
         }
         if let (false, Some(p)) = (self.security.is_empty(), self.security.privilege) {
             let _ = writeln!(out, "Admin rights ({}):", p.command());
-            if let Some((path, _)) = &self.security.file {
+            if let Some((path, text)) = &self.security.file {
                 let _ = writeln!(
                     out,
                     "  ~ write {} so the wheel group can use {} (checked before it's put in place)",
                     path.display(),
                     p.command()
                 );
+                let kept = crate::security::kept_rules(text);
+                if kept > 0 {
+                    let _ = writeln!(
+                        out,
+                        "    Your other {kept} line{} in it stay, after bunny's rule.",
+                        if kept == 1 { "" } else { "s" }
+                    );
+                }
             }
             for user in &self.security.add_to_wheel {
                 let _ = writeln!(out, "  + add {user} to the wheel group");
@@ -290,7 +329,7 @@ impl Plan {
             out.push_str("Boot menu:\n");
             let _ = writeln!(
                 out,
-                "  + add an \"undo the last change\" step to the startup image (kernel {})",
+                "  + add an \"Undo the last change\" step to the startup image (kernel {})",
                 versions.join(", ")
             );
             out.push_str(
@@ -299,7 +338,7 @@ impl Plan {
             );
         }
         if self.boot.remove_entry {
-            out.push_str("Boot menu:\n  - remove the \"undo the last change\" entry\n\n");
+            out.push_str("Boot menu:\n  - remove bunny's entries (Undo the last change, Earlier versions)\n\n");
         }
         if !self.boot.problems.is_empty() {
             out.push_str("Note: the boot menu's undo entry can't be set up on this system:\n");
@@ -427,7 +466,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
     let user_enabled = init
         .user_services()
         .context("Couldn't read which services start at boot")?;
-    let wanted_services: BTreeSet<String> = config.services.iter().cloned().collect();
+    let wanted_services: BTreeSet<String> = config.wanted_services().into_iter().collect();
 
     let configured = portage::configured_repositories(root);
     let wanted_repos: BTreeSet<String> = config.repositories.iter().cloned().collect();
@@ -435,6 +474,13 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
         .iter()
         .any(|r| !root.join("var/db/repos").join(r).is_dir());
     let to_add: Vec<String> = wanted_world.difference(&current_world).cloned().collect();
+    let from_desktop: BTreeSet<String> = wanted_world
+        .iter()
+        .chain(&wanted_services)
+        .chain(config.use_flags().keys())
+        .filter(|name| config.added_by_desktop(name))
+        .cloned()
+        .collect();
 
     Ok(Plan {
         init_name: init.name(),
@@ -475,6 +521,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             .cloned()
             .collect(),
         removal_requested: false,
+        from_desktop,
         boot: crate::boot::changes(&config.boot, root),
         security: config
             .security
@@ -611,6 +658,72 @@ mod tests {
     }
 
     #[test]
+    fn desktop_settings_are_planned_and_marked() {
+        let root = fake_root();
+        let r = root.path();
+        std::fs::write(r.join("etc/init.d/dbus"), "").unwrap();
+        let config = Config::parse(
+            "packages = [\"app-editors/neovim\", \"app-misc/old-thing\"]\n\
+             services = [\"elogind\"]\n[desktop]\nwayland = true\n",
+        )
+        .unwrap();
+        let plan = make(&config, r).unwrap();
+        assert_eq!(plan.add_packages, ["sys-apps/dbus", "sys-auth/elogind"]);
+        assert_eq!(plan.enable_services, ["dbus"]);
+        let atoms: Vec<&str> = plan.use_changes.iter().map(|c| c.atom.as_str()).collect();
+        assert_eq!(atoms, ["sys-auth/pambase", "sys-auth/seatd"]);
+        let text = plan.render();
+        assert!(
+            text.contains("  + sys-apps/dbus   (from [desktop])\n"),
+            "{text}"
+        );
+        assert!(text.contains("  ~ sys-auth/pambase: (none) → elogind   (from [desktop])\n"));
+        assert!(text.contains("  + dbus   (from [desktop])\n"));
+        // elogind is in `services` too, so it's yours, not [desktop]'s.
+        assert!(!plan.from_desktop.contains("elogind"));
+    }
+
+    #[test]
+    fn desktop_matches_the_same_settings_made_by_hand() {
+        // The dry run's manual steps, then the same thing as [desktop]:
+        // nothing to do either way.
+        let root = fake_root();
+        let r = root.path();
+        let boot = r.join("etc/runlevels/boot");
+        std::fs::create_dir_all(&boot).unwrap();
+        std::fs::remove_file(r.join("etc/runlevels/default/elogind")).unwrap();
+        std::fs::write(boot.join("elogind"), "").unwrap();
+        std::fs::write(r.join("etc/init.d/dbus"), "").unwrap();
+        std::fs::write(r.join("etc/runlevels/default/dbus"), "").unwrap();
+        std::fs::create_dir_all(r.join("etc/portage/package.use")).unwrap();
+        std::fs::write(
+            r.join("etc/portage/package.use/zz-bunny"),
+            "sys-auth/pambase elogind\nsys-auth/seatd elogind\n",
+        )
+        .unwrap();
+        std::fs::write(
+            r.join(portage::WORLD_FILE),
+            "app-editors/neovim\nsys-apps/dbus\nsys-auth/elogind\n",
+        )
+        .unwrap();
+        let by_hand = Config::parse(
+            "packages = [\"app-editors/neovim\", \"sys-apps/dbus\", \"sys-auth/elogind\"]\n\
+             services = [\"elogind\", \"dbus\"]\n\
+             [pkg.\"sys-auth/pambase\"]\nuse = [\"elogind\"]\n\
+             [pkg.\"sys-auth/seatd\"]\nuse = [\"elogind\"]\n",
+        )
+        .unwrap();
+        let plan = make(&by_hand, r).unwrap();
+        assert!(plan.is_empty(), "{plan:#?}");
+        let desktop =
+            Config::parse("packages = [\"app-editors/neovim\"]\n[desktop]\nwayland = true\n")
+                .unwrap();
+        let plan = make(&desktop, r).unwrap();
+        assert!(plan.is_empty(), "{plan:#?}");
+        assert!(plan.extra_services.is_empty());
+    }
+
+    #[test]
     fn matching_system_has_empty_plan() {
         let root = fake_root();
         let config = Config::parse(
@@ -623,5 +736,22 @@ mod tests {
         let plan = make(&config, root.path()).unwrap();
         assert!(plan.is_empty(), "{plan:#?}");
         assert!(plan.render().contains("already matches"));
+    }
+
+    #[test]
+    fn the_repository_trust_note_is_not_a_problem() {
+        // Developer mode's report = "auto" sends any command that shows ⚠ or ✗;
+        // a switch that adds a repository and works must not be one of them.
+        let plan = Plan {
+            add_repositories: vec!["guru".into()],
+            ..Plan::default()
+        };
+        let shown = plan.render();
+        assert!(shown.contains("Only add ones you trust"), "{shown}");
+        let worked = crate::dev::Meta {
+            exit_code: Some(0),
+            ..crate::dev::Meta::default()
+        };
+        assert!(!crate::dev::had_problem(&worked, &shown), "{shown}");
     }
 }

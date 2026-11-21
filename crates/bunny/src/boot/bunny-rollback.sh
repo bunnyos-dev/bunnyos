@@ -58,30 +58,63 @@ bunny_rollback() {
         umount "$bunny_top"
         return 0
     fi
-    if ! mv "$bunny_top/@" "$bunny_top/@replaced-$bunny_stamp"; then
+    # The restored copy is made first, under a temporary name, so the only
+    # steps that touch @ are two renames.
+    if ! btrfs subvolume snapshot "$bunny_top/@snapshots/$bunny_target" "$bunny_top/@restoring-$bunny_stamp" >/dev/null; then
+        warn "bunny: couldn't copy $bunny_target, so nothing was undone"
+        umount "$bunny_top"
+        return 0
+    fi
+    if ! mv -T "$bunny_top/@" "$bunny_top/@replaced-$bunny_stamp"; then
+        btrfs subvolume delete "$bunny_top/@restoring-$bunny_stamp" >/dev/null 2>&1
         warn "bunny: couldn't move the current system aside, so nothing was undone"
         umount "$bunny_top"
         return 0
     fi
-    if ! btrfs subvolume snapshot "$bunny_top/@snapshots/$bunny_target" "$bunny_top/@" >/dev/null; then
-        mv "$bunny_top/@replaced-$bunny_stamp" "$bunny_top/@"
-        warn "bunny: couldn't restore $bunny_target; the current system was put back"
+    if ! mv -T "$bunny_top/@restoring-$bunny_stamp" "$bunny_top/@"; then
+        if mv -T "$bunny_top/@replaced-$bunny_stamp" "$bunny_top/@"; then
+            btrfs subvolume delete "$bunny_top/@restoring-$bunny_stamp" >/dev/null 2>&1
+            warn "bunny: couldn't restore $bunny_target; the current system was put back"
+        else
+            warn "bunny: couldn't restore $bunny_target or put the current system back."
+            warn "bunny: it's safe in the subvolume @replaced-$bunny_stamp; rename it back to @ from a live USB"
+        fi
         umount "$bunny_top"
         return 0
     fi
 
     # The config that matched that generation goes back too, so config and
     # system agree. Only a config under /etc (one in /home isn't rolled back).
+    # The same goes for this computer's host file.
     bunny_applied="$bunny_top/@/var/lib/bunny/applied"
     if [ -f "$bunny_applied/config-path" ] && [ -f "$bunny_applied/bunny.toml" ]; then
         read -r bunny_config < "$bunny_applied/config-path"
         case "$bunny_config" in
             *..*) ;;
             /etc/*.toml)
-                cp "$bunny_applied/bunny.toml" "$bunny_top/@$bunny_config" || \
-                    warn "bunny: couldn't put $bunny_config back as it was"
-                if [ -f "$bunny_applied/bunny.lock" ]; then
-                    cp "$bunny_applied/bunny.lock" "$bunny_top/@${bunny_config%.toml}.lock" || true
+                # A config that's a link lives outside the system (like one
+                # in /home): writing through it would change the real file.
+                if [ ! -L "$bunny_top/@$bunny_config" ] && [ ! -L "$bunny_top/@${bunny_config%.toml}.lock" ]; then
+                    cp "$bunny_applied/bunny.toml" "$bunny_top/@$bunny_config" || \
+                        warn "bunny: couldn't put $bunny_config back as it was"
+                    if [ -f "$bunny_applied/bunny.lock" ]; then
+                        cp "$bunny_applied/bunny.lock" "$bunny_top/@${bunny_config%.toml}.lock" || true
+                    fi
+                fi
+                ;;
+        esac
+    fi
+    # This computer's host file (hosts/<name>.toml), as applied with it.
+    if [ -f "$bunny_applied/host-path" ] && [ -f "$bunny_applied/host.toml" ]; then
+        read -r bunny_host < "$bunny_applied/host-path"
+        case "$bunny_host" in
+            *..*) ;;
+            /etc/*.toml)
+                if [ -d "$bunny_top/@${bunny_host%/*}" ]; then
+                    cp "$bunny_applied/host.toml" "$bunny_top/@$bunny_host" || \
+                        warn "bunny: couldn't put $bunny_host back as it was"
+                else
+                    warn "bunny: couldn't put $bunny_host back (its folder is gone)"
                 fi
                 ;;
         esac
@@ -89,9 +122,11 @@ bunny_rollback() {
 
     # The restored system brings back its own, older boot menu, whose undo
     # entry would go one change further back. Remove it: there's no "last
-    # change" to undo until the next switch.
-    bunny_cfg="$bunny_top/@/boot/grub/custom.cfg"
-    if [ -f "$bunny_cfg" ]; then
+    # change" to undo until the next switch. (Earlier versions has its own
+    # markers and stays.) bunny.cfg is where it is now; custom.cfg is where
+    # older versions of bunny put it.
+    for bunny_cfg in "$bunny_top/@/boot/grub/bunny.cfg" "$bunny_top/@/boot/grub/custom.cfg"; do
+        [ -f "$bunny_cfg" ] || continue
         bunny_skip=0
         : > "$bunny_cfg.bunny-new"
         while IFS= read -r bunny_line || [ -n "$bunny_line" ]; do
@@ -102,7 +137,7 @@ bunny_rollback() {
             [ "$bunny_skip" = 1 ] || printf '%s\n' "$bunny_line" >> "$bunny_cfg.bunny-new"
         done < "$bunny_cfg"
         mv "$bunny_cfg.bunny-new" "$bunny_cfg" || rm -f "$bunny_cfg.bunny-new"
-    fi
+    done
 
     # Notes, so `bunny rollback list` can say what happened.
     printf 'kind = "rollback"\nsummary = ""\nto = "%s"\n' "$bunny_target" \

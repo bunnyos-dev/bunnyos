@@ -204,7 +204,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Filled in from the maintainer's notes and developer-mode reports.)
 
-- [ ] **Bug: the time zone from `bunny install` isn't set.** After the
+- [~] **Bug: the time zone from `bunny install` isn't set.** After the
       install, `/etc/timezone` is missing and `/etc/localtime` still points
       to `zoneinfo/Factory` (from the stage3), so `date` shows `-00`.
       `inside.sh` writes `/etc/timezone` and runs `emerge --config
@@ -212,7 +212,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       Gentoo. Fix: make the link the way Gentoo's handbook now says for
       OpenRC (`ln -sf ../usr/share/zoneinfo/<zone> /etc/localtime`), and
       check it with a test.
-- [ ] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
+- [~] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
       at boot, not in your config: local, netmount". Those two are in the
       stage3's default runlevel, and the starter config doesn't list them.
       Fix: list them in the starter config, or have bunny treat OpenRC's own
@@ -225,10 +225,10 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [~] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
       reinstalled curl, gettext, iputils, libb2 and portage-utils, shown as
       "(rebuild)". Say why (a USE flag changed, a library they use changed).
-- [ ] **26 unread Gentoo announcements on a fresh install.** They're all
+- [~] **26 unread Gentoo announcements on a fresh install.** They're all
       older than the system. `bunny install` should mark them read
       (`eselect news read --quiet all`), so only new ones are mentioned.
-- [ ] **Guide, What to do first: the git steps don't work as written.**
+- [~] **Guide, What to do first: the git steps don't work as written.**
       `git init` makes a `master` branch (the page later pushes `main`), and
       the commit fails with "Author identity unknown" because root has no
       git name or email. Then `sudo git push` would fail too: the GitHub

@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- After an undo from the boot menu on an encrypted disk (where `/boot` is its
+  own partition), bunny now puts `/boot`'s kernel back to the one that version
+  used, early in the first start afterwards, and rebuilds the boot menu.
+  `bunny status` says what it did. The next switch adds the small
+  `bunny-finish-undo` start-up service for this.
+
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.

@@ -157,15 +157,30 @@ might not have. bunny makes up for that:
 - **Older generations** (saved before bunny kept kernels) can still be rolled
   back to; `/boot` just keeps its current kernel, and bunny says so.
 - **The boot-menu undo** boots the generation's kernel straight from
-  `/boot/bunny/files/`, finding the partition by its UUID. It can't change
-  the kernel files on `/boot` itself, so after it the normal menu entry may
-  start a kernel the restored system has no drivers for. `bunny status` then
-  shows a **Kernel** warning; until that's fixed, pick the older kernel under
-  "Advanced options" in the boot menu. (Putting `/boot` back automatically
-  after a boot-menu undo is planned.)
-  The undo entry also stays in the menu (its file is on `/boot` too), but
-  picking it again does nothing, since that change is already undone.
-  `bunny rollback` does remove it.
+  `/boot/bunny/files/`, finding the partition by its UUID. The undo itself
+  runs in the startup image, which can't reach `/boot`, so it leaves a note
+  in the restored system (`/var/lib/bunny/boot-undo`, the generation's name).
+  Early in that first start, the `bunny-finish-undo` service (in OpenRC's
+  `boot` runlevel; bunny adds it together with the undo step) runs `bunny
+  finish-undo`, which makes `/boot`'s kernel files exactly what that
+  generation had, the same way `bunny rollback` does, rebuilds the boot menu
+  with `grub-mkconfig`, removes the undo entry (its file is on `/boot` too)
+  and clears the note. `bunny status` then says what it did:
+
+  ```
+  ✓ Kernel        /boot has kernel 6.12.58-gentoo-dist again, put back after the undo from the boot menu
+                  (it had 6.12.60-gentoo-dist from the version you went back from)
+  ```
+
+  That line shows until your next change. If it couldn't be done, the note
+  stays, bunny tries again at the next start, and `bunny status` shows a
+  **Kernel** warning with the reason; `sudo bunny finish-undo` tries again
+  straight away. A note is only acted on while that undo is still the last
+  thing that happened (an older note that came back with a snapshot is
+  dropped). Generations saved before bunny kept kernels, or before it had
+  this service, leave `/boot` as it is; then `bunny status` warns if `/boot`'s
+  kernel has no drivers in the restored system, and you can pick the older
+  kernel under "Advanced options" in the boot menu.
 - **`bunny clean`** removes the lists of generations it deletes, and any
   copies no remaining generation uses.
 

@@ -12,6 +12,7 @@ mod diff;
 mod edit;
 mod emerge;
 mod explain;
+mod finish_undo;
 mod glsa;
 mod helper;
 mod import;
@@ -127,6 +128,16 @@ enum Command {
     /// List the saved generations you can roll back to
     Generations {
         /// System root (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Finish an undo from the boot menu: put /boot's kernel back (run at start-up)
+    #[command(hide = true)]
+    FinishUndo {
+        /// Say nothing when there's nothing to do
+        #[arg(long)]
+        quiet: bool,
+        /// System root (for testing on a fake system; commands are only printed)
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
@@ -384,6 +395,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
+        Command::FinishUndo { quiet, root } => commands::finish_undo_cmd(quiet, &root),
         Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
         Command::Lock { config, root } => lock_cmd(&config, &root),
         Command::Explain { file } => explain_cmd(file.as_deref()),

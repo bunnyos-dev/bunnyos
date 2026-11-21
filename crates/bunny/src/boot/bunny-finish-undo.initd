@@ -1,0 +1,30 @@
+#!/sbin/openrc-run
+# shellcheck shell=sh
+# Bunny Linux: finishes an undo from the boot menu (installed by bunny).
+#
+# The undo itself happens in the startup image, which can't reach /boot when
+# /boot is its own partition (encrypted disks). So the undo leaves a note,
+# and on this first start afterwards bunny puts /boot's kernel back as it
+# was for that version and refreshes the boot menu. Does nothing otherwise.
+
+# shellcheck disable=SC2034  # read by openrc-run
+description="Puts /boot's kernel back after an undo from the boot menu"
+
+depend() {
+    need localmount
+    before bootmisc
+}
+
+start() {
+    [ -e /var/lib/bunny/boot-undo ] || return 0
+    for bunny in /usr/bin/bunny /usr/local/bin/bunny; do
+        [ -x "$bunny" ] || continue
+        ebegin "Putting back the kernel that matches the undone version"
+        "$bunny" finish-undo --quiet
+        eend $? "bunny couldn't do it; bunny status says why"
+        # A failure here never stops the computer from starting.
+        return 0
+    done
+    ewarn "bunny isn't installed, so /boot's kernel wasn't put back"
+    return 0
+}

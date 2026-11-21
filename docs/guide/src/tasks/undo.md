@@ -91,6 +91,11 @@ system starts as it was before the change. It's the same as `bunny
 rollback`, done while starting up: the broken system is saved too, so you
 can go back to it with `bunny rollback list`.
 
+On an encrypted disk, where `/boot` is its own partition, bunny finishes the
+undo early in that first start, putting `/boot`'s kernel back to the one that
+version used (the same for **Go back to this version**, below). `bunny
+status` says so on its **Kernel** line.
+
 After you've used it, it's gone until your next change, so you can't go
 further back by picking it again. (The same happens after `bunny
 rollback`.) If it's somehow picked twice for the same change, the second

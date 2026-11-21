@@ -63,6 +63,9 @@ fn ask_portage(
     println!("\nAsking Portage what it needs to do…");
     let mut pretend = cmd(update);
     pretend.insert(1, "--pretend".into());
+    // --verbose shows each package's USE flags, with the changed ones
+    // marked, so a rebuild can say why it happens.
+    pretend.push("--verbose".into());
     pretend.push("@world".into());
     // Portage's own answer, as data. emerge's screen text only when that
     // isn't available (and to explain a refusal).

@@ -125,7 +125,7 @@ fn config_file(source: &Source) -> Option<PathBuf> {
 
 fn write(runner: &dyn Runner, path: &Path, text: &str) -> Result<()> {
     if runner.dry() {
-        println!("  (would write) {}", path.display());
+        super::would(runner, "write", &path.display().to_string());
         return Ok(());
     }
     if let Some(parent) = path.parent() {
@@ -146,12 +146,28 @@ pub fn put_in_place(
 ) -> Result<PathBuf> {
     let dir = choices.mnt.join(DIR);
     let config_path = dir.join("bunny.toml");
-    println!("\n==> Writing your config to /{DIR}/bunny.toml");
+    super::say(
+        runner,
+        &format!("Writing your config to /{DIR}/bunny.toml"),
+        &format!(
+            "{}.\nAlso writes hosts/{}.toml with this computer's disk details.",
+            match source {
+                Source::Starter => "Writes a starter config from your answers",
+                Source::File(_) => "Copies your config",
+                Source::Repo { .. } => "Copies your config's repository (with its history)",
+            },
+            account.hostname
+        ),
+    );
     match source {
         Source::Starter => write(runner, &config_path, &starter::config(account))?,
         Source::File(path) => {
             if runner.dry() {
-                println!("  (would copy) {} to /{DIR}/bunny.toml", path.display());
+                super::would(
+                    runner,
+                    "copy",
+                    &format!("{} to /{DIR}/bunny.toml", path.display()),
+                );
             } else {
                 std::fs::create_dir_all(&dir)?;
                 std::fs::copy(path, &config_path)
@@ -267,7 +283,12 @@ pub fn first_switch(
             return Ok(false);
         }
     }
-    println!("\n==> Applying your config (the first bunny switch)");
+    super::say(
+        runner,
+        "Applying your config (the first bunny switch)",
+        "Runs bunny switch and bunny lock inside the new system, so it starts\n\
+         already matching your config, with its first saved version.",
+    );
     let switched = runner.run(&[
         "chroot".into(),
         mnt.clone(),

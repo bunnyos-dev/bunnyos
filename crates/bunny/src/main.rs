@@ -275,7 +275,7 @@ enum Command {
         /// Install from your own config: a bunny.toml, or a git repository (github:you/my-system)
         #[arg(long, value_name = "FILE OR REPO")]
         config: Option<String>,
-        /// Show everything it would do, without erasing or changing anything
+        /// Show each step and what it does, without erasing or changing anything (with --verbose: every command)
         #[arg(long)]
         dry_run: bool,
         /// Read the list of disks from this file (lsblk --json output) instead of lsblk

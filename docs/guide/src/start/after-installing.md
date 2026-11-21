@@ -38,8 +38,9 @@ Two more files sit next to `bunny.toml`:
 
 `/etc/bunny` is already a git repository: `bunny install` made one, with a
 first commit called "As installed". So you have the history of every change
-from the start (`cd /etc/bunny && git log`), and you can install the same
-system on another computer with one command.
+from the start (`cd /etc/bunny && git log`, as yourself; no sudo needed to
+read it), and you can install the same system on another computer with one
+command.
 
 To keep it on GitHub, sign in to GitHub once, as yourself:
 

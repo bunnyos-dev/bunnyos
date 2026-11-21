@@ -712,6 +712,13 @@ GPT
   a `.gitignore` that keeps out `keys/` (the `/home` disk's key) and leftover
   copies, and a first commit "As installed". A `--config` repository keeps
   its own history. Failures are explained and never stop the install.
+  Either way it adds `/etc/bunny` to git's system-wide `safe.directory`
+  (a `[safe]` section appended to the new system's `/etc/gitconfig`,
+  written directly rather than with the USB's `git config --system`, and
+  only if no `[safe] directory` line already covers it or `*`): the folder
+  belongs to root, and git refuses to read it as another user ("detected
+  dubious ownership"). `bunny publish` does the same, so older installs get
+  it, and its preview says so.
 - **`bunny publish [repo]` (current behaviour):** sends `/etc/bunny` to
   GitHub with the invoking user's own `gh` sign-in (`SUDO_USER`/`DOAS_USER`;
   refused when root logged in directly). It starts the history if there's

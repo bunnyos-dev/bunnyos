@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: `git log` in `/etc/bunny` as your own user said "detected dubious
+  ownership". `bunny install` and `bunny publish` now add `/etc/bunny` to
+  git's `safe.directory` in `/etc/gitconfig`, once.
+
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.

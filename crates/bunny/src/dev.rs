@@ -358,12 +358,38 @@ impl Redactions {
         for (from, to) in &self.swaps {
             text = if from.starts_with('/') {
                 text.replace(from.as_str(), to)
+            } else if SHARED_WORDS.contains(&from.to_lowercase().as_str()) {
+                replace_as_name(&text, from, to)
             } else {
                 replace_word(&text, from, to)
             };
         }
         mask_tokens(&text)
     }
+}
+
+/// Words bunny (and Gentoo) print themselves. A user or computer called
+/// one of these is only swapped where it's clearly a name, so a user named
+/// `bunny` doesn't turn `bunny update` into `you update`.
+const SHARED_WORDS: [&str; 8] = [
+    "bunny", "gentoo", "portage", "emerge", "linux", "root", "admin", "user",
+];
+
+/// Replaces `name` only where it's used as a user or computer name:
+/// `name@host`, `user@name`, `"name"` (like `admins = ["name"]`), and after
+/// `login: ` or `user `.
+fn replace_as_name(text: &str, name: &str, with: &str) -> String {
+    let mut out = text.to_string();
+    for (find, put) in [
+        (format!("{name}@"), format!("{with}@")),
+        (format!("@{name}"), format!("@{with}")),
+        (format!("\"{name}\""), format!("\"{with}\"")),
+        (format!("login: {name}"), format!("login: {with}")),
+        (format!("user {name}"), format!("user {with}")),
+    ] {
+        out = out.replace(&find, &put);
+    }
+    out
 }
 
 /// Replaces `word` where it isn't part of a longer name (letters, digits,
@@ -797,6 +823,25 @@ mod tests {
             "you@computer ~ $ ls /home/you/docs\n\
              samba and sams stay; user you, mount <tailnet-name>,\n\
              mail <email>."
+        );
+    }
+
+    #[test]
+    fn a_user_called_bunny_keeps_bunnys_own_words() {
+        // From the dry run: the user name was `bunny`.
+        let r = Redactions::new(vec![
+            ("/home/bunny".into(), "/home/you".into()),
+            ("bunny".into(), "you".into()),
+            ("vm-bunny".into(), "computer".into()),
+        ]);
+        let text = "bunny@vm-bunny ~ $ bunny status\n\
+                    ✓ /etc/bunny/bunny.toml looks good. Use `bunny update`.\n\
+                    admins = [\"bunny\"]\nvm-bunny login: bunny\nls /home/bunny/x";
+        assert_eq!(
+            r.apply(text),
+            "you@computer ~ $ bunny status\n\
+             ✓ /etc/bunny/bunny.toml looks good. Use `bunny update`.\n\
+             admins = [\"you\"]\ncomputer login: you\nls /home/you/x"
         );
     }
 

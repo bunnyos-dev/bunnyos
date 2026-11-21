@@ -37,25 +37,39 @@ Two more files sit next to `bunny.toml`:
 ## Keep your config in git
 
 Then you have the history of every change, and you can install the same
-system on another computer with one command.
+system on another computer with one command. `/etc/bunny` belongs to root,
+so git runs with sudo there, and root needs a name for its commits (use
+your GitHub "noreply" address, from GitHub's Settings → Emails, to keep
+your real one private):
 
 ```sh
 cd /etc/bunny
-sudo git init
+sudo git init -b main
+sudo git config user.name "Your Name"
+sudo git config user.email "you@users.noreply.github.com"
 sudo git add bunny.toml bunny.lock hosts
 sudo git commit -m "My system, as installed"
 ```
 
-To keep it on GitHub, make a new **private** repository there (empty, no
-README), then, with its address:
+After a change: `sudo git commit -am "Added tmux"`.
+
+**On GitHub (optional).** Make a new **private** repository there (empty,
+no README). Pushing runs as root too, so sign root in to GitHub once:
+
+```sh
+bunny add dev-util/github-cli
+sudo gh auth login
+sudo gh auth setup-git
+```
+
+(Without a desktop, `gh auth login` says it can't copy the code or open a
+browser. That's expected: open github.com/login/device on another device
+and type the code it shows.) Then, with your repository's address:
 
 ```sh
 sudo git remote add origin https://github.com/you/my-system.git
 sudo git push -u origin main
 ```
-
-From then on, after a change: `sudo git commit -am "Added tmux"` and
-`sudo git push`.
 
 To install the same system on another computer, start it from the USB and run:
 

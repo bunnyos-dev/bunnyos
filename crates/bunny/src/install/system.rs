@@ -509,7 +509,11 @@ mod tests {
         assert!(env.contains("SERVICES=\"dhcpcd sysklogd sshd\""), "{env}");
         assert!(env.contains("BOOT_SERVICES=\"swapfiles\""), "{env}");
         assert!(read("etc/init.d/swapfiles").contains("need localmount"));
-        assert!(read("root/bunny-inside.sh").contains("grub-install"));
+        let inside = read("root/bunny-inside.sh");
+        assert!(inside.contains("grub-install"));
+        // The time zone is set with the link current Gentoo reads.
+        assert!(inside.contains("ln -sf \"../usr/share/zoneinfo/$TIMEZONE\" /etc/localtime"));
+        assert!(inside.contains("eselect news read --quiet all"));
         assert!(dir.path().join("srv").is_dir());
         assert!(dir.path().join("usr/local/bin/bunny").is_file());
         // No passwords are ever written to the new system's files.

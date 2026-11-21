@@ -104,6 +104,13 @@ bunny_rollback() {
         esac
     fi
 
+    # When /boot is its own partition this step can't reach it, so /boot
+    # still has the newer kernel. Leave a note: on this first start, bunny
+    # (the bunny-finish-undo service) puts that generation's kernel back.
+    [ -d "$bunny_top/@/var/lib/bunny" ] || mkdir -p "$bunny_top/@/var/lib/bunny"
+    printf '%s\n' "$bunny_target" > "$bunny_top/@/var/lib/bunny/boot-undo" || \
+        warn "bunny: couldn't leave a note to put /boot's kernel back; bunny status will say so"
+
     # The restored system brings back its own, older boot menu, whose undo
     # entry would go one change further back. Remove it: there's no "last
     # change" to undo until the next switch.

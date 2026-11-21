@@ -29,6 +29,14 @@ pub(super) fn install_boot_module(
             .with_context(|| format!("Couldn't write {}", path.display()))?;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
     }
+    // The start-up service that finishes an undo when /boot is its own
+    // partition (the startup image can't reach it). Harmless otherwise.
+    crate::init::for_config(crate::config::Init::default(), root)
+        .add_boot_service(
+            crate::finish_undo::SERVICE,
+            crate::finish_undo::SERVICE_SCRIPT,
+        )
+        .with_context(|| format!("Couldn't add the {} service", crate::finish_undo::SERVICE))?;
     let undo = |why: String| -> anyhow::Error {
         let _ = std::fs::remove_dir_all(&dir);
         anyhow::anyhow!(

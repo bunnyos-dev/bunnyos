@@ -14,7 +14,7 @@ pub(crate) use install::{install_cmd, Args as InstallArgs};
 pub(crate) use packages::{add_cmd, remove_cmd, search_cmd};
 pub(crate) use report::report;
 pub(crate) use switch::{switch, update_cmd};
-pub(crate) use undo::{clean_cmd, generations, rollback_cmd};
+pub(crate) use undo::{clean_cmd, finish_undo_cmd, generations, rollback_cmd};
 
 use std::path::Path;
 use std::process::ExitCode;

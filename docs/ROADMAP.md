@@ -386,7 +386,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny.toml` elsewhere has no `hosts/` next to it, so this computer's
       packages (GRUB, the kernel…) show as "would be removed". Use this
       computer's host file, or say clearly that it isn't included.
-- [ ] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
+- [~] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
       sudo's password and a package name that doesn't exist each sent a
       report. Only bunny's own problems should.
 - [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove

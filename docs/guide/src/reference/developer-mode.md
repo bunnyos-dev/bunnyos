@@ -21,7 +21,7 @@ name = "laptop"     # what to call this computer in reports
 
 | Setting | Values | Default | Meaning |
 |---|---|---|---|
-| `report` | `false` / `true` / `"auto"` | `false` | `true` records every command; you send them with `bunny report`. `"auto"` also sends a command by itself when it fails or shows a ⚠ or ✗. Notes marked `·` (like the reminder to only add repositories you trust) don't count. |
+| `report` | `false` / `true` / `"auto"` | `false` | `true` records every command; you send them with `bunny report`. `"auto"` also sends a command by itself when it fails or shows a ⚠ or ✗. Notes marked `·` (like the reminder to only add repositories you trust) don't count, and neither do your own slips: a package name that doesn't exist, a config mistake, or no password at sudo's question (exit code 4; see [exit codes](commands.md#exit-codes)). Those are still recorded, and `bunny report` sends them if you ask. |
 | `name` | any text | `"this computer"` | Shown in reports, so you can tell your computers apart. |
 | `reports` | `"owner/name"` | `"bunnyos-dev/bunny-reports"` | The GitHub repository reports are filed in. It should be private. |
 

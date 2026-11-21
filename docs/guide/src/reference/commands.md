@@ -69,3 +69,13 @@ too.
 - **Erasing a disk** (`bunny install`) asks you to type the disk's name
   instead, so it can't happen by pressing Enter.
 - Anything other than yes or no is asked again rather than guessed.
+
+## Exit codes
+
+| Code | Means |
+|---|---|
+| 0 | It worked (or you answered no, and nothing was changed). |
+| 1 | Something went wrong. bunny says what. |
+| 4 | Stopped because of what was typed, and nothing was changed: a package name that doesn't exist, a mistake in the config, or no password at sudo's or doas's question (Ctrl+C there included). |
+
+`bunny diff` has its own: 0 when there are no differences, 1 when there are.

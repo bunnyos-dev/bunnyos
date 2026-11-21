@@ -74,11 +74,18 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     if admin_refused(status.code(), status.signal()) {
         eprintln!("{}", refused_message(admin));
     }
-    Ok(Some(if status.success() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }))
+    Ok(Some(passed_on(status.code())))
+}
+
+/// The exit code for the bunny that asked sudo or doas to run it as root:
+/// success, [`YOUR_INPUT`] (bunny as root stopped because of what you typed,
+/// or sudo or doas got no password), or a failure.
+fn passed_on(code: Option<i32>) -> ExitCode {
+    match code {
+        Some(0) => ExitCode::SUCCESS,
+        Some(n) if n == i32::from(YOUR_INPUT) || admin_refused(Some(n)) => your_input(),
+        _ => ExitCode::FAILURE,
+    }
 }
 
 /// Held while a command changes the system: only one at a time, and none
@@ -131,11 +138,23 @@ pub(crate) fn changing(real_system: bool, pending_ok: bool) -> anyhow::Result<Ch
 /// `elevate`: anything but 1, which sudo and doas use for "didn't run it".
 pub(crate) const ELEVATED_FAILURE: u8 = 3;
 
+/// The exit code for "stopped because of what you typed, not a problem in
+/// bunny": a package name that doesn't exist, a mistake in the config, or
+/// no password at sudo's or doas's question (Ctrl+C included). Nothing was
+/// changed. Developer mode doesn't report these by itself.
+pub(crate) const YOUR_INPUT: u8 = 4;
+
+/// [`YOUR_INPUT`] as an exit code.
+pub(crate) fn your_input() -> ExitCode {
+    ExitCode::from(YOUR_INPUT)
+}
+
 /// bunny's exit code when it was re-run as root (`--elevated`): a failure
 /// becomes `ELEVATED_FAILURE`, so `elevate` can tell it apart from sudo or
-/// doas refusing.
+/// doas refusing. [`YOUR_INPUT`] is kept, so the bunny that asked for admin
+/// rights can pass it on.
 pub(crate) fn elevated_exit(code: ExitCode, elevated: bool) -> ExitCode {
-    if elevated && code != ExitCode::SUCCESS {
+    if elevated && code != ExitCode::SUCCESS && code != your_input() {
         ExitCode::from(ELEVATED_FAILURE)
     } else {
         code
@@ -290,7 +309,8 @@ pub(crate) fn read_config_text(config: &Path) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        admin_refused, elevated_exit, parse_answer, refused_message, Default, ELEVATED_FAILURE,
+        admin_refused, elevated_exit, parse_answer, passed_on, refused_message, your_input,
+        Default, ELEVATED_FAILURE, YOUR_INPUT,
     };
     use std::process::ExitCode;
 
@@ -306,6 +326,23 @@ mod tests {
         assert!(!admin_refused(Some(101), None));
         assert!(!admin_refused(None, Some(libc::SIGKILL)));
         assert!(!admin_refused(None, Some(libc::SIGTERM)));
+    }
+
+    #[test]
+    fn your_own_mistakes_keep_their_exit_code_through_sudo() {
+        // bunny as root stopped over a name that doesn't exist: passed on.
+        assert_eq!(elevated_exit(your_input(), true), your_input());
+        assert_eq!(passed_on(Some(i32::from(YOUR_INPUT))), your_input());
+        // sudo got no password (Ctrl+C at its question): your input too.
+        assert_eq!(passed_on(Some(1)), your_input());
+        // bunny's own failures and crashes stay failures.
+        assert_eq!(
+            passed_on(Some(i32::from(ELEVATED_FAILURE))),
+            ExitCode::FAILURE
+        );
+        assert_eq!(passed_on(Some(101)), ExitCode::FAILURE);
+        assert_eq!(passed_on(None), ExitCode::FAILURE);
+        assert_eq!(passed_on(Some(0)), ExitCode::SUCCESS);
     }
 
     #[test]

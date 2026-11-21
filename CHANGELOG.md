@@ -36,6 +36,10 @@ a minor version can change how things work).
 - Fixed: `bunny plan` without sudo said the boot menu's undo entry couldn't
   be set up, when it just couldn't read `/boot`. It now says the boot menu
   wasn't checked and to run `sudo bunny plan` to include it.
+- Developer mode's `"auto"` no longer sends a report when you mistype a
+  package name, make a config mistake, or don't give sudo your password
+  (Ctrl+C at its question). These now end with exit code 4 ("stopped
+  because of what was typed; nothing was changed") instead of 1.
 
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also

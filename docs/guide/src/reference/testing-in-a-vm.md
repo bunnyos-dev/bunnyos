@@ -88,6 +88,10 @@ tools/bunny-vm.sh snap clean-install
 | `tools/bunny-vm.sh restore clean-install` | Go back to the clean install (VM off) |
 | `tools/bunny-vm.sh snap <name>` / `snaps` | Save / list VM snapshots (VM off) |
 | `tools/bunny-vm.sh reset-keys` | Wipe the VM's Secure Boot keys |
+| `tools/bunny-vm.sh forget-key` | Forget the VM's SSH key, after you reinstall it |
+
+The VM's user is `you` unless you say otherwise: `VM_USER=bunny tools/bunny-vm.sh ssh`
+(also for `put` and `stop`).
 
 To test a build of bunny: `cargo build --release`,
 `tools/bunny-vm.sh put target/release/bunny`, then run `./bunny …` in the VM.
@@ -137,5 +141,13 @@ Every command takes `VM=laptop` the same way: `VM=laptop tools/bunny-vm.sh ssh`,
 - **Black window?** Start with `GL=0 tools/bunny-vm.sh run`.
 - **"Connection refused" from ssh:** the VM isn't running or hasn't finished
   booting yet.
+- **"REMOTE HOST IDENTIFICATION HAS CHANGED" or "Host key verification
+  failed":** each VM remembers its own SSH key (in `~/bunny-vm-<name>/known_hosts`,
+  or `~/bunny-vm/known_hosts` for the main one), so two VMs sharing a port
+  don't clash any more. If you see it anyway, that VM was reinstalled and
+  has a new key: run `VM=<name> tools/bunny-vm.sh forget-key` and connect
+  again. (Older versions of this script kept the keys in your own
+  `~/.ssh/known_hosts`; the old `[localhost]:2222` and `[localhost]:2223`
+  lines there aren't used any more.)
 - **Paste commands that ask questions one at a time**, or the next pasted line
   becomes the answer.

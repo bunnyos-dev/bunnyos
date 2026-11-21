@@ -346,7 +346,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       uses port 2223, so SSH remembers the last VM's key and refuses the new
       one. Fix: keep each VM's key in its own known_hosts file
       (`$VM_DIR/known_hosts`), or give each VM its own port.
-- [ ] **Developer mode can't record `bunny install`.** It's set in
+- [~] **Developer mode can't record `bunny install`.** It's set in
       `bunny.toml`, and the live USB has none, so the install itself (the
       part being tested most) isn't recorded. Idea: preview ISOs record by
       default, and the recording is copied into the new system so

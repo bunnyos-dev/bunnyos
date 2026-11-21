@@ -103,6 +103,12 @@ If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run
 `bunny install` again and it starts over from the beginning.
 
+On a **preview USB** (built for testing), the install is recorded, and just
+before unmounting it copies the recording into your home folder in the new
+system ("Keeping the recording of this install"), so `bunny report` can send
+it after you restart. See
+[Developer mode](developer-mode.md#recording-an-install-preview-usbs).
+
 ## The files it writes
 
 | File | What it is |

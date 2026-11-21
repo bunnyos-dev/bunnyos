@@ -78,6 +78,27 @@ In `~/.local/state/bunny/sessions/`: a `.log` file with the raw recording
 and a `.toml` file with the command, the time and whether it's been sent.
 Delete them whenever you like.
 
+## Recording an install (preview USBs)
+
+The live USB has no `bunny.toml`, so there's nowhere to turn developer mode
+on. Instead, **preview USBs** (the ones built for testing, named
+`bunny-linux-live-preview.iso`) record every bunny command by themselves:
+they have a file, `/etc/bunny-preview.toml`, with `[dev] report = true`. The
+welcome says so. Nothing is sent from the USB.
+
+When `bunny install` finishes, it copies its recording (up to just before it
+unmounts the new system, so the last few lines are missing) into your new
+home folder, `~/.local/state/bunny/sessions/`. After restarting, sign in to
+GitHub and run `bunny report`: the install is one of the recordings waiting,
+and it shows what it sends and asks first. It's sent like any other
+recording, with personal details swapped out. If the install fails, the
+recording stays on the USB, in `/root/.local/state/bunny/sessions/`, until
+you restart.
+
+Release USBs don't have the file and don't record anything. An install from
+any USB is also recorded when developer mode is already on for that command
+(for example, a `bunny install` you run inside a recorded session).
+
 ## How it works
 
 bunny runs the command inside `script` (from util-linux), which records a

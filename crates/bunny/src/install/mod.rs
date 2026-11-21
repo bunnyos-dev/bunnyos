@@ -75,12 +75,73 @@ pub fn run(
         first_config::start_history(config, choices, account, runner)?;
         Ok(Finished { switched })
     })();
+    if result.is_ok() {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        keep_recording(
+            crate::dev::current_recording().as_deref(),
+            &args,
+            choices,
+            account,
+            runner,
+        );
+    }
     let _ = system::finish(choices, runner);
     first_config::clean_up(config, runner);
     if !runner.dry() {
         let _ = std::fs::remove_file(&home_key);
     }
     result
+}
+
+/// When this install is being recorded (developer mode, on by default on a
+/// preview USB), copies the recording into your home folder in the new
+/// system, so `bunny report` there sends it after the first start. Never
+/// stops the install.
+fn keep_recording(
+    log: Option<&std::path::Path>,
+    args: &[String],
+    choices: &Choices,
+    account: &Account,
+    runner: &mut dyn Runner,
+) {
+    let Some(log) = log else {
+        return;
+    };
+    let user = &account.username;
+    let home = format!("/home/{user}");
+    let sessions = ".local/state/bunny/sessions";
+    println!("\n==> Keeping the recording of this install (developer mode)");
+    if runner.dry() {
+        println!("  (would copy) {} to {home}/{sessions}/", log.display());
+        return;
+    }
+    let to = choices.mnt.join(&home[1..]).join(sessions);
+    let copied = crate::dev::copy_recording(log, &to, args).and_then(|_| {
+        let owned = runner.run(&[
+            "chroot".into(),
+            choices.mnt.to_string_lossy().into_owned(),
+            "chown".into(),
+            "-R".into(),
+            format!("{user}:"),
+            format!("{home}/.local"),
+        ])?;
+        if owned {
+            Ok(())
+        } else {
+            anyhow::bail!("couldn't give it to {user}")
+        }
+    });
+    match copied {
+        Ok(()) => println!(
+            "  ✓ It's in {home}/{sessions}/. After restarting, `bunny report` sends it\n    \
+             (it shows what it sends and asks first)."
+        ),
+        Err(err) => println!(
+            "  ⚠ Couldn't copy it into the new system ({err:#}).\n    \
+             It's still on the USB, in {}, until you restart.",
+            log.display()
+        ),
+    }
 }
 
 /// How the install ended.
@@ -111,4 +172,81 @@ fn make_key(path: &std::path::Path, runner: &dyn Runner) -> Result<()> {
     use std::io::Write;
     file.write_all(&key)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Records commands and does nothing.
+    #[derive(Default)]
+    struct Recorded(Vec<String>, bool);
+    impl Runner for Recorded {
+        fn run(&mut self, cmd: &[String]) -> Result<bool> {
+            self.0.push(cmd.join(" "));
+            Ok(true)
+        }
+        fn dry(&self) -> bool {
+            self.1
+        }
+    }
+
+    fn account() -> Account {
+        Account {
+            username: "you".into(),
+            hostname: "laptop".into(),
+            ssh: false,
+            timezone: "UTC".into(),
+            keymap: "us".into(),
+        }
+    }
+
+    #[test]
+    fn a_recorded_install_is_copied_into_your_home_folder() {
+        let usb = tempfile::tempdir().unwrap();
+        let log = usb.path().join("20261119-201500-install.log");
+        std::fs::write(&log, "recorded\n").unwrap();
+        let mnt = tempfile::tempdir().unwrap();
+        let choices = Choices {
+            disk: "/dev/vda".into(),
+            mnt: mnt.path().to_path_buf(),
+            ..Default::default()
+        };
+        let mut r = Recorded::default();
+        keep_recording(
+            Some(&log),
+            &["install".into()],
+            &choices,
+            &account(),
+            &mut r,
+        );
+        let sessions = mnt.path().join("home/you/.local/state/bunny/sessions");
+        assert!(sessions.join("20261119-201500-install.log").is_file());
+        assert!(sessions.join("20261119-201500-install.toml").is_file());
+        assert_eq!(
+            r.0,
+            [format!(
+                "chroot {} chown -R you: /home/you/.local",
+                mnt.path().display()
+            )]
+        );
+    }
+
+    #[test]
+    fn nothing_is_copied_when_not_recording_or_on_a_dry_run() {
+        let mnt = tempfile::tempdir().unwrap();
+        let choices = Choices {
+            disk: "/dev/vda".into(),
+            mnt: mnt.path().to_path_buf(),
+            ..Default::default()
+        };
+        let mut r = Recorded::default();
+        keep_recording(None, &[], &choices, &account(), &mut r);
+        let log = mnt.path().join("x-install.log");
+        std::fs::write(&log, "").unwrap();
+        let mut dry = Recorded(Vec::new(), true);
+        keep_recording(Some(&log), &[], &choices, &account(), &mut dry);
+        assert!(r.0.is_empty() && dry.0.is_empty());
+        assert!(!mnt.path().join("home").exists());
+    }
 }

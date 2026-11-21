@@ -36,6 +36,14 @@ else
     Then check:  ping -c 1 gentoo.org
 EOF
 fi
+if [ -f /etc/bunny-preview.toml ]; then
+    cat <<'EOF'
+
+  This is a preview USB, for testing: bunny records every command here.
+  Nothing is sent from the USB. bunny install copies its recording into the
+  new system; there, `bunny report` shows what it sends and asks first.
+EOF
+fi
 echo
 echo "  Type welcome to see this again."
 echo

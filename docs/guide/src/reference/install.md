@@ -110,6 +110,7 @@ the disk again. The disk is only partly set up at that point; run
 | `/etc/bunny/bunny.toml` | Your config. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
 | `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone and keyboard layout. |
+| `/usr/local/share/consolefonts/bunny.psfu`, `/etc/conf.d/consolefont` | A console font that can draw bunny's marks (✓ ✗ ⚠), set by OpenRC's `consolefont` service at boot. It's kbd's `eurlatgr`, with ⚠ drawn as `!` (no console font has a ⚠). Only the text console uses it; desktops have their own fonts. |
 
 Passwords are never written to a file: they're passed straight to
 `cryptsetup` and `chpasswd`.

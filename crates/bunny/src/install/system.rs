@@ -515,4 +515,18 @@ mod tests {
         // No passwords are ever written to the new system's files.
         assert!(!env.to_lowercase().contains("password"));
     }
+
+    /// The console font that can draw ✓ ✗ ⚠ is set up and started at boot.
+    #[test]
+    fn inside_script_sets_a_console_font_with_bunnys_marks() {
+        assert!(INSIDE.contains("/usr/share/consolefonts/eurlatgr.psfu.gz"));
+        // ⚠ is added to the "!" glyph (position 0x21).
+        assert!(INSIDE.contains("printf '0x021\\tU+26A0\\n'"));
+        assert!(INSIDE.contains("/etc/conf.d/consolefont"));
+        assert!(INSIDE.contains("rc-update add consolefont boot"));
+        // It only needs kbd, which the stage3 already has.
+        let font = INSIDE.find("consolefont boot").unwrap();
+        let packages = INSIDE.find("emerge -q --noreplace $PACKAGES").unwrap();
+        assert!(font < packages);
+    }
 }

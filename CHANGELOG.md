@@ -85,6 +85,9 @@ a minor version can change how things work).
 - Guide: the git steps in "What to do first" work as written (branch
   `main`, a name for root's commits, signing root in to GitHub), and
   "Helping test" signs in to GitHub before turning on developer mode.
+- `bunny install --dry-run` now shows each step in plain words (its name
+  and what it does) instead of a wall of commands. `--dry-run --verbose`
+  shows every command and file, as before.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

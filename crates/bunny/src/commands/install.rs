@@ -37,6 +37,36 @@ pub(crate) struct Args {
     pub findmnt: Option<PathBuf>,
 }
 
+/// Runs the install for real, or for a dry run: in plain words (each
+/// step and what it does) by default, every command and file with
+/// `--verbose`.
+fn runner_for(args: &Args) -> Box<dyn Runner> {
+    if !args.dry_run {
+        Box::new(apply::SystemRunner)
+    } else if crate::VERBOSE.load(std::sync::atomic::Ordering::Relaxed) {
+        Box::new(apply::PrintRunner)
+    } else {
+        Box::new(apply::StepsRunner)
+    }
+}
+
+/// What a dry run will show, after the preview.
+fn dry_run_note(erases: bool) -> String {
+    let nothing = if erases {
+        "nothing will be erased"
+    } else {
+        "nothing will be changed"
+    };
+    if crate::VERBOSE.load(std::sync::atomic::Ordering::Relaxed) {
+        format!("\nThis is a dry run: {nothing}, and every command and file is only printed.")
+    } else {
+        format!(
+            "\nThis is a dry run: {nothing}. Each step says what it would do\n\
+             (add --verbose to see the exact commands and files)."
+        )
+    }
+}
+
 fn ask_line(question: &str) -> anyhow::Result<String> {
     print!("{question}");
     std::io::stdout().flush()?;
@@ -238,11 +268,7 @@ fn mounted_flow(
     if review.offer_subvolumes {
         let answer = ask_line("\nMake the standard subvolumes first, for undo? [Y/n] ")?;
         if !answer.eq_ignore_ascii_case("n") && !answer.eq_ignore_ascii_case("no") {
-            let mut runner: Box<dyn Runner> = if args.dry_run {
-                Box::new(apply::PrintRunner)
-            } else {
-                Box::new(apply::SystemRunner)
-            };
+            let mut runner: Box<dyn Runner> = runner_for(args);
             found = mounted::add_subvolumes(&found, folder, runner.as_mut())?;
             println!("✓ Made the subvolumes. Now mounted:");
             for m in &found.mounts {
@@ -266,7 +292,7 @@ fn mounted_flow(
     );
     show_config_line(source, args.edit);
     if args.dry_run {
-        println!("\nThis is a dry run: nothing will be changed, and commands are only printed.");
+        println!("{}", dry_run_note(false));
     } else {
         let answer = ask_line("\nInstall Bunny Linux there? [y/N] ")?;
         if !answer.eq_ignore_ascii_case("y") && !answer.eq_ignore_ascii_case("yes") {
@@ -371,7 +397,7 @@ fn erase_disk_flow(
     show_config_line(source, args.edit);
 
     if args.dry_run {
-        println!("\nThis is a dry run: nothing will be erased, and commands are only printed.");
+        println!("{}", dry_run_note(true));
     } else {
         println!("\nThis can't be undone.");
         let answer = ask_line(&format!(
@@ -405,11 +431,7 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
     }
 
     // Your own config is fetched and checked before anything is erased.
-    let mut check_runner: Box<dyn Runner> = if args.dry_run {
-        Box::new(apply::PrintRunner)
-    } else {
-        Box::new(apply::SystemRunner)
-    };
+    let mut check_runner: Box<dyn Runner> = runner_for(&args);
     let source = first_config::prepare(args.config.as_deref(), check_runner.as_mut())?;
 
     let found = match &args.mounted {
@@ -485,11 +507,7 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
         timezone,
         keymap,
     };
-    let mut runner: Box<dyn Runner> = if args.dry_run {
-        Box::new(apply::PrintRunner)
-    } else {
-        Box::new(apply::SystemRunner)
-    };
+    let mut runner: Box<dyn Runner> = runner_for(&args);
     let finished = crate::install::run(
         &choices,
         &account,

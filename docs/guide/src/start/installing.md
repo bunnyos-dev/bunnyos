@@ -118,8 +118,21 @@ It ends with "✓ You're online." when you are.
 bunny install --dry-run
 ```
 
-This goes through every question and prints every step, without changing
-anything. It's a good way to see what's coming.
+This goes through every question and then lists each step and what it
+does, without changing anything. It's a good way to see what's coming:
+
+```
+==> Partitioning /dev/nvme0n1
+    Erases /dev/nvme0n1's partition table and makes two partitions: EFI (2 GB),
+    which the computer starts from, and the rest for Bunny Linux.
+
+==> Encrypting the disk (LUKS2)
+    Encrypts the Bunny Linux partition with your password, then unlocks
+    it so the install can write to it.
+```
+
+To see the exact commands and files instead, add `--verbose`:
+`bunny install --dry-run --verbose`.
 
 ## 6. Install
 

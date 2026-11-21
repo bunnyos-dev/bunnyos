@@ -26,7 +26,7 @@ mod tests;
 
 pub use boot_menu::{refresh_earlier, save_kernels};
 pub use package_use::foreign_package_use_files;
-pub use runner::{PrintRunner, Runner, SystemRunner};
+pub use runner::{PrintRunner, Runner, StepsRunner, SystemRunner};
 
 use admin::apply_security;
 use boot_menu::{install_boot_module, write_menu};

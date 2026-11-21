@@ -42,6 +42,13 @@ pub trait Runner {
     fn dry(&self) -> bool {
         false
     }
+
+    /// True for a dry run that describes each step in plain words instead
+    /// of listing its commands and files (`bunny install --dry-run`
+    /// without `--verbose`).
+    fn describes_steps(&self) -> bool {
+        false
+    }
 }
 
 /// Runs commands for real.
@@ -210,5 +217,44 @@ impl Runner for PrintRunner {
 
     fn dry(&self) -> bool {
         true
+    }
+}
+
+/// A dry run that runs and prints no commands: the steps say what they do
+/// instead (see [`Runner::describes_steps`]).
+pub struct StepsRunner;
+
+impl Runner for StepsRunner {
+    fn run(&mut self, _cmd: &[String]) -> Result<bool> {
+        Ok(true)
+    }
+
+    fn run_with_input(&mut self, _cmd: &[String], _input: &str, _secret: bool) -> Result<bool> {
+        Ok(true)
+    }
+
+    fn dry(&self) -> bool {
+        true
+    }
+
+    fn describes_steps(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_steps_runner_changes_nothing() {
+        let mut r = StepsRunner;
+        assert!(r.dry() && r.describes_steps());
+        let cmd = vec!["wipefs".to_string(), "--all".into(), "/dev/null".into()];
+        assert!(r.run(&cmd).unwrap());
+        assert!(r.run_with_input(&cmd, "secret", true).unwrap());
+        assert_eq!(r.output(&cmd).unwrap(), None);
+        assert!(!PrintRunner.describes_steps());
+        assert!(!SystemRunner.describes_steps());
     }
 }

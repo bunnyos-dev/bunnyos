@@ -712,7 +712,9 @@ GPT
   key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
   only to the tools' standard input, never to files or the screen. On a
   failure everything is unmounted and closed, so a second run starts clean.
-  `--dry-run` prints every command and file (PrintRunner).
+  `--dry-run` shows each step's name and what it does in plain words
+  (StepsRunner); `--dry-run --verbose` prints every command and file
+  (PrintRunner).
 - **Your config's history (current behaviour):** after the first switch,
   `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
   main`, run with the USB's git), with a repository-only identity from the

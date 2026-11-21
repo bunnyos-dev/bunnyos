@@ -158,6 +158,13 @@ impl Plan {
 
         if !self.add_repositories.is_empty() {
             section(&mut out, "Repositories to add", "+", &self.add_repositories);
+        }
+        // Bunny Linux's own repository needs no warning.
+        if self
+            .add_repositories
+            .iter()
+            .any(|r| crate::overlays::built_in(r).is_none())
+        {
             // A note, not a warning: "·" rather than ⚠, because ⚠ and ✗ mean
             // "something went wrong" (developer mode's "auto" reports them).
             out.push_str(

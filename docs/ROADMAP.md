@@ -272,7 +272,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       description, and #6 is a copy of the system before nothing happened.
       Delete the snapshot when a switch fails before changing anything (a
       cancelled one already does), or mark it "(stopped early)".
-- [ ] **Idea: Bunny Linux's own name and logo (fastfetch and friends).**
+- [~] **Idea: Bunny Linux's own name and logo (fastfetch and friends).** (bunny-overlay #3 and this repo's PR; placeholder logo)
       Tools like fastfetch read `/etc/os-release` to know which system they're
       on, and Gentoo's says Gentoo, so they show Gentoo's logo. Plan: a small
       `bunny-release` package in `::bunny` with Bunny Linux's os-release

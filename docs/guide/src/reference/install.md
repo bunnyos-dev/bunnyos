@@ -138,8 +138,10 @@ computer:
 
 - **`/etc/bunny/bunny.toml`** is everything you choose: your programs,
   services, who can use sudo, and the boot menu's Undo entry. The starter
-  one lists the minimal system's networking, log, sudo and git, and has
-  comments pointing to this Guide. Put it in git and use it on every
+  one lists the minimal system's networking, log, sudo and git, plus
+  `sys-apps/bunny-release` from Bunny Linux's own repository
+  (`repositories = ["bunny"]`), which makes the system say Bunny Linux
+  instead of Gentoo. It has comments pointing to this Guide. Put it in git and use it on every
   computer.
 - **`/etc/bunny/hosts/<computer name>.toml`** is what this computer needs to
   start (the kernel, firmware, GRUB, the filesystem tools, and `cryptsetup`

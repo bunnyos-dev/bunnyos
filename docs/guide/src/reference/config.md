@@ -107,6 +107,12 @@ With `--verbose`, the full output is shown as it comes instead.
   Mango), and offers to add their repository and testing versions for you.
 - Repositories must be downloadable with git (`dev-vcs/git`, which the
   installed system has).
+- **`"bunny"`** is Bunny Linux's own repository
+  ([bunny-overlay](https://github.com/bunnyos-dev/bunny-overlay)). It isn't
+  in Gentoo's list, so bunny knows its address itself, and doesn't show the
+  warning above for it. It has `sys-apps/bunny-release`, which makes the
+  system say Bunny Linux (`/etc/os-release`, and the logo in `fastfetch`),
+  and bunny itself. A config from `bunny install` has it already.
 
 Like `packages`, put `repositories` above the first `[section]`.
 

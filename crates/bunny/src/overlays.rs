@@ -15,6 +15,17 @@ use crate::apply::Runner;
 /// Gentoo's list of repositories.
 pub const LIST_URL: &str = "https://api.gentoo.org/overlays/repositories.xml";
 
+/// Bunny Linux's own repository (`bunny-overlay`): bunny itself and
+/// `sys-apps/bunny-release`. It isn't in Gentoo's list, so bunny knows where
+/// it is.
+pub const OWN: &str = "bunny";
+pub const OWN_GIT: &str = "https://github.com/bunnyos-dev/bunny-overlay.git";
+
+/// Where to get a repository bunny knows without Gentoo's list.
+pub fn built_in(name: &str) -> Option<&'static str> {
+    (name == OWN).then_some(OWN_GIT)
+}
+
 /// One repository in Gentoo's list.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Listed {

@@ -477,7 +477,12 @@ admins = ["you"]
 list (`api.gentoo.org/overlays/repositories.xml`). A switch writes
 `repos.conf/bunny-<name>.conf` (git, auto-sync) and runs `emaint sync` right
 after the snapshot, then checks packages; repositories set up outside bunny
-are reported, not touched. `[pkg] keywords` go in
+are reported, not touched. `"bunny"` (Bunny Linux's own overlay,
+`bunny-overlay`) is built in: bunny knows its git address, so it needs no
+lookup and gets no trust warning. The starter config from `bunny install`
+lists it and `sys-apps/bunny-release` (Bunny Linux's `/etc/os-release` and
+fastfetch logo); the first switch inside the new system installs it, since
+the install script's own emerge only sees Gentoo's tree. `[pkg] keywords` go in
 `package.accept_keywords/zz-bunny`. `bunny add` has a short list of
 well-known packages outside `::gentoo` (Mango in GURU, Hyprland in
 hyproverlay) and offers their repository and keywords. Custom repository

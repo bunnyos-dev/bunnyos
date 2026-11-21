@@ -10,11 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
-- `bunny install` asks whether to encrypt the disk, whether to make swap (or
-  set up hibernation), and, when there's a second disk, whether to keep
-  `/home` on it. Pressing Enter takes the recommended answer each time, and
-  the summary shows the options that repeat your choices on another
-  computer.
+- `bunny install` asks "Use the recommended setup?": Enter gives an encrypted
+  disk with compressed swap in memory (zram, like Fedora); `n` asks about
+  encryption and swap one at a time (zram, a swap file too, hibernate, or
+  none). The summary shows the options that repeat your choices on another
+  computer. New systems get zram swap by default (`--no-zram` turns it off).
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

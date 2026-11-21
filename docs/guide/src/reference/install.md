@@ -35,7 +35,8 @@ minimal system. It runs from a live USB.
 | `--disk <disk>` | The disk to erase, like `/dev/nvme0n1` or `nvme0n1`. Without it, bunny lists the disks and asks. |
 | `--no-encrypt` | Don't encrypt. Anyone with the computer can then read the disk. |
 | `--efi-size <size>` | Size of the EFI partition. Default `2G`; at least `512M`. |
-| `--swap <size>` | Make a swapfile of this size, like `8G`, in its own subvolume (`/swap/swapfile`). Default: no swapfile. |
+| `--swap <size>` | Also make a swap file on disk of this size, like `8G`, in its own subvolume (`/swap/swapfile`), used after zram. Default: none. |
+| `--no-zram` | No compressed swap in memory. By default bunny sets up zram (a `zram` service in the boot runlevel): as big as memory, up to 8 GB, used before any swap file. |
 | `--hibernate` | Set up hibernation: a swapfile as big as your memory (unless `--swap` says otherwise), and the kernel settings to resume from it. |
 | `--home-disk <disk>` | Use a second disk, all of it, for `/home`. It's erased too, encrypted with the same password, and unlocked at boot with a key file kept on the encrypted system (so you only type the password once). |
 | `--ssh` | Start the SSH server at boot. Off by default. |
@@ -56,13 +57,16 @@ Sizes are written like `512M`, `2G` or `1.5G`.
    is left out, with the reason, if it's in use: anything on it mounted (the
    USB stick you started from always is), used as swap, or unlocked. Disks
    under 20 GB and read-only ones are left out too.
-3. **Encryption, swap and /home.** Each question has a recommended answer,
-   taken by pressing Enter: encrypt the disk ([Y/n], yes), swap (Enter for
-   none; a size like `8G`; or `hibernate`, sized from the computer's memory;
-   the advice says none from 16 GB of memory, a little below that), and,
-   only when there's another usable disk, `/home` on it ([y/N], no; with
-   several, you name one). A question isn't asked when its option was
-   given: `--no-encrypt`; `--swap` or `--hibernate`; `--home-disk`.
+3. **The recommended setup, or your own.** "Use the recommended setup?
+   [Y/n]": Enter takes it: the disk encrypted, and swap compressed in
+   memory (zram, as big as the computer's memory up to 8 GB, like Fedora),
+   with no swap file on disk. `n` asks, each with the recommended answer on
+   Enter: encrypt ([Y/n]), then swap: Enter for zram; a size (zram plus a
+   swap file on disk, used after zram); `hibernate` (zram plus a swap file
+   as big as memory, and resuming from it); or `none`. An option answers
+   its question, which isn't asked: `--no-encrypt`; `--swap`,
+   `--hibernate` or `--no-zram`. Given both, nothing is asked. `/home` on
+   a second disk isn't asked: use `--home-disk`.
 4. **The preview.** Everything on the disk that will be erased (each
    partition, its size, what it holds, like "NTFS (Windows)"), then exactly
    what you'll get, and which other disks aren't touched. If any answer
@@ -132,6 +136,7 @@ it after you restart. See
 | `/etc/sudoers.d/bunny` | Admin rights for the `wheel` group, the same file [`[security]`](config.md#security) manages. |
 | `/etc/default/grub` | Adds `GRUB_DISTRIBUTOR="Bunny Linux"` and the kernel settings (`rd.luks.uuid=…`, `rootflags=subvol=@`, and `resume=…` with `--hibernate`). Comments out Gentoo's `GRUB_THEME`. |
 | `/etc/grub.d/10_bunny` | Names the main boot menu entry "Bunny Linux" (not "Bunny Linux GNU/Linux"), with "Advanced options" under it. `10_linux` and `31_efi_bootnext` ("(EFI BootNext)" entries) are made non-executable; the originals are in `/var/lib/bunny/backups/as-installed/`. See [the boot menu](generations.md#undo-from-the-boot-menu). |
+| `/etc/init.d/zram` | Unless `--no-zram`: compressed swap in memory, started at boot. |
 | `/etc/init.d/swapfiles` | Only with a swapfile: turns it on once `/swap` is mounted (OpenRC's own swap service starts too early for a swapfile on its own subvolume). |
 | `/etc/conf.d/dmcrypt`, `/etc/bunny/keys/home.key` | Only with `--home-disk` and encryption: unlocks the `/home` disk at boot. The key is readable only by root. |
 

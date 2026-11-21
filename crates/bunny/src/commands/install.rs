@@ -22,6 +22,7 @@ pub(crate) struct Args {
     pub no_encrypt: bool,
     pub efi_size: Option<String>,
     pub swap: Option<String>,
+    pub no_zram: bool,
     pub hibernate: bool,
     pub home_disk: Option<String>,
     pub ssh: bool,
@@ -354,6 +355,7 @@ fn erase_disk_flow(
     let mut choices = Choices {
         disk: disk.path.clone(),
         encrypt: !args.no_encrypt,
+        zram: !args.no_zram,
         home_disk: home_disk.as_ref().map(|d| d.path.clone()),
         ..Default::default()
     };
@@ -377,20 +379,17 @@ fn erase_disk_flow(
         }
     }
 
-    // The questions the options above didn't answer: encrypt, swap, and
-    // /home on another disk (only when there is one).
+    // The questions the options above didn't answer: use the recommended
+    // setup, or encrypt and swap one at a time.
+    let given = questions::Given {
+        no_encrypt: args.no_encrypt,
+        swap: args.swap.is_some() || args.hibernate || args.no_zram,
+    };
+    questions::ask(&mut choices, &given, ram, &mut |q: &str| ask_line(q))?;
     let others: Vec<&Disk> = all
         .iter()
         .filter(|d| d.path != disk.path && d.unusable().is_none())
         .collect();
-    let given = questions::Given {
-        no_encrypt: args.no_encrypt,
-        swap: args.swap.is_some() || args.hibernate,
-        home_disk: args.home_disk.is_some(),
-    };
-    questions::ask(&mut choices, &given, &others, ram, &mut |q: &str| {
-        ask_line(q)
-    })?;
     let home_disk = choices
         .home_disk
         .as_ref()

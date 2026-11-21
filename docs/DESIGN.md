@@ -729,16 +729,19 @@ GPT
 - **Current behaviour (part 1, guided):** `bunny install` lists whole disks
   from `lsblk --json` and leaves out any in use (anything mounted, swap, or
   something opened on it like LUKS or LVM), read-only or under 20 GB. After
-  the disk, a few questions (`install::questions`), each with a recommended
-  answer taken by Enter: encrypt ([Y/n]), swap (none / a size / hibernate,
-  sized from memory; none advised from 16 GB of memory), and `/home` on
-  another usable disk ([y/N], only asked when there is one). An option on
-  the command line answers its question (`--no-encrypt`, `--swap` or
-  `--hibernate`, `--home-disk`). No partition sizes, mount points or
-  filesystem choice: btrfs is needed for undo, and full control is
-  `--mounted`. The preview then names the disks left untouched and, when
-  the answers differ from the recommended setup, the options that repeat
-  them (without `--disk`, which differs per computer). The
+  the disk, "Use the recommended setup? [Y/n]" (`install::questions`):
+  Enter takes it (encrypted, zram swap); `n` asks encrypt ([Y/n]) and swap
+  (Enter zram; a size for zram plus a swap file; `hibernate`; `none`). An
+  option answers its question (`--no-encrypt`; `--swap`, `--hibernate` or
+  `--no-zram`). zram is bunny's own small OpenRC service (`zram`, boot
+  runlevel), not sys-block/zram-init (its `maxs` setting breaks on kernels
+  from 6.15): as big as memory up to 8 GB like Fedora, zstd when the kernel
+  has it, priority 100 so it's used before a swap file. `/home` on a second
+  disk isn't asked yet (on hold; `--home-disk` works). No partition sizes,
+  mount points or filesystem choice: btrfs is needed for undo, and full
+  control is `--mounted`. The preview then names the disks left untouched
+  and, when the answers differ from the recommended setup, the options that
+  repeat them (without `--disk`, which differs per computer). The
   preview lists every partition that will be erased and the layout you get;
   you confirm by typing the disk's name. Layout: GPT, EFI (2 GB, FAT32) at
   `/boot`, the rest LUKS2 (opened as `bunny-root`) with btrfs subvolumes

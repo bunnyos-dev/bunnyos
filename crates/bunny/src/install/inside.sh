@@ -23,6 +23,27 @@ eselect locale set en_US.utf8 >/dev/null
 . /etc/profile
 sed -i "s/^keymap=.*/keymap=\"$KEYMAP\"/" /etc/conf.d/keymaps
 
+say "A console font that can draw ✓ ✗ ⚠"
+# The console's usual font has no ✓ or ✗ (bunny's ✓ showed as "v"). kbd's
+# eurlatgr has both (sharing the √ and × shapes) and ·, but no ⚠, so the
+# copy made here also draws ⚠ with its "!". The live USB does the same.
+font_src=/usr/share/consolefonts/eurlatgr.psfu.gz
+font=/usr/local/share/consolefonts/bunny.psfu
+[ -f "$font_src" ] || font_src="${font_src%.gz}"
+if [ -f "$font_src" ]; then
+    mkdir -p "${font%/*}"
+    zcat -f "$font_src" > /tmp/bunny-font.psfu
+    psfgettable /tmp/bunny-font.psfu /tmp/bunny-font.txt
+    printf '0x021\tU+26A0\n' >> /tmp/bunny-font.txt
+    psfaddtable /tmp/bunny-font.psfu /tmp/bunny-font.txt "$font"
+    rm -f /tmp/bunny-font.psfu /tmp/bunny-font.txt
+    sed -i "s|^#\?consolefont=.*|consolefont=\"$font\"|" /etc/conf.d/consolefont
+    rc-update add consolefont boot
+else
+    # Not worth stopping the install for: the marks show as v and x.
+    echo "Note: kbd's eurlatgr font is missing, so the console keeps its usual font."
+fi
+
 say "Installing the system (prebuilt packages; this takes a while)"
 # shellcheck disable=SC2086  # a list of package names
 emerge -q --noreplace $PACKAGES

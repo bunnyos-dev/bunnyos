@@ -313,7 +313,10 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny reboot windows` | Reboot into another OS once |
 | `bunny disk backup-header` | Back up the LUKS header |
 
-Read-only commands never need root. Commands that change the system ask for
+Read-only commands never need root. (`bunny plan` as yourself can't read a
+`/boot` that only root may read, like an EFI partition; it then says the
+boot menu wasn't checked and to run it with sudo or doas, rather than
+reporting problems it couldn't see.) Commands that change the system ask for
 elevation themselves through the configured tool (see `[security]`; sudo
 when nothing is set and both are installed).
 

@@ -67,6 +67,9 @@ pub struct Changes {
     /// Why it can't be set up on this system (shown, but doesn't stop the
     /// rest of the switch).
     pub problems: Vec<String>,
+    /// `/boot` can only be read as root (an EFI partition usually is), and
+    /// this isn't root: nothing about the boot menu could be checked.
+    pub needs_root: bool,
 }
 
 impl Changes {
@@ -107,8 +110,31 @@ pub fn kernels(root: &Path) -> Vec<String> {
     found
 }
 
+/// Whether `/boot` can't be read because of its permissions (only root can
+/// read an EFI partition mounted with `fmask=0077`). Root is never refused.
+fn boot_needs_root(root: &Path) -> bool {
+    let denied = |r: std::io::Result<std::fs::Metadata>| {
+        r.is_err_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+    };
+    std::fs::read_dir(root.join("boot"))
+        .is_err_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+        || denied(std::fs::metadata(root.join("boot/grub/grub.cfg")))
+}
+
 pub fn changes(boot: &Boot, root: &Path) -> Changes {
+    changes_reading(boot, root, boot_needs_root(root))
+}
+
+/// [`changes`], told whether `/boot` can be read (for tests, which run as
+/// root and so can't be refused).
+fn changes_reading(boot: &Boot, root: &Path, needs_root: bool) -> Changes {
     let mut out = Changes::default();
+    if boot.undo_entry && needs_root {
+        // Every check below reads /boot, and would wrongly say there's no
+        // GRUB or startup image.
+        out.needs_root = true;
+        return out;
+    }
     if !boot.undo_entry {
         out.remove_entry =
             std::fs::read_to_string(root.join(CUSTOM_CFG)).is_ok_and(|text| text.contains(BEGIN));
@@ -579,6 +605,26 @@ mod tests {
         std::fs::write(dir.join("module-setup.sh"), MODULE_SETUP).unwrap();
         std::fs::write(dir.join("bunny-rollback.sh"), HOOK).unwrap();
         assert!(changes(&boot, root.path()).is_empty());
+    }
+
+    #[test]
+    fn doesnt_guess_when_boot_can_only_be_read_as_root() {
+        // Run as yourself on an encrypted install: /boot is the EFI
+        // partition, readable only by root, so nothing there can be seen.
+        let root = tempfile::tempdir().unwrap();
+        let c = changes_reading(&Boot { undo_entry: true }, root.path(), true);
+        assert!(c.needs_root);
+        assert!(c.problems.is_empty(), "{:?}", c.problems);
+        assert!(c.install_module.is_none());
+        assert!(c.is_empty());
+        // Readable: the usual checks.
+        let c = changes_reading(&Boot { undo_entry: true }, root.path(), false);
+        assert!(!c.needs_root);
+        assert!(!c.problems.is_empty());
+        // Turned off: there's nothing to check.
+        assert!(!changes_reading(&Boot { undo_entry: false }, root.path(), true).needs_root);
+        // A /boot that's simply readable isn't mistaken for one that isn't.
+        assert!(!boot_needs_root(fake_root().path()));
     }
 
     #[test]

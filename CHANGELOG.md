@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: `bunny plan` without sudo said the boot menu's undo entry couldn't
+  be set up, when it just couldn't read `/boot`. It now says the boot menu
+  wasn't checked and to run `sudo bunny plan` to include it.
+
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.

@@ -246,39 +246,29 @@ fn run_install(
 
 /// Shows which packages aren't needed anymore and asks before removing them
 /// (always, even with --yes). Returns false if they weren't removed.
+///
+/// The list comes from bunny's Portage helper when it can answer; then
+/// exactly the packages shown are removed (`emerge --depclean =cat/pkg-1.0
+/// …`, which still keeps any that something needs). Otherwise from
+/// `emerge --depclean --pretend`'s text, as before.
 pub(super) fn remove_quietly(
     runner: &mut dyn Runner,
     opts: &Options,
     outcome: &Outcome,
 ) -> Result<bool> {
-    let (ok, output) = runner.run_quiet(
-        &cmd(&["emerge", "--depclean", "--pretend", "--color=n"]),
-        &mut |_| {},
-    )?;
-    if !ok {
-        return Ok(false);
-    }
-    let list = crate::emerge::parse_depclean(&output).unwrap_or_default();
-    let count = crate::emerge::depclean_count(&output).unwrap_or(0);
-    if list.len() != count {
-        // emerge's output changed shape: let emerge show its own list and ask.
-        return runner.run(&cmd(&["emerge", "--depclean", "--ask"]));
-    }
+    let (list, from_helper) = match crate::helper::depclean(runner) {
+        Some(list) => (list, true),
+        None => match depclean_from_emerge(runner)? {
+            Removals::List(list) => (list, false),
+            Removals::Failed => return Ok(false),
+            // emerge's output changed shape: let emerge show its own list and ask.
+            Removals::Unreadable => return runner.run(&cmd(&["emerge", "--depclean", "--ask"])),
+        },
+    };
     if list.is_empty() {
         return Ok(true);
     }
-    println!("\nThese packages aren't needed anymore (nothing you asked for uses them):");
-    let split: Vec<(&str, &str)> = list
-        .iter()
-        .map(|cpv| match crate::import::strip_version(cpv) {
-            Some(name) => (name, &cpv[name.len() + 1..]),
-            None => (cpv.as_str(), ""),
-        })
-        .collect();
-    let width = split.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
-    for (name, version) in split {
-        println!("  - {name:<width$}  {version}");
-    }
+    print!("{}", describe_removals(&list));
     let undoable = outcome.snapshot.is_some();
     if !(opts.confirm)("Remove them?", undoable)? {
         return Ok(false);
@@ -289,7 +279,14 @@ pub(super) fn remove_quietly(
             progress.step(&format!("[{n}/{total}] Removing {name}"), None, None);
         }
     };
-    let (ok, _) = runner.run_quiet(&cmd(&["emerge", "--depclean", "--color=n"]), &mut on_line)?;
+    let mut remove = cmd(&["emerge", "--depclean", "--color=n"]);
+    if from_helper {
+        // Only what was shown and agreed to. emerge checks again that
+        // nothing needs them, so a difference between the helper and emerge
+        // can only mean removing less, never more.
+        remove.extend(list.iter().map(|r| format!("={}", r.cpv())));
+    }
+    let (ok, _) = runner.run_quiet(&remove, &mut on_line)?;
     progress.finish();
     if ok {
         println!(
@@ -299,6 +296,70 @@ pub(super) fn remove_quietly(
         );
     }
     Ok(ok)
+}
+
+/// What `emerge --depclean --pretend` said it would remove.
+enum Removals {
+    List(Vec<crate::helper::Removal>),
+    /// emerge failed (it explains on its own when run for real).
+    Failed,
+    /// The list and the count didn't match: emerge's wording changed.
+    Unreadable,
+}
+
+/// The fallback when the helper can't answer: emerge's own text.
+fn depclean_from_emerge(runner: &mut dyn Runner) -> Result<Removals> {
+    let (ok, output) = runner.run_quiet(
+        &cmd(&["emerge", "--depclean", "--pretend", "--color=n"]),
+        &mut |_| {},
+    )?;
+    if !ok {
+        return Ok(Removals::Failed);
+    }
+    let list = crate::emerge::parse_depclean(&output).unwrap_or_default();
+    let count = crate::emerge::depclean_count(&output).unwrap_or(0);
+    if list.len() != count {
+        return Ok(Removals::Unreadable);
+    }
+    Ok(Removals::List(
+        list.iter()
+            .map(|cpv| {
+                let (name, version) = match crate::import::strip_version(cpv) {
+                    Some(name) => (name, &cpv[name.len() + 1..]),
+                    None => (cpv.as_str(), ""),
+                };
+                crate::helper::Removal {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    needed_by: Vec::new(),
+                }
+            })
+            .collect(),
+    ))
+}
+
+/// The list shown before asking, one package a line, with why it goes when
+/// Portage said (another package in the list was what needed it).
+pub(super) fn describe_removals(list: &[crate::helper::Removal]) -> String {
+    let mut out =
+        String::from("\nThese packages aren't needed anymore (nothing you asked for uses them):\n");
+    let name_width = list.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    let version_width = list.iter().map(|r| r.version.len()).max().unwrap_or(0);
+    for r in list {
+        let line = if r.needed_by.is_empty() {
+            format!("  - {:<name_width$}  {}", r.name, r.version)
+        } else {
+            format!(
+                "  - {:<name_width$}  {:<version_width$}  (only {} used it)",
+                r.name,
+                r.version,
+                r.needed_by.join(", ")
+            )
+        };
+        out.push_str(line.trim_end());
+        out.push('\n');
+    }
+    out
 }
 
 /// What to tell someone who pressed Ctrl+C while emerge was installing.

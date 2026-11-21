@@ -261,9 +261,9 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   run has no `--ask`; one progress line is drawn from `>>> Emerging (n of m)`
   lines, and the full output is saved to `/var/log/bunny/<time>-emerge.log`.
   Package messages (elog) are shown at the end, a few lines each. Removal
-  uses `emerge --depclean --pretend`, lists the packages from its "All
-  selected packages" line (falling back to emerge's own `--ask` if the count
-  doesn't match), and always asks. Cleanup also runs after USE changes and
+  asks the Portage helper what depclean would remove (or reads `emerge
+  --depclean --pretend`'s "All selected packages" line, falling back to
+  emerge's own `--ask` if the count doesn't match), and always asks. Cleanup also runs after USE changes and
   updates, since both can orphan dependencies. `--verbose` restores the old
   live, emerge-asks behaviour.
 - **Ctrl+C:** stops bunny at once, except at a question during a switch

@@ -85,6 +85,55 @@ pub fn plan(runner: &mut dyn Runner) -> Option<Vec<Merge>> {
     parse_plan(&out)
 }
 
+/// A package `emerge --depclean` would remove.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Removal {
+    /// `category/name`.
+    pub name: String,
+    pub version: String,
+    /// Other packages in the same removal whose dependencies name this one:
+    /// it goes because they go. Empty when Portage didn't say (or from
+    /// emerge's text, which doesn't say).
+    #[serde(default)]
+    pub needed_by: Vec<String>,
+}
+
+impl Removal {
+    /// `cat/pkg-1.0`, as emerge writes it (and accepts it after `=`).
+    pub fn cpv(&self) -> String {
+        format!("{}-{}", self.name, self.version)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct DepcleanReply {
+    ok: bool,
+    removals: Option<Vec<Removal>>,
+}
+
+/// Parses the helper's answer to `depclean`. `None` if it didn't say.
+pub fn parse_depclean(json: &str) -> Option<Vec<Removal>> {
+    let reply: DepcleanReply = serde_json::from_str(json.lines().last()?).ok()?;
+    if !reply.ok {
+        return None;
+    }
+    let removals = reply.removals?;
+    // Anything that doesn't look like a package: don't trust the rest either.
+    let sane = removals.iter().all(|r| {
+        crate::config::is_package_name(&r.name)
+            && r.version.starts_with(|c: char| c.is_ascii_digit())
+            && !r.version.contains(char::is_whitespace)
+    });
+    sane.then_some(removals)
+}
+
+/// What `emerge --depclean` would remove, from Portage itself. `None` means
+/// "ask emerge instead".
+pub fn depclean(runner: &mut dyn Runner) -> Option<Vec<Removal>> {
+    let out = runner.output(&command(&["depclean"])).ok()??;
+    parse_depclean(&out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,6 +185,50 @@ mod tests {
     }
 
     #[test]
+    fn reads_what_depclean_would_remove() {
+        let json = r#"{"ok": true, "removals": [
+            {"name": "app-text/tree", "version": "2.2.1", "slot": "0", "needed_by": []},
+            {"name": "acct-user/nullmail", "version": "0-r2", "slot": "0", "needed_by": ["mail-mta/nullmailer"]},
+            {"name": "mail-mta/nullmailer", "version": "2.2-r2", "slot": "0", "needed_by": []},
+            {"name": "dev-lang/python", "version": "3.12.12_p1", "slot": "3.12", "needed_by": []}
+        ], "helper": 2}"#
+            .replace('\n', " ");
+        let list = parse_depclean(&json).unwrap();
+        assert_eq!(list.len(), 4);
+        assert_eq!(list[0].cpv(), "app-text/tree-2.2.1");
+        assert_eq!(list[1].needed_by, ["mail-mta/nullmailer"]);
+        assert_eq!(list[3].cpv(), "dev-lang/python-3.12.12_p1");
+
+        // Nothing to remove is an answer too.
+        let none = parse_depclean(r#"{"ok": true, "removals": [], "helper": 2}"#).unwrap();
+        assert!(none.is_empty());
+        // `needed_by` is optional.
+        let plain = parse_depclean(
+            r#"{"ok": true, "removals": [{"name": "a/b", "version": "1"}], "helper": 2}"#,
+        )
+        .unwrap();
+        assert!(plain[0].needed_by.is_empty());
+    }
+
+    #[test]
+    fn depclean_falls_back_when_the_helper_cant_help() {
+        for bad in [
+            r#"{"ok": false, "reason": "portage couldn't work out what to remove", "helper": 2}"#,
+            // An older helper that doesn't know the command.
+            r#"{"ok": false, "reason": "unknown command: depclean", "helper": 1}"#,
+            // ok, but no list: don't take that as "nothing to remove".
+            r#"{"ok": true, "helper": 2}"#,
+            // Something that isn't a package.
+            r#"{"ok": true, "removals": [{"name": "tree", "version": "2.2.1"}]}"#,
+            r#"{"ok": true, "removals": [{"name": "a/b", "version": "1 --ask"}]}"#,
+            "Traceback (most recent call last):",
+            "",
+        ] {
+            assert!(parse_depclean(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
     fn the_script_is_valid_python() {
         let ok = std::process::Command::new("python3")
             .args(["-c", "import ast, sys; ast.parse(sys.stdin.read())"])
@@ -167,5 +260,15 @@ mod tests {
         }
         assert!(text.contains("\"ok\": false"), "{text}");
         assert!(parse_plan(&text).is_none());
+
+        let Ok(out) = std::process::Command::new("python3")
+            .args(["-c", SCRIPT, "depclean"])
+            .output()
+        else {
+            return;
+        };
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(text.contains("\"ok\": false"), "{text}");
+        assert!(parse_depclean(&text).is_none());
     }
 }

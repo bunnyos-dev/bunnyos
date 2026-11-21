@@ -722,10 +722,24 @@ fn masked(lines: &[&str]) -> Vec<Explanation> {
         };
         let package = base_name(rest.split('"').next().unwrap_or(rest));
         let following = &lines[i + 1..];
-        let reason = following
+        // One line per version, and they can differ: a live `-9999` version
+        // usually has no keyword at all while the releases are testing
+        // versions. Explain the easiest way in: a testing version first,
+        // then a deliberate mask, and "not for your computer" only when
+        // that's true of every version.
+        let reasons: Vec<String> = following
             .iter()
-            .find_map(|l| l.split("(masked by: ").nth(1))
+            .take_while(|l| !l.trim().is_empty())
+            .filter_map(|l| l.split("(masked by: ").nth(1))
             .map(|r| r.trim_end_matches(')').to_string())
+            .collect();
+        let testing = |r: &&String| r.contains("keyword") && r.contains('~');
+        let reason = reasons
+            .iter()
+            .find(testing)
+            .or_else(|| reasons.iter().find(|r| !r.contains("missing keyword")))
+            .or(reasons.first())
+            .cloned()
             .unwrap_or_default();
         // Gentoo's comment explaining the mask: the "# " lines after the
         // package.mask file name, minus the first (author and date).
@@ -968,6 +982,29 @@ fn notices(lines: &[&str]) -> Vec<Explanation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn masked_explains_the_testing_version_when_only_the_live_one_has_no_keyword() {
+        let text = "!!! All ebuilds that could satisfy \"gui-wm/dwl\" have been masked.\n\
+                    !!! One of the following masked packages is required to complete your request:\n\
+                    - gui-wm/dwl-9999::gentoo (masked by: missing keyword)\n\
+                    - gui-wm/dwl-0.9::gentoo (masked by: ~amd64 keyword)\n\
+                    - gui-wm/dwl-0.8::gentoo (masked by: ~amd64 keyword)\n\
+                    \n\
+                    For more information, see the MASKED PACKAGES section in the emerge\n";
+        let found = explain(text);
+        assert_eq!(found.len(), 1);
+        let shown = found[0].render();
+        assert!(
+            shown.contains("only available as a testing version"),
+            "{shown}"
+        );
+        assert!(shown.contains("keywords = [\"~amd64\"]"), "{shown}");
+        // Only the live version, with no keyword: not for this computer.
+        let live = "!!! All ebuilds that could satisfy \"x/y\" have been masked.\n\
+                    - x/y-9999::gentoo (masked by: missing keyword)\n\n";
+        assert!(explain(live)[0].render().contains("CPU architecture"));
+    }
 
     fn fixture(name: &str) -> String {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

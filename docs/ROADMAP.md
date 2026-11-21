@@ -513,7 +513,10 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] TPM disk unlock
 
 ### Phase 9: the look (design work, done together, a little at a time)
-- [ ] Bunny Linux logo (hired designer) and the palette from DESIGN.md "Look and feel"
+- [ ] Bunny Linux logo (hired designer) and the palette from DESIGN.md "Look and feel".
+      **Reminder:** hire once Bunny Linux is a working OS (installs, starts
+      into a desktop, usable day to day). Tell the maintainer when that
+      milestone is reached. Terms, credit and the post: `docs/ARTIST-BRIEF.md`.
 - [ ] Installer and Bunny Desktop styled to match the mockups, one screen
       per PR
 - [ ] Plymouth boot animation, Esc shows the kernel log

@@ -46,8 +46,59 @@ impl Generation {
         }
     }
 
+    /// The same moment in this computer's time zone, the way a person says
+    /// it: `Nov 18, 7:03 PM`. Falls back to [`when`](Self::when).
+    pub fn when_local(&self) -> String {
+        local_time(&self.name).unwrap_or_else(|| self.when())
+    }
+
     pub fn is_pre_rollback(&self) -> bool {
         self.name.ends_with("-before-rollback")
+    }
+}
+
+/// `bunny-YYYYMMDD-HHMMSS…` (UTC) in local time, like `Nov 18, 7:03 PM`.
+pub fn local_time(name: &str) -> Option<String> {
+    let stamp = name.trim_start_matches("bunny-");
+    let (d, rest) = stamp.split_once('-')?;
+    let t = rest.get(..6)?;
+    if d.len() != 8
+        || !d.chars().all(|c| c.is_ascii_digit())
+        || !t.chars().all(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+    let n = |s: &str| s.parse::<i32>().ok();
+    // SAFETY: tm is plain data; timegm and localtime_r only read and write
+    // the structs passed in.
+    unsafe {
+        let mut tm: libc::tm = std::mem::zeroed();
+        tm.tm_year = n(&d[..4])? - 1900;
+        tm.tm_mon = n(&d[4..6])? - 1;
+        tm.tm_mday = n(&d[6..])?;
+        tm.tm_hour = n(&t[..2])?;
+        tm.tm_min = n(&t[2..4])?;
+        tm.tm_sec = n(&t[4..])?;
+        let epoch = libc::timegm(&mut tm);
+        let mut local: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&epoch, &mut local).is_null() {
+            return None;
+        }
+        const MONTHS: [&str; 12] = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ];
+        let hour = match local.tm_hour % 12 {
+            0 => 12,
+            h => h,
+        };
+        Some(format!(
+            "{} {}, {}:{:02} {}",
+            MONTHS.get(local.tm_mon as usize)?,
+            local.tm_mday,
+            hour,
+            local.tm_min,
+            if local.tm_hour < 12 { "AM" } else { "PM" }
+        ))
     }
 }
 
@@ -475,6 +526,24 @@ pub fn clean(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn says_when_in_local_time() {
+        // The test runs in whatever zone the machine has; check the shape
+        // and that an invalid name falls back.
+        let g = Generation {
+            name: "bunny-20261119-000331".into(),
+        };
+        let local = g.when_local();
+        let re_ok = local.contains(", ") && (local.ends_with(" AM") || local.ends_with(" PM"));
+        assert!(re_ok, "{local}");
+        assert!(local.starts_with("Nov ") || local.starts_with("Nov") || local.starts_with("Dec"));
+        assert_eq!(local_time("bunny-garbage"), None);
+        let odd = Generation {
+            name: "bunny-x".into(),
+        };
+        assert_eq!(odd.when_local(), "bunny-x");
+    }
 
     #[derive(Default)]
     struct Recorder {

@@ -139,7 +139,7 @@ explanation shows the exact lines to add.
 
 ```toml
 [boot]
-undo_entry = true   # add "undo the last change" to the boot menu
+undo_entry = true   # "Undo the last change" and "Earlier versions" in the boot menu
 ```
 
 | Setting | Values | Default | Meaning |

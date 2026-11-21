@@ -215,8 +215,13 @@ isolated = false       # compile inside a clean container
   `bunny.rollback=<generation>`, and nothing otherwise. bunny installs it and
   rebuilds `/boot/initramfs-<ver>.img` once (staged as `.bunny-new`, old image
   backed up), *before* the switch's snapshot so that generation already has
-  it. After each switch it writes a block in `/boot/grub/custom.cfg` (read at
-  boot via `41_custom`, so no `grub-mkconfig`) that boots the kernel and
+  it. After each switch it writes `/boot/grub/bunny.cfg` (read via bunny's
+  `/etc/grub.d/11_bunny`, right after `10_linux`'s entries; installed once
+  with one `grub-mkconfig`, then read at boot so later changes need none):
+  "Undo the last change" (summary and local time) plus an "Earlier versions"
+  submenu (newest 10 bootable generations, each with "Go back to this
+  version" and its summary as do-nothing lines), in separate markers so the
+  hook only drops the undo entry. That undo block that boots the kernel and
   initramfs **from the generation's snapshot** (`/@snapshots/<gen>/boot/…`)
   with the running system's command line plus `bunny.rollback=<gen>`, so
   kernel modules match after the swap. Only added when the generation's

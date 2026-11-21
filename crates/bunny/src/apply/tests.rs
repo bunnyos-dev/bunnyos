@@ -910,13 +910,34 @@ fn undo_entry_is_set_up_in_one_switch() {
     assert!(r.join("etc/init.d/bunny-finish-undo").is_file());
     assert!(std::fs::symlink_metadata(r.join("etc/runlevels/boot/bunny-finish-undo")).is_ok());
 
-    let cfg = std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap();
+    let cfg = std::fs::read_to_string(r.join(crate::boot::BUNNY_CFG)).unwrap();
     assert!(cfg.contains("linux /@snapshots/bunny-20261116-120000/boot/vmlinuz-6.12.58 root=UUID=1234-abcd ro rootflags=subvol=@ bunny.rollback=bunny-20261116-120000"), "{cfg}");
+    assert!(cfg.contains("menuentry 'Undo the last change ("), "{cfg}");
+    // Earlier versions lists the generation too, with Go back to it.
+    assert!(
+        cfg.contains("submenu 'Earlier versions (1 saved)'"),
+        "{cfg}"
+    );
+    assert!(
+        cfg.contains("menuentry 'Go back to this version ("),
+        "{cfg}"
+    );
+    // GRUB reads bunny.cfg right after the system's own entries.
+    let script = std::fs::read_to_string(r.join(crate::boot::GRUBD_SCRIPT)).unwrap();
+    assert!(script.contains("bunny.cfg"));
+    assert!(
+        runner
+            .commands
+            .iter()
+            .any(|c| c.starts_with("grub-mkconfig -o ")),
+        "{:?}",
+        runner.commands
+    );
     assert!(
         outcome
             .notes
             .iter()
-            .any(|n| n.contains("undo the last change")),
+            .any(|n| n.contains("Undo the last change")),
         "{:?}",
         outcome.notes
     );
@@ -984,7 +1005,7 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
         "new image with the undo step"
     );
 
-    let cfg = std::fs::read_to_string(r.join(crate::boot::CUSTOM_CFG)).unwrap();
+    let cfg = std::fs::read_to_string(r.join(crate::boot::BUNNY_CFG)).unwrap();
     assert!(
         cfg.contains("search --no-floppy --fs-uuid --set=root ABCD-1234"),
         "{cfg}"
@@ -998,7 +1019,7 @@ fn undo_entry_boots_the_kernel_kept_on_a_separate_boot() {
         outcome
             .notes
             .iter()
-            .any(|n| n.contains("undo the last change")),
+            .any(|n| n.contains("Undo the last change")),
         "{:?}",
         outcome.notes
     );

@@ -24,12 +24,12 @@ mod runner;
 #[cfg(test)]
 mod tests;
 
-pub use boot_menu::save_kernels;
+pub use boot_menu::{refresh_earlier, save_kernels};
 pub use package_use::foreign_package_use_files;
 pub use runner::{PrintRunner, Runner, SystemRunner};
 
 use admin::apply_security;
-use boot_menu::{install_boot_module, write_undo_entry};
+use boot_menu::{install_boot_module, write_menu};
 use install::{drop_snapshot, emerge_failed, install_quietly, is_tip, remove_quietly};
 use package_use::{adopt_package_use, copy_tree, write_keywords, USE_BEFORE};
 use repositories::set_up_repositories;
@@ -185,7 +185,7 @@ pub fn switch(
         );
     }
     // 8. The boot menu's undo entry, pointing at this switch's snapshot.
-    update_boot_menu(config, root, plan, opts, &mut outcome)?;
+    update_boot_menu(config, root, plan, opts, runner, &mut outcome)?;
 
     notes::write_state(
         root,
@@ -389,17 +389,23 @@ fn update_boot_menu(
     root: &Path,
     plan: &Plan,
     opts: &Options,
+    runner: &mut dyn Runner,
     outcome: &mut Outcome,
 ) -> Result<()> {
     if config.boot.undo_entry && plan.boot.problems.is_empty() {
-        if let Some(note) = write_undo_entry(root, opts, outcome)? {
-            outcome.notes.push(note);
-        }
+        let notes = write_menu(root, opts, outcome, runner)?;
+        outcome.notes.extend(notes);
     } else if plan.boot.remove_entry {
-        let path = root.join(crate::boot::CUSTOM_CFG);
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        std::fs::write(&path, crate::boot::merge_custom_cfg(&text, ""))
-            .context("Couldn't remove the undo entry from the boot menu")?;
+        for file in [crate::boot::BUNNY_CFG, crate::boot::CUSTOM_CFG] {
+            let path = root.join(file);
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let text = crate::boot::merge_custom_cfg(&text, "");
+            let text = crate::boot::merge_earlier(&text, "");
+            std::fs::write(&path, text)
+                .context("Couldn't remove bunny's entries from the boot menu")?;
+        }
     }
     Ok(())
 }

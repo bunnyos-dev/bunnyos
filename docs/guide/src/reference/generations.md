@@ -92,8 +92,15 @@ With `[boot] undo_entry = true`:
   The new image is built as a separate file and only swapped in when it's
   complete; the old one is saved in the backup folder. This happens before
   that switch's snapshot, so that very generation can be undone from the menu.
-- After each switch, bunny writes one entry to `/boot/grub/custom.cfg` (GRUB
-  reads that file at boot; anything else in it is kept). The entry boots
+- After each switch, bunny writes its entries to `/boot/grub/bunny.cfg`:
+  "Undo the last change", and "Earlier versions" (the newest 10
+  generations that can be started this way, each a submenu with "Go back
+  to this version" and what came after it). `/etc/grub.d/11_bunny` makes
+  GRUB read that file right after the system's own entries; bunny installs
+  it and runs `grub-mkconfig` once. GRUB reads `bunny.cfg` each time the
+  menu is shown, so later changes need no `grub-mkconfig`. (Older versions
+  of bunny wrote the undo entry to `custom.cfg`, at the bottom of the menu;
+  the next switch moves it.) The undo entry boots
   **the kernel and startup image saved in that generation**, with
   `bunny.rollback=<generation>` added. Using the generation's own kernel means
   everything matches after the swap, even if the change updated the kernel.
@@ -104,8 +111,9 @@ With `[boot] undo_entry = true`:
   step fails, the current system is left (or put back) as it was, and it
   starts normally.
 - `/boot/grub` is part of the system, so the restored system brings back its
-  own, older `custom.cfg`, whose entry would undo one change further back.
-  Both `bunny rollback` and the boot-menu undo remove bunny's entry from the
+  own, older `bunny.cfg`, whose entry would undo one change further back.
+  Both `bunny rollback` and the boot-menu undo remove the undo entry (Earlier
+  versions stays, since it has its own markers) from the
   restored system (other entries in the file stay). The next switch adds a
   fresh one.
 - If `/.snapshots/bunny-state.toml` says the last thing was a rollback to the

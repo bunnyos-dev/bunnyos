@@ -85,6 +85,7 @@ pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<E
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, true)?;
     let keep = keep.max(1);
     let (device, running) = if real_system {
         let info = std::fs::read_to_string("/proc/self/mountinfo")
@@ -209,6 +210,7 @@ pub(crate) fn rollback_cmd(
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, false)?;
     let gens = rollback::list(root)?;
     let name = match name {
         Some(input) => rollback::resolve(&gens, &input).unwrap_or(input),

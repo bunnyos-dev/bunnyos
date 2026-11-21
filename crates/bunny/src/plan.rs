@@ -303,13 +303,21 @@ impl Plan {
         }
         if let (false, Some(p)) = (self.security.is_empty(), self.security.privilege) {
             let _ = writeln!(out, "Admin rights ({}):", p.command());
-            if let Some((path, _)) = &self.security.file {
+            if let Some((path, text)) = &self.security.file {
                 let _ = writeln!(
                     out,
                     "  ~ write {} so the wheel group can use {} (checked before it's put in place)",
                     path.display(),
                     p.command()
                 );
+                let kept = crate::security::kept_rules(text);
+                if kept > 0 {
+                    let _ = writeln!(
+                        out,
+                        "    Your other {kept} line{} in it stay, after bunny's rule.",
+                        if kept == 1 { "" } else { "s" }
+                    );
+                }
             }
             for user in &self.security.add_to_wheel {
                 let _ = writeln!(out, "  + add {user} to the wheel group");

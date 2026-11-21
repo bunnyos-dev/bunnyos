@@ -109,6 +109,49 @@ pub fn render(sec: &Security) -> String {
     }
 }
 
+/// For doas, whose settings are all in one file: bunny's rule first, then
+/// every other line that was already there, kept as it was. doas uses the
+/// last rule that matches, so your own rules (like `nopass` for one command)
+/// still win. For sudo, bunny's file sits next to yours, so it's just
+/// [`render`].
+pub fn render_keeping(sec: &Security, current: Option<&str>) -> String {
+    let mut out = render(sec);
+    if sec.privilege != Privilege::Doas {
+        return out;
+    }
+    let ours = |line: &str| {
+        matches!(line, "permit :wheel" | "permit persist :wheel")
+            || line.starts_with("# Managed by bunny")
+            || line.starts_with("# Edit bunny.toml")
+            || line.starts_with("# Kept from your doas.conf")
+    };
+    let kept: Vec<&str> = current
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !ours(l.trim()))
+        .collect();
+    if !kept.is_empty() {
+        out.push_str("\n# Kept from your doas.conf (bunny leaves these as they are):\n");
+        for line in kept {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// The lines of the user's own that [`render_keeping`] keeps.
+pub fn kept_rules(text: &str) -> usize {
+    text.split_once("# Kept from your doas.conf")
+        .map(|(_, rest)| {
+            rest.lines()
+                .skip(1)
+                .filter(|l| !l.trim().is_empty())
+                .count()
+        })
+        .unwrap_or(0)
+}
+
 /// What a switch would change for `[security]`.
 #[derive(Debug, Default, PartialEq)]
 pub struct Changes {
@@ -133,7 +176,8 @@ pub fn changes(sec: &Security, root: &Path) -> Changes {
         ..Changes::default()
     };
     let path = root.join(sec.privilege.file());
-    let wanted = render(sec);
+    let current = std::fs::read_to_string(&path).ok();
+    let wanted = render_keeping(sec, current.as_deref());
     match std::fs::read_to_string(&path) {
         Ok(current) if current == wanted => {}
         // sudo's file is readable by root only, so read-only commands run
@@ -333,5 +377,29 @@ mod tests {
         let readable = std::fs::read_to_string(&path).is_ok(); // true when tests run as root
         let c = changes(&s, root.path());
         assert_eq!(c.file.is_some(), readable);
+    }
+
+    #[test]
+    fn doas_keeps_your_own_rules() {
+        let doas = sec(Privilege::Doas, true, &[]);
+        let current = "permit :wheel\npermit nopass you as root cmd /sbin/poweroff\n# my note\n";
+        let text = render_keeping(&doas, Some(current));
+        let bunny = text.find("permit persist :wheel").unwrap();
+        let mine = text
+            .find("permit nopass you as root cmd /sbin/poweroff")
+            .unwrap();
+        // bunny's rule first, so yours (doas uses the last match) still wins.
+        assert!(bunny < mine, "{text}");
+        assert!(text.contains("# my note"));
+        assert!(
+            !text.contains("permit :wheel\n"),
+            "the old wheel rule is replaced: {text}"
+        );
+        assert_eq!(kept_rules(&text), 2);
+        // Writing it again keeps it the same.
+        assert_eq!(render_keeping(&doas, Some(&text)), text);
+        // sudo has its own file next to yours: nothing to keep.
+        let sudo = sec(Privilege::Sudo, true, &[]);
+        assert_eq!(render_keeping(&sudo, Some(current)), render(&sudo));
     }
 }

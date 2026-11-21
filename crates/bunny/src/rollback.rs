@@ -287,17 +287,36 @@ pub fn rollback(
         )? {
             bail!("Couldn't save the current system first, so nothing was changed.");
         }
-        if !run(runner, &["mv", &t(ROOT_SUBVOL), &t(&replaced)])? {
-            bail!("Couldn't move the current system aside, so nothing was changed.");
-        }
+        // The restored copy is made first, under a temporary name, so the
+        // only steps that touch @ are two renames.
+        let restoring = format!("{ROOT_SUBVOL}restoring-{stamp}");
         let source = t(&format!("{SNAPSHOTS_SUBVOL}/{generation}"));
         if !run(
             runner,
-            &["btrfs", "subvolume", "snapshot", &source, &t(ROOT_SUBVOL)],
+            &["btrfs", "subvolume", "snapshot", &source, &t(&restoring)],
         )? {
-            // Put the current system back where it was.
-            run(runner, &["mv", &t(&replaced), &t(ROOT_SUBVOL)])?;
-            bail!("Couldn't restore \"{generation}\". Your current system was put back unchanged.");
+            bail!("Couldn't copy \"{generation}\", so nothing was changed.");
+        }
+        // Ctrl+C now would stop between the renames.
+        let _careful = crate::interrupt::Careful::start();
+        if !run(runner, &["mv", "-T", &t(ROOT_SUBVOL), &t(&replaced)])? {
+            let _ = run(runner, &["btrfs", "subvolume", "delete", &t(&restoring)]);
+            bail!("Couldn't move the current system aside, so nothing was changed.");
+        }
+        if !run(runner, &["mv", "-T", &t(&restoring), &t(ROOT_SUBVOL)])? {
+            // Put the current system back where it was, and check it worked.
+            if run(runner, &["mv", "-T", &t(&replaced), &t(ROOT_SUBVOL)])? {
+                let _ = run(runner, &["btrfs", "subvolume", "delete", &t(&restoring)]);
+                bail!("Couldn't restore \"{generation}\". Your current system was put back unchanged.");
+            }
+            bail!(
+                "Couldn't restore \"{generation}\", and couldn't put the current system back either.\n  \
+                 Don't restart yet: the disk has no @ right now. Your system is safe in the\n  \
+                 subvolume {replaced}. To put it back:\n    \
+                 mount -o subvolid=5 {device} /mnt\n    \
+                 mv -T /mnt/{replaced} /mnt/{ROOT_SUBVOL}\n    \
+                 umount /mnt"
+            );
         }
         // Shallowest first, so parents are in place before their children.
         for path in nested.iter().rev() {
@@ -308,7 +327,7 @@ pub fn rollback(
             let to = t(path);
             // The snapshot has an empty folder where the subvolume was.
             let _ = run(runner, &["rmdir", &to])?;
-            if run(runner, &["mv", &from, &to])? {
+            if run(runner, &["mv", "-T", &from, &to])? {
                 carried.push(format!("/{inside}"));
             } else {
                 left_behind.push(format!("/{inside}"));
@@ -704,12 +723,12 @@ mod tests {
         let restore = runner
             .commands
             .iter()
-            .position(|c| c.contains("snapshots/bunny-a"))
+            .position(|c| c == &format!("mv -T {top}/@restoring-X {top}/@"))
             .unwrap();
         assert_eq!(runner.commands[restore + 1], format!("rmdir {top}/@/srv"));
         assert_eq!(
             runner.commands[restore + 2],
-            format!("mv {top}/@replaced-X/srv {top}/@/srv")
+            format!("mv -T {top}/@replaced-X/srv {top}/@/srv")
         );
         assert_eq!(out.carried, ["/srv"]);
         assert!(out.left_behind.is_empty());
@@ -764,8 +783,9 @@ mod tests {
                 format!(
                     "btrfs subvolume snapshot -r {top}/@ {top}/@snapshots/bunny-X-before-rollback"
                 ),
-                format!("mv {top}/@ {top}/@replaced-X"),
-                format!("btrfs subvolume snapshot {top}/@snapshots/bunny-20261116-204336 {top}/@"),
+                format!("btrfs subvolume snapshot {top}/@snapshots/bunny-20261116-204336 {top}/@restoring-X"),
+                format!("mv -T {top}/@ {top}/@replaced-X"),
+                format!("mv -T {top}/@restoring-X {top}/@"),
                 format!("umount {top}"),
             ]
         );
@@ -775,12 +795,13 @@ mod tests {
     #[test]
     fn failed_restore_puts_the_system_back() {
         let root = system_with(&["bunny-a"]);
+        // The restored copy is made, but renaming it to @ fails.
         let mut runner = Recorder {
-            fail: Some("bunny-a"),
+            fail: Some("@restoring-X "),
             ..Default::default()
         };
         let err = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap_err();
-        assert!(err.to_string().contains("put back unchanged"));
+        assert!(err.to_string().contains("put back unchanged"), "{err}");
         let top = root
             .path()
             .join("run/bunny/top")
@@ -788,8 +809,41 @@ mod tests {
             .into_owned();
         assert!(runner
             .commands
-            .contains(&format!("mv {top}/@replaced-X {top}/@")));
+            .contains(&format!("mv -T {top}/@replaced-X {top}/@")));
+        assert!(runner
+            .commands
+            .contains(&format!("btrfs subvolume delete {top}/@restoring-X")));
         assert_eq!(runner.commands.last().unwrap(), &format!("umount {top}"));
+    }
+
+    #[test]
+    fn failed_copy_changes_nothing() {
+        let root = system_with(&["bunny-a"]);
+        let mut runner = Recorder {
+            fail: Some("bunny-a"),
+            ..Default::default()
+        };
+        let err = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap_err();
+        assert!(err.to_string().contains("nothing was changed"), "{err}");
+        assert!(
+            !runner.commands.iter().any(|c| c.starts_with("mv")),
+            "{:?}",
+            runner.commands
+        );
+    }
+
+    #[test]
+    fn says_how_to_recover_if_putting_back_fails_too() {
+        let root = system_with(&["bunny-a"]);
+        // Moving @ aside works; both renames to @ fail ("…-X /…/@").
+        let mut runner = Recorder {
+            fail: Some("X /"),
+            ..Default::default()
+        };
+        let err = rollback(root.path(), "bunny-a", MOUNTINFO, &mut runner, "X").unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("Don't restart yet"), "{text}");
+        assert!(text.contains("mv -T /mnt/@replaced-X /mnt/@"), "{text}");
     }
 
     #[test]

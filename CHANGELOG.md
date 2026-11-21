@@ -109,6 +109,21 @@ a minor version can change how things work).
   packages, services and USE flags for one computer only, so the main config
   works everywhere. `bunny install` writes one with what the computer needs
   to start and a record of its disk.
+- Safety fixes from the code review:
+  - Only one bunny command changes the system at a time, and none while a
+    rollback waits for a restart (their changes would have been lost).
+  - A `bunny update` that stops partway keeps what finished and records it
+    in `bunny.lock`, instead of setting things up for a downgrade. The Ctrl+C
+    message now says to run `bunny update` again.
+  - Rolling back makes the restored copy first, then swaps with two renames,
+    checks that putting things back worked, and holds off Ctrl+C meanwhile.
+  - `switch` and `update` work when `EMERGE_DEFAULT_OPTS` has `--ask`.
+  - `add` and `remove` put the config back when something fails before the
+    system was touched.
+  - Undo no longer writes through a config that's a link into `/home`.
+  - With doas, your own rules in `/etc/doas.conf` are kept after bunny's.
+  - The guide says to push a config repository in `/etc/bunny` to a remote,
+    since undo takes `/etc/bunny` back too.
 - Undo now puts the kernel back on systems where `/boot` is its own partition
   (usually encrypted ones). Each generation keeps a copy of its kernel on
   `/boot`, shared when nothing changed; `bunny rollback` restores it and says

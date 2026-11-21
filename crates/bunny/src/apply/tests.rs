@@ -12,6 +12,7 @@ fn explains_a_ctrl_c_during_install() {
         Some(&(102, 102, "www-client/firefox".to_string())),
         &["www-client/firefox".to_string()],
         &outcome,
+        "bunny switch",
     );
     assert!(
         text.starts_with("Stopped with Ctrl+C while installing."),
@@ -38,7 +39,8 @@ fn explains_a_ctrl_c_during_install() {
         "{text}"
     );
 
-    let early = interrupted_message(None, &[], &Outcome::default());
+    let early = interrupted_message(None, &[], &Outcome::default(), "bunny update");
+    assert!(early.contains("`bunny update` picks up"), "{early}");
     assert!(
         early.contains("hadn't started installing anything"),
         "{early}"
@@ -516,7 +518,13 @@ fn quiet_install_asks_emerge_first_then_installs_without_its_questions() {
         .collect();
     assert!(emerges[0].starts_with("emerge --pretend --update --deep --newuse"));
     assert!(emerges[1].contains("--quiet-build=y @world"));
-    assert!(!emerges[1].contains("--ask"), "{}", emerges[1]);
+    // emerge never asks itself, even if EMERGE_DEFAULT_OPTS says --ask.
+    assert!(emerges[1].contains("--ask=n"), "{}", emerges[1]);
+    assert!(
+        !emerges[1].replace("--ask=n", "").contains("--ask"),
+        "{}",
+        emerges[1]
+    );
     assert_eq!(
         outcome.messages,
         [(
@@ -621,7 +629,7 @@ fn quiet_removal_lists_and_always_asks() {
     assert!(!runner
         .commands
         .iter()
-        .any(|c| c == "emerge --depclean --color=n"));
+        .any(|c| c == "emerge --depclean --color=n --ask=n"));
     assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
 
     let mut runner = Scripted {
@@ -632,7 +640,7 @@ fn quiet_removal_lists_and_always_asks() {
     assert!(runner
         .commands
         .iter()
-        .any(|c| c == "emerge --depclean --color=n"));
+        .any(|c| c == "emerge --depclean --color=n --ask=n"));
 }
 
 const HELPER_DEPCLEAN: &str = r#"{"ok": true, "removals": [{"name": "acct-user/nullmail", "version": "0-r2", "slot": "0", "needed_by": ["mail-mta/nullmailer"]}, {"name": "mail-mta/nullmailer", "version": "2.2-r2", "slot": "0", "needed_by": []}], "helper": 2}"#;
@@ -1284,4 +1292,28 @@ fn keywords_are_put_back_when_the_switch_is_cancelled() {
         !r.join(portage::KEYWORDS_DIR).exists(),
         "no keywords file was left"
     );
+}
+
+#[test]
+fn errors_say_whether_anything_changed() {
+    let early = nothing_changed(anyhow::anyhow!("the snapshot failed"));
+    assert!(changed_nothing(&early));
+    assert_eq!(early.to_string(), "the snapshot failed");
+    assert!(changed_nothing(&anyhow::Error::new(Cancelled)));
+    assert!(!changed_nothing(&anyhow::anyhow!("emerge stopped")));
+    // Marking twice keeps the original kind.
+    assert!(nothing_changed(anyhow::Error::new(Cancelled)).is::<Cancelled>());
+}
+
+#[test]
+fn a_failed_snapshot_counts_as_nothing_changed() {
+    let root = fake_system();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Recorder {
+        fail: Some("snapshot"),
+        ..Recorder::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap_err();
+    assert!(changed_nothing(&err), "{err:#}");
 }

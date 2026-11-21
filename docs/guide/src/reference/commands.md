@@ -52,6 +52,14 @@ That's useful for testing.
 |---|---|
 | `bunny report [--dry-run] [--yes]` | Sends recorded commands that haven't been sent yet as one GitHub issue. `--dry-run` shows what would be sent. Needs `[dev] report` on; see [Developer mode](developer-mode.md). |
 
+## One at a time
+
+Only one command that changes the system runs at a time. If another is
+still going (say a long `bunny update` in another terminal), bunny says so
+and changes nothing. If something fails before the system was touched
+(the snapshot, the startup image), `add` and `remove` put the config back
+too.
+
 ## How questions work
 
 - **`[Y/n]`**: Enter means yes. Used when the change can be undone (a snapshot

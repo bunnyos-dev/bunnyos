@@ -47,6 +47,33 @@ impl std::fmt::Display for Cancelled {
 
 impl std::error::Error for Cancelled {}
 
+/// Something failed before anything on the system was changed (the
+/// snapshot, the startup image, reading the system). `bunny add`/`remove`
+/// put the config back when they see it.
+#[derive(Debug)]
+pub struct NothingChanged(pub String);
+
+impl std::fmt::Display for NothingChanged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for NothingChanged {}
+
+/// Marks an error as coming from before anything was changed.
+pub fn nothing_changed(e: anyhow::Error) -> anyhow::Error {
+    if e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>() {
+        return e;
+    }
+    anyhow::Error::new(NothingChanged(format!("{e:#}")))
+}
+
+/// Whether nothing on the system was changed when `e` happened.
+pub fn changed_nothing(e: &anyhow::Error) -> bool {
+    e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>()
+}
+
 /// emerge refused before installing anything (its dry run failed), and the
 /// files were put back, so nothing changed. Holds the explanation to show.
 #[derive(Debug)]
@@ -119,10 +146,11 @@ pub fn switch(
     //    boot menu. It only adds a module and rebuilds the image (the old
     //    image is backed up); if that fails, nothing else has changed.
     if let Some(versions) = &plan.boot.install_module {
-        install_boot_module(root, versions, runner, &outcome.backup_dir)?;
+        install_boot_module(root, versions, runner, &outcome.backup_dir)
+            .map_err(nothing_changed)?;
     }
     // 1. Snapshot first, so there's always a way back.
-    take_snapshot(root, plan, runner, opts, &mut outcome)?;
+    take_snapshot(root, plan, runner, opts, &mut outcome).map_err(nothing_changed)?;
     std::fs::create_dir_all(&outcome.backup_dir)
         .with_context(|| format!("Couldn't create {}", outcome.backup_dir.display()))?;
     // 1b. Repositories, so packages from new ones can be checked and installed.

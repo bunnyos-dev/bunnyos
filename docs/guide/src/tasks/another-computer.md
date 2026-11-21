@@ -27,6 +27,20 @@ Bunny Linux, `bunny install` already made `/etc/bunny` a git repository, and
 [What to do first](../start/after-installing.md#keep-your-config-in-git)).
 On a Gentoo you set up yourself, `bunny publish` starts the repository too.
 
+**Push every commit somewhere else** (a private GitHub repository, your
+NAS): `/etc/bunny` is part of the system, so undoing a change takes the
+repository back too, and commits made after that point would only survive
+in the old system that `bunny clean` later deletes. With a remote, they're
+always there:
+
+```sh
+sudo git remote add origin <your repository's address>
+sudo git push -u origin HEAD
+```
+
+After a rollback, `sudo git fetch` and `git log origin/HEAD` show everything
+you'd committed.
+
 ## Things to know
 
 - **Old versions disappear from Gentoo.** Gentoo removes old versions from its

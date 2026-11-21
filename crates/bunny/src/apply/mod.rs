@@ -145,6 +145,17 @@ pub fn switch(
     remove_unused(plan, runner, opts, &mut outcome)?;
     // 7. Services.
     enable_services(config, root, plan, runner, &mut outcome)?;
+    if plan
+        .use_changes
+        .iter()
+        .any(|c| c.atom == "sys-auth/pambase")
+    {
+        outcome.notes.push(
+            "Logins changed (sys-auth/pambase). Log out and back in so yours \
+             picks it up: a desktop won't start in a login from before."
+                .into(),
+        );
+    }
     // 8. The boot menu's undo entry, pointing at this switch's snapshot.
     update_boot_menu(config, root, plan, opts, &mut outcome)?;
 
@@ -324,7 +335,8 @@ fn enable_services(
             ));
             continue;
         }
-        if !runner.run(&cmd(&["rc-update", "add", service, "default"]))? {
+        let runlevel = init::openrc_runlevel(service);
+        if !runner.run(&cmd(&["rc-update", "add", service, runlevel]))? {
             outcome
                 .notes
                 .push(format!("Couldn't enable \"{service}\" at boot."));

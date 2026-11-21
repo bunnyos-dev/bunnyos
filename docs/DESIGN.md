@@ -83,6 +83,14 @@ Bunny Linux Baseline   tested defaults, fully prebuilt
      └ host layer  per-machine (hosts/desktop.toml, hosts/laptop.toml)
 ```
 
+**Current behaviour (host layer):** `hosts/<host name>.toml` next to the
+config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
+kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
+plus a `[machine]` record from `bunny install` that's read but never acted on
+(the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
+main file. Rollback restores the main config and lock, not host files (known
+limit). The Baseline layer is still planned.
+
 Modules expand one line into packages + services + config files, for example
 `[desktop] wm = "hyprland"` or `[security] encryption = true`.
 
@@ -152,6 +160,20 @@ isolated = false       # compile inside a clean container
   writable copy of the chosen snapshot the new `@`. It takes effect on reboot.
   If restoring fails, the current system is moved back unchanged.
 - `/boot` lives inside `@`, so the kernel rolls back together with the system.
+- **When `/boot` is its own filesystem** (encrypted installs, where it's the
+  EFI partition): right after each generation's snapshot, bunny copies
+  `/boot`'s kernel files into `/boot/bunny/files/` (identical files stored
+  once; a rebuilt one with the same name becomes `<name>~2`) and lists the
+  generation's set in `/boot/bunny/generations/<gen>`. Skipped with a note if
+  it wouldn't leave 64 MB free. `bunny rollback` saves the current set first
+  (refusing to change anything if it can't), then after the swap makes
+  `/boot`'s kernel files exactly that generation's set (copy in, then remove)
+  and runs `grub-mkconfig`. The undo entry boots the copies from `/boot`
+  (`search --fs-uuid` on that partition). The boot-time undo can't touch
+  `/boot`, so `bunny status` warns about kernels in `/boot` with no
+  `/lib/modules` in the running system; restoring `/boot` after a boot-menu
+  undo is a follow-up. `clean` drops lists of deleted generations and unused
+  copies.
 - **Nested subvolumes** (subvolumes inside `@`, e.g. `/srv` when tmpfiles
   creates it as a subvolume on btrfs) aren't part of snapshots. Rollback moves
   them over to the restored system, like `/home`, and `clean` deletes them
@@ -422,6 +444,17 @@ admins = ["you"]
    track.
 3. **Flatpak** for large GUI apps.
 
+**Current behaviour (repositories and testing versions, November 2026):**
+`repositories = ["guru"]` in `bunny.toml` names repositories from Gentoo's
+list (`api.gentoo.org/overlays/repositories.xml`). A switch writes
+`repos.conf/bunny-<name>.conf` (git, auto-sync) and runs `emaint sync` right
+after the snapshot, then checks packages; repositories set up outside bunny
+are reported, not touched. `[pkg] keywords` go in
+`package.accept_keywords/zz-bunny`. `bunny add` has a short list of
+well-known packages outside `::gentoo` (Mango in GURU, Hyprland in
+hyproverlay) and offers their repository and keywords. Custom repository
+addresses (not in Gentoo's list) are later work.
+
 ### Relationship to Gentoo (towards a fork, one step at a time)
 
 Decided November 2026. Today Bunny Linux is a **Gentoo-based distribution**:
@@ -668,6 +701,25 @@ GPT
   --config github:you/my-system` partitions, writes the Baseline image and
   applies the config and lock in one command. Same recipe, not bit-for-bit
   (see "Lockfile").
+- **Current behaviour (part 1, guided):** `bunny install` lists whole disks
+  from `lsblk --json` and leaves out any in use (anything mounted, swap, or
+  something opened on it like LUKS or LVM), read-only or under 20 GB. The
+  preview lists every partition that will be erased and the layout you get;
+  you confirm by typing the disk's name. Layout: GPT, EFI (2 GB, FAT32) at
+  `/boot`, the rest LUKS2 (opened as `bunny-root`) with btrfs subvolumes
+  `@ @home @log @cache @build @snapshots` (+ `@swap` with a swapfile).
+  `/boot` on the EFI partition means kernels sit outside `@`, so undo relies
+  on the kernel copies in `/boot/bunny/`. Then: the newest OpenRC stage3
+  (SHA512-checked), fstab, Portage settings with signed binary packages, a
+  dracut config, the sudo file from `security::render`, and an embedded
+  `inside.sh` run in a chroot (packages from the binhost, GRUB named
+  "Bunny Linux" plus the fallback path, the kernel's startup image, the
+  user). One password unlocks the disk and logs in; root stays locked.
+  `--home-disk` encrypts a second disk with the same password plus a random
+  key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
+  only to the tools' standard input, never to files or the screen. On a
+  failure everything is unmounted and closed, so a second run starts clean.
+  `--dry-run` prints every command and file (PrintRunner).
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 
@@ -692,6 +744,15 @@ Needs the Baseline image (phases 6 and 7).
 - **Bunny Linux Net** (target ~300–400 MB) and **Bunny Linux Offline** (target ~1.5 GB).
 - No desktop, no Wayland, no Mesa, no Portage or Python on the USB. BusyBox
   userland is fine there.
+- **Current behaviour (the first, minimal image):** `tools/build-iso.sh`
+  builds it from Gentoo's stage3 with prebuilt packages: gentoo-kernel-bin,
+  linux-firmware, the disk tools, dhcpcd + iwd, chrony, git and bunny.
+  dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
+  overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
+  USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  Portage and Python are still in it (removing them is later work), so it's
+  bigger than the target; the package tree, docs and kernel sources are
+  removed.
 - Without a Microsoft-signed shim, Secure Boot must be off to boot the USB.
 
 ### Hosting

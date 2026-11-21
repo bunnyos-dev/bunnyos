@@ -10,6 +10,49 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- New: `repositories` in `bunny.toml` for package repositories besides
+  Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
+  up and downloads them before installing, so a package from one installs in
+  the same switch.
+- New: `keywords` under `[pkg]` allows testing versions (`["~amd64"]`).
+  emerge's "only available as a testing version" is now explained with the
+  lines to add.
+- `bunny add` knows where a few packages that aren't in Gentoo's own tree
+  went (Mango, Hyprland), and offers to add their repository and testing
+  versions.
+- New: `bunny install` puts Bunny Linux on a computer from a live USB. It
+  lists the disks (leaving out ones in use), shows exactly what will be
+  erased, asks you to type the disk's name, and installs a minimal encrypted
+  system with the Bunny Linux layout. Options for no encryption, a swapfile,
+  hibernation, a second disk for `/home`, and SSH; `--dry-run` shows every
+  step without changing anything.
+- `bunny install` asks for your time zone and keyboard layout, writes a
+  starter `bunny.toml` for the new system, and applies it before you restart,
+  so the system starts matching its config (with the boot menu's Undo entry
+  on). `--config` installs from your own config (a file, or a git repository
+  like `github:you/my-system`), checked before anything is erased; `--edit`
+  lets you change it first.
+- `bunny install --mounted <folder>` installs onto partitions you made and
+  mounted yourself, without erasing anything. It explains what limits your
+  layout (like no undo on ext4) and can make the standard btrfs subvolumes
+  on an empty filesystem.
+- New: the Bunny Linux live USB image. `tools/build-iso.sh` builds it; it
+  starts to a terminal with a welcome that explains `bunny install`, links
+  the Guide and says how to get online.
+- Guide: a new "Install Bunny Linux" chapter (the USB, `bunny install` step
+  by step, first start), "What to do first" (git, a desktop) and "Helping
+  test" (developer mode).
+- New: host files. `hosts/<computer name>.toml` next to `bunny.toml` adds
+  packages, services and USE flags for one computer only, so the main config
+  works everywhere. `bunny install` writes one with what the computer needs
+  to start and a record of its disk.
+- Undo now puts the kernel back on systems where `/boot` is its own partition
+  (usually encrypted ones). Each generation keeps a copy of its kernel on
+  `/boot`, shared when nothing changed; `bunny rollback` restores it and says
+  which kernel you'll get, and the boot menu's undo entry starts it.
+  `bunny status` warns if `/boot` has a kernel the system has no drivers for.
+- `tools/bunny-vm.sh stop` shuts the test VM down from your desktop.
+- `bunny --help` described `report` with `import`'s words; each now has its own.
 - `tools/convert-layout.sh` moves an existing Gentoo on btrfs (with `/` at the
   top of the volume) to the Bunny Linux layout, so undo works. Plan first,
   nothing deleted, and a boot menu entry back to the old system.

@@ -27,7 +27,8 @@ saying what came right after it: a switch (with a summary like
    some systems) over to the new `@`, so their contents aren't lost
 
 On the next boot, the system starts from the new `@`. `/boot` is inside `@`,
-so the kernel goes back too.
+so the kernel goes back too. (If `/boot` is its own partition, bunny puts the
+kernel back itself; see [below](#when-boot-is-its-own-partition).)
 
 If step 4 fails, the old `@` is moved back and nothing changes.
 
@@ -93,6 +94,47 @@ Limits:
   `bunny rollback` from a running system does carry them.
 - The entry needs GRUB, dracut, and the system started with `root=UUID=…`.
   `bunny plan` says if something's missing; everything else still works.
+
+## When `/boot` is its own partition
+
+On an encrypted system, `/boot` is usually the EFI partition, outside `@`
+(the boot menu can't read the encrypted disk). Snapshots don't include it, so
+on their own they'd keep the newest kernel, whose drivers the restored system
+might not have. bunny makes up for that:
+
+- **Each generation keeps its kernel on `/boot`.** Right after a
+  generation's snapshot, bunny copies `/boot`'s kernel files (`vmlinuz-*`,
+  `initramfs-*.img`, `System.map-*`, `config-*` and microcode images) into
+  `/boot/bunny/files/`, and lists which ones that generation had in
+  `/boot/bunny/generations/<generation>`. A file that's already there with
+  the same contents isn't copied again, so generations that share a kernel
+  cost nothing extra. A rebuilt startup image with the same name is kept as
+  `<name>~2`, `~3` and so on.
+- **There must be room.** bunny leaves 64 MB free on `/boot` for the next
+  kernel update. If a copy wouldn't fit, the switch goes ahead and says that
+  undoing it can't put the kernel back. `bunny clean` frees space.
+- **`bunny rollback` puts the kernel back.** Before changing anything, it
+  keeps the current kernel files (for the `before-rollback` generation, so
+  the rollback can be undone completely). Then, after the swap, it makes
+  `/boot`'s kernel files exactly what that generation had, copying everything
+  in before removing anything, and rebuilds the boot menu with
+  `grub-mkconfig`. Its question says which kernel you'll get, e.g.
+  `The kernel goes back too: 6.12.60 → 6.12.58`. If the kernel copy can't be
+  made, nothing is changed.
+- **Older generations** (saved before bunny kept kernels) can still be rolled
+  back to; `/boot` just keeps its current kernel, and bunny says so.
+- **The boot-menu undo** boots the generation's kernel straight from
+  `/boot/bunny/files/`, finding the partition by its UUID. It can't change
+  the kernel files on `/boot` itself, so after it the normal menu entry may
+  start a kernel the restored system has no drivers for. `bunny status` then
+  shows a **Kernel** warning; until that's fixed, pick the older kernel under
+  "Advanced options" in the boot menu. (Putting `/boot` back automatically
+  after a boot-menu undo is planned.)
+  The undo entry also stays in the menu (its file is on `/boot` too), but
+  picking it again does nothing, since that change is already undone.
+  `bunny rollback` does remove it.
+- **`bunny clean`** removes the lists of generations it deletes, and any
+  copies no remaining generation uses.
 
 ## Requirements
 

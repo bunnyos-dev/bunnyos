@@ -32,6 +32,11 @@ a minor version can change how things work).
   and your own `[pkg]` settings still win.
 - The `elogind` service is now added to the `boot` runlevel, as Gentoo
   recommends (other services still go in `default`).
+- Live USB: the welcome no longer says "Not online yet" while the network is
+  still starting. It waits up to about 15 seconds ("Checking the
+  connection…"), checks the internet and names (DNS) separately, so
+  "online, but names don't work" has its own message, and `welcome` checks
+  again.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

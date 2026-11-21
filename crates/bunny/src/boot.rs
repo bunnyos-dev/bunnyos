@@ -596,6 +596,43 @@ mod tests {
     }
 
     #[test]
+    fn boot_step_puts_the_host_file_back_too() {
+        let top = fake_top();
+        let t = top.path();
+        let generation = t.join("@snapshots/bunny-20261117-091500");
+        let applied = generation.join(crate::applied::DIR);
+        std::fs::create_dir_all(&applied).unwrap();
+        std::fs::create_dir_all(generation.join("etc/bunny/hosts")).unwrap();
+        std::fs::write(generation.join("etc/bunny/bunny.toml"), "edited").unwrap();
+        std::fs::write(
+            generation.join("etc/bunny/hosts/laptop.toml"),
+            "host edited after the snapshot",
+        )
+        .unwrap();
+        std::fs::write(applied.join("bunny.toml"), "as applied").unwrap();
+        std::fs::write(applied.join("config-path"), "/etc/bunny/bunny.toml\n").unwrap();
+        std::fs::write(applied.join("host.toml"), "host as applied").unwrap();
+        std::fs::write(applied.join("host-path"), "/etc/bunny/hosts/laptop.toml\n").unwrap();
+        let log = run_hook("bunny-20261117-091500", t);
+        assert_eq!(
+            std::fs::read_to_string(t.join("@/etc/bunny/hosts/laptop.toml")).unwrap(),
+            "host as applied",
+            "{log}"
+        );
+
+        // A path that leaves /etc is ignored.
+        let top = fake_top();
+        let t = top.path();
+        let generation = t.join("@snapshots/bunny-20261117-091500");
+        let applied = generation.join(crate::applied::DIR);
+        std::fs::create_dir_all(&applied).unwrap();
+        std::fs::write(applied.join("host.toml"), "host as applied").unwrap();
+        std::fs::write(applied.join("host-path"), "/etc/../evil.toml\n").unwrap();
+        let log = run_hook("bunny-20261117-091500", t);
+        assert!(!t.join("@/evil.toml").exists(), "{log}");
+    }
+
+    #[test]
     fn boot_step_does_nothing_on_a_normal_boot_or_a_bad_name() {
         for target in ["", "../etc", "bunny-missing", "@home"] {
             let top = fake_top();

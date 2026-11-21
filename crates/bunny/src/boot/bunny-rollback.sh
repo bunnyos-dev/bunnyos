@@ -85,6 +85,7 @@ bunny_rollback() {
 
     # The config that matched that generation goes back too, so config and
     # system agree. Only a config under /etc (one in /home isn't rolled back).
+    # The same goes for this computer's host file.
     bunny_applied="$bunny_top/@/var/lib/bunny/applied"
     if [ -f "$bunny_applied/config-path" ] && [ -f "$bunny_applied/bunny.toml" ]; then
         read -r bunny_config < "$bunny_applied/config-path"
@@ -99,6 +100,21 @@ bunny_rollback() {
                     if [ -f "$bunny_applied/bunny.lock" ]; then
                         cp "$bunny_applied/bunny.lock" "$bunny_top/@${bunny_config%.toml}.lock" || true
                     fi
+                fi
+                ;;
+        esac
+    fi
+    # This computer's host file (hosts/<name>.toml), as applied with it.
+    if [ -f "$bunny_applied/host-path" ] && [ -f "$bunny_applied/host.toml" ]; then
+        read -r bunny_host < "$bunny_applied/host-path"
+        case "$bunny_host" in
+            *..*) ;;
+            /etc/*.toml)
+                if [ -d "$bunny_top/@${bunny_host%/*}" ]; then
+                    cp "$bunny_applied/host.toml" "$bunny_top/@$bunny_host" || \
+                        warn "bunny: couldn't put $bunny_host back as it was"
+                else
+                    warn "bunny: couldn't put $bunny_host back (its folder is gone)"
                 fi
                 ;;
         esac

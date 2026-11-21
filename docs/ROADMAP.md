@@ -503,7 +503,7 @@ is tested first in a VM with the same layout.
 
 ## Known issues / small fixes
 
-- Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
+- [~] Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
 
 
 - The boot menu's main entry says "Gentoo GNU/Linux", not Bunny Linux (set

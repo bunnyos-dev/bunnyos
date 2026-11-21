@@ -49,13 +49,25 @@ system, so undo leaves it alone rather than writing through the link.
 
 A generation is saved right before a change, but by then `bunny.toml` has
 usually changed already (`bunny add` edits it first; so do you). So after each
-successful switch, bunny keeps a copy of the config and lock it just applied in
-`/var/lib/bunny/applied/`. That folder is part of the system, so every later
+successful switch, bunny keeps a copy of the config, the lock and this
+computer's host file (`hosts/<computer name>.toml`, if there is one) it just
+applied in `/var/lib/bunny/applied/`. That folder is part of the system, so every later
 generation carries the config that matches it.
 
 When you roll back (with `bunny rollback` or from the boot menu), that copy is
 put back where your config lives, as long as that's under `/etc`. A config in
-`/home` is on its own subvolume and is left alone.
+`/home` is on its own subvolume and is left alone. `bunny rollback` says what
+it put back:
+
+```
+  /etc/bunny/bunny.toml and /etc/bunny/hosts/laptop.toml are put back as they were then,
+  so they match the restored system.
+```
+
+Only the host file for this computer is kept; files for your other computers
+in `hosts/` aren't changed. Generations saved before this version of bunny
+have no copy of the host file, so undoing to one of those leaves the host
+file as it is.
 
 ## What's never rolled back
 

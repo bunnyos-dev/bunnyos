@@ -113,7 +113,7 @@ pub struct Outcome {
     /// Nested subvolumes that couldn't be carried over (left in `replaced`).
     pub left_behind: Vec<String>,
     /// The config put back as it was at that generation, if any.
-    pub config_restored: Option<PathBuf>,
+    pub config_restored: Option<crate::applied::Restored>,
     /// The restored system's old "undo the last change" entry was removed.
     pub undo_entry_dropped: bool,
     /// `/boot` is its own filesystem and its kernel files were put back as

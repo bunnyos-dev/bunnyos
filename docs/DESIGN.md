@@ -698,6 +698,9 @@ GPT
   `inside.sh` run in a chroot (packages from the binhost, GRUB named
   "Bunny Linux" plus the fallback path, the kernel's startup image, the
   user). One password unlocks the disk and logs in; root stays locked.
+  The password can't be empty; under 8 characters gets a warning (easy to
+  guess, a few words are better) and can be kept by typing it again, or
+  replaced by pressing Enter. It's your disk and your choice.
   `--home-disk` encrypts a second disk with the same password plus a random
   key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
   only to the tools' standard input, never to files or the screen. On a

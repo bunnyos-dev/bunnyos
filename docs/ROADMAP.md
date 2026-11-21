@@ -379,7 +379,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       easy to guess and suggest a longer one, then carry on.
 - [ ] **`bunny install --dry-run` asks for a password** although nothing is
       encrypted on a dry run. Skip it.
-- [ ] **`bunny plan` without sudo says the undo entry can't be set up**
+- [~] **`bunny plan` without sudo says the undo entry can't be set up**
       (it can't read `/boot`). Say "run with sudo to check the boot menu"
       instead of guessing.
 - [ ] **`bunny plan <copy>` silently drops the host file.** A copy of

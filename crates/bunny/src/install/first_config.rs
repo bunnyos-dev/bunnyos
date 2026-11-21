@@ -329,6 +329,14 @@ pub fn start_history(
     runner: &mut dyn Runner,
 ) -> Result<()> {
     let dir = choices.mnt.join(DIR);
+    // /etc/bunny belongs to root; without this, `git log` there as your
+    // user fails with "detected dubious ownership".
+    if let Err(e) = crate::config_repo::trust(&choices.mnt, &format!("/{DIR}"), runner) {
+        println!(
+            "\n⚠ {e:#}. To read /{DIR}'s history as yourself, run after restarting:\n    \
+             sudo git config --system --add safe.directory /{DIR}"
+        );
+    }
     if matches!(source, Source::Repo { .. }) {
         println!(
             "\n  /{DIR} keeps the git history of the repository it came from. To save\n  \
@@ -519,8 +527,12 @@ mod tests {
             ]
         );
         assert!(mnt.path().join("etc/bunny/.gitignore").is_file());
+        // Your user can read it: git trusts /etc/bunny system-wide.
+        assert!(crate::config_repo::trusted(mnt.path(), "/etc/bunny"));
 
-        // A config from a repository keeps that repository's history.
+        // A config from a repository keeps that repository's history, and
+        // is readable too.
+        std::fs::remove_file(mnt.path().join("etc/gitconfig")).unwrap();
         let mut r = Recorded::default();
         let repo = Source::Repo {
             url: "https://example.org/x".into(),
@@ -528,6 +540,7 @@ mod tests {
         };
         start_history(&repo, &choices, &account(), &mut r).unwrap();
         assert!(r.0.is_empty(), "{:?}", r.0);
+        assert!(crate::config_repo::trusted(mnt.path(), "/etc/bunny"));
     }
 
     #[test]

@@ -391,6 +391,56 @@ pub fn install_inside(
     Ok(())
 }
 
+/// Tidies the new system's boot menu (Gentoo's theme, "Bunny Linux
+/// GNU/Linux", the "(EFI BootNext)" entries) and rebuilds it. Done here, not
+/// only in the first switch, so it happens whatever your config says. The
+/// old files are kept in `/var/lib/bunny/backups/as-installed/`. Problems are
+/// explained and never stop the install.
+pub fn tidy_boot_menu(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
+    use crate::boot::tidy;
+    say(
+        runner,
+        "Tidying the boot menu",
+        "Turns off Gentoo's menu theme, names the main entry \"Bunny Linux\" (not\n\
+         \"Bunny Linux GNU/Linux\") with \"Advanced options\" under it, and removes\n\
+         the \"(EFI BootNext)\" entries. \"UEFI Firmware Settings\" stays.",
+    );
+    let mnt = &choices.mnt;
+    if runner.dry() {
+        for file in [
+            tidy::DEFAULT_GRUB,
+            tidy::OWN_SCRIPT,
+            tidy::LINUX_SCRIPT,
+            tidy::BOOTNEXT_SCRIPT,
+        ] {
+            super::would(runner, "change", &mnt.join(file).display().to_string());
+        }
+    } else {
+        let todo = tidy::needed(mnt);
+        if todo.is_empty() {
+            return Ok(());
+        }
+        let backup = mnt.join("var/lib/bunny/backups/as-installed");
+        if let Err(e) = tidy::apply(mnt, &todo, &backup) {
+            println!("  ⚠ Couldn't tidy the boot menu ({e:#}). It still works as it is.");
+            return Ok(());
+        }
+    }
+    if !runner.run(&s(&[
+        "chroot",
+        &mnt.to_string_lossy(),
+        "grub-mkconfig",
+        "-o",
+        "/boot/grub/grub.cfg",
+    ]))? {
+        println!(
+            "  ⚠ Couldn't rebuild the boot menu (the message is above). After restarting, run:\n    \
+             sudo grub-mkconfig -o /boot/grub/grub.cfg"
+        );
+    }
+    Ok(())
+}
+
 /// The swapfile's offset, for resuming from hibernation.
 pub fn resume_offset(choices: &Choices, runner: &mut dyn Runner) -> Result<Option<String>> {
     if !choices.hibernate || choices.swap_mib == 0 {
@@ -550,6 +600,9 @@ mod tests {
         );
         assert!(env.contains("CMDLINE=\"rd.luks.uuid=luks\""), "{env}");
         assert!(env.contains("sys-fs/cryptsetup"), "{env}");
+        // Bunny Linux's own packages come with the first switch, once its
+        // repository is set up: the install script's emerge can't see them.
+        assert!(!env.contains("bunny-release"), "{env}");
         assert!(env.contains("SERVICES=\"dhcpcd sysklogd sshd\""), "{env}");
         assert!(env.contains("BOOT_SERVICES=\"swapfiles\""), "{env}");
         assert!(read("etc/init.d/swapfiles").contains("need localmount"));
@@ -562,5 +615,55 @@ mod tests {
         assert!(dir.path().join("usr/local/bin/bunny").is_file());
         // No passwords are ever written to the new system's files.
         assert!(!env.to_lowercase().contains("password"));
+    }
+
+    /// The console font that can draw ✓ ✗ ⚠ is set up and started at boot.
+    #[test]
+    fn inside_script_sets_a_console_font_with_bunnys_marks() {
+        assert!(INSIDE.contains("/usr/share/consolefonts/eurlatgr.psfu.gz"));
+        // ⚠ is added to the "!" glyph (position 0x21).
+        assert!(INSIDE.contains("printf '0x021\\tU+26A0\\n'"));
+        assert!(INSIDE.contains("/etc/conf.d/consolefont"));
+        assert!(INSIDE.contains("rc-update add consolefont boot"));
+        // It only needs kbd, which the stage3 already has.
+        let font = INSIDE.find("consolefont boot").unwrap();
+        let packages = INSIDE.find("emerge -q --noreplace $PACKAGES").unwrap();
+        assert!(font < packages);
+    }
+
+    #[test]
+    fn the_boot_menu_is_tidied_and_rebuilt() {
+        let mnt = crate::boot::tidy::tests::gentoo_root();
+        let choices = Choices {
+            disk: "/dev/vda".into(),
+            mnt: mnt.path().to_path_buf(),
+            ..Default::default()
+        };
+        #[derive(Default)]
+        struct Recorded(Vec<String>);
+        impl Runner for Recorded {
+            fn run(&mut self, cmd: &[String]) -> Result<bool> {
+                self.0.push(cmd.join(" "));
+                Ok(true)
+            }
+        }
+        let mut runner = Recorded::default();
+        tidy_boot_menu(&choices, &mut runner).unwrap();
+        assert!(crate::boot::tidy::needed(mnt.path()).is_empty());
+        assert_eq!(
+            runner.0,
+            vec![format!(
+                "chroot {} grub-mkconfig -o /boot/grub/grub.cfg",
+                mnt.path().display()
+            )]
+        );
+        assert!(mnt
+            .path()
+            .join("var/lib/bunny/backups/as-installed/etc/default/grub")
+            .is_file());
+        // Already tidy: nothing runs.
+        let mut again = Recorded::default();
+        tidy_boot_menu(&choices, &mut again).unwrap();
+        assert!(again.0.is_empty());
     }
 }

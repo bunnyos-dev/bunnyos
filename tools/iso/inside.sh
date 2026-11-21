@@ -64,6 +64,29 @@ rc-update add iwd default
 # Quiet start-up: only warnings and errors.
 sed -i 's/^#\?rc_verbose=.*/rc_verbose=NO/' /etc/rc.conf
 
+say "A console font that can draw ✓ ✗ ⚠"
+# The console's usual font has no ✓ or ✗ (bunny's ✓ showed as "v"). kbd's
+# eurlatgr has both (sharing the √ and × shapes) and ·, but no ⚠, so the
+# copy made here also draws ⚠ with its "!".
+font_src=/usr/share/consolefonts/eurlatgr.psfu.gz
+font=/usr/local/share/consolefonts/bunny.psfu
+[ -f "$font_src" ] || font_src="${font_src%.gz}"
+[ -f "$font_src" ] || { echo "kbd's eurlatgr console font is missing." >&2; exit 1; }
+mkdir -p "${font%/*}"
+zcat -f "$font_src" > /tmp/bunny-font.psfu
+psfgettable /tmp/bunny-font.psfu /tmp/bunny-font.txt
+printf '0x021\tU+26A0\n' >> /tmp/bunny-font.txt
+psfaddtable /tmp/bunny-font.psfu /tmp/bunny-font.txt "$font"
+rm -f /tmp/bunny-font.psfu /tmp/bunny-font.txt
+for mark in 2713 2717 26a0 00b7; do
+    psfgettable "$font" - | grep -qi "U+$mark" \
+        || { echo "The console font can't draw U+$mark." >&2; exit 1; }
+done
+sed -i "s|^#\?consolefont=.*|consolefont=\"$font\"|" /etc/conf.d/consolefont
+grep -q "^consolefont=\"$font\"" /etc/conf.d/consolefont \
+    || { echo "Couldn't set the console font." >&2; exit 1; }
+rc-update add consolefont boot
+
 say "The kernel and the live startup image"
 kver="$(find /lib/modules -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -1)"
 [ -n "$kver" ] || { echo "No kernel was installed." >&2; exit 1; }

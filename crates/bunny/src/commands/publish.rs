@@ -66,7 +66,13 @@ pub(crate) fn publish(
         Box::new(apply::SystemRunner)
     };
     let gh_installed = root.join("usr/bin/gh").exists();
-    let plan = config_repo::look(&dir, &person, &host, repo, gh_installed, runner.as_mut())?;
+    let mut plan = config_repo::look(&dir, &person, &host, repo, gh_installed, runner.as_mut())?;
+    // The folder as the system sees it, for git's safe.directory.
+    let inside = Path::new("/").join(dir.strip_prefix(root).unwrap_or(&dir));
+    let inside = inside.to_string_lossy().into_owned();
+    if !config_repo::trusted(root, &inside) {
+        plan.trust = Some((root.to_path_buf(), inside));
+    }
     print!("{}", plan.preview());
     if !runner.dry() {
         let default = if plan.public {

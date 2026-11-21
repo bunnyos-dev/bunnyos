@@ -43,10 +43,12 @@ pub(crate) fn ask(question: &str, enter_means_yes: bool) -> anyhow::Result<bool>
 /// `sudo bunny`. Returns the exit code if it did.
 ///
 /// sudo and doas both exit with 1 when they don't run the command (no
-/// password, a wrong one, Ctrl+C at the question, or not allowed). bunny run
-/// with `--elevated` never exits with 1 (see `elevated_exit`), so a 1 here
-/// means bunny never started as root and nothing was changed: we say so in
-/// plain words instead of leaving sudo's own line as the only explanation.
+/// password, a wrong one, or not allowed; sudo also for Ctrl+C at the
+/// question). doas is stopped by Ctrl+C at its question instead. bunny run
+/// with `--elevated` never exits with 1 (see `elevated_exit`) and handles
+/// Ctrl+C itself, so either means bunny never started as root and nothing was
+/// changed: we say so in plain words instead of leaving sudo's or doas's own
+/// line (or nothing) as the only explanation.
 pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
     if !real_system || is_root() {
         return Ok(None);
@@ -68,14 +70,23 @@ pub(crate) fn elevate(real_system: bool) -> anyhow::Result<Option<ExitCode>> {
         .with_context(|| {
             format!("bunny needs to run as root to change the system, and couldn't start {admin}")
         })?;
-    if admin_refused(status.code()) {
+    use std::os::unix::process::ExitStatusExt;
+    if admin_refused(status.code(), status.signal()) {
         eprintln!("{}", refused_message(admin));
     }
-    Ok(Some(if status.success() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }))
+    Ok(Some(passed_on(status.code(), status.signal())))
+}
+
+/// The exit code for the bunny that asked sudo or doas to run it as root:
+/// success, [`YOUR_INPUT`] (bunny as root stopped because of what you typed,
+/// or sudo or doas got no password), or a failure.
+fn passed_on(code: Option<i32>, signal: Option<i32>) -> ExitCode {
+    match code {
+        Some(0) => ExitCode::SUCCESS,
+        Some(n) if n == i32::from(YOUR_INPUT) => your_input(),
+        _ if admin_refused(code, signal) => your_input(),
+        _ => ExitCode::FAILURE,
+    }
 }
 
 /// Held while a command changes the system: only one at a time, and none
@@ -128,21 +139,33 @@ pub(crate) fn changing(real_system: bool, pending_ok: bool) -> anyhow::Result<Ch
 /// `elevate`: anything but 1, which sudo and doas use for "didn't run it".
 pub(crate) const ELEVATED_FAILURE: u8 = 3;
 
+/// The exit code for "stopped because of what you typed, not a problem in
+/// bunny": a package name that doesn't exist, a mistake in the config, or
+/// no password at sudo's or doas's question (Ctrl+C included). Nothing was
+/// changed. Developer mode doesn't report these by itself.
+pub(crate) const YOUR_INPUT: u8 = 4;
+
+/// [`YOUR_INPUT`] as an exit code.
+pub(crate) fn your_input() -> ExitCode {
+    ExitCode::from(YOUR_INPUT)
+}
+
 /// bunny's exit code when it was re-run as root (`--elevated`): a failure
 /// becomes `ELEVATED_FAILURE`, so `elevate` can tell it apart from sudo or
-/// doas refusing.
+/// doas refusing. [`YOUR_INPUT`] is kept, so the bunny that asked for admin
+/// rights can pass it on.
 pub(crate) fn elevated_exit(code: ExitCode, elevated: bool) -> ExitCode {
-    if elevated && code != ExitCode::SUCCESS {
+    if elevated && code != ExitCode::SUCCESS && code != your_input() {
         ExitCode::from(ELEVATED_FAILURE)
     } else {
         code
     }
 }
 
-/// Whether sudo or doas refused to run bunny (exit code 1), rather than bunny
-/// itself failing as root.
-fn admin_refused(code: Option<i32>) -> bool {
-    code == Some(1)
+/// Whether sudo or doas refused to run bunny (exit code 1, or doas stopped by
+/// Ctrl+C at its password question), rather than bunny itself failing as root.
+fn admin_refused(code: Option<i32>, signal: Option<i32>) -> bool {
+    code == Some(1) || signal == Some(libc::SIGINT)
 }
 
 /// What to say when sudo or doas didn't run bunny as root.
@@ -287,19 +310,42 @@ pub(crate) fn read_config_text(config: &Path) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        admin_refused, elevated_exit, parse_answer, refused_message, Default, ELEVATED_FAILURE,
+        admin_refused, elevated_exit, parse_answer, passed_on, refused_message, your_input,
+        Default, ELEVATED_FAILURE, YOUR_INPUT,
     };
     use std::process::ExitCode;
 
     #[test]
     fn sudo_refusing_is_told_apart_from_bunny_failing() {
         // sudo and doas exit with 1 when they don't run the command.
-        assert!(admin_refused(Some(1)));
-        // bunny as root: success, its own failure, a crash, a signal.
-        assert!(!admin_refused(Some(0)));
-        assert!(!admin_refused(Some(ELEVATED_FAILURE as i32)));
-        assert!(!admin_refused(Some(101)));
-        assert!(!admin_refused(None));
+        assert!(admin_refused(Some(1), None));
+        // doas is stopped by Ctrl+C at its password question.
+        assert!(admin_refused(None, Some(libc::SIGINT)));
+        // bunny as root: success, its own failure, a crash, killed.
+        assert!(!admin_refused(Some(0), None));
+        assert!(!admin_refused(Some(ELEVATED_FAILURE as i32), None));
+        assert!(!admin_refused(Some(101), None));
+        assert!(!admin_refused(None, Some(libc::SIGKILL)));
+        assert!(!admin_refused(None, Some(libc::SIGTERM)));
+    }
+
+    #[test]
+    fn your_own_mistakes_keep_their_exit_code_through_sudo() {
+        // bunny as root stopped over a name that doesn't exist: passed on.
+        assert_eq!(elevated_exit(your_input(), true), your_input());
+        assert_eq!(passed_on(Some(i32::from(YOUR_INPUT)), None), your_input());
+        // sudo got no password (Ctrl+C at its question): your input too.
+        assert_eq!(passed_on(Some(1), None), your_input());
+        // bunny's own failures and crashes stay failures.
+        assert_eq!(
+            passed_on(Some(i32::from(ELEVATED_FAILURE)), None),
+            ExitCode::FAILURE
+        );
+        assert_eq!(passed_on(Some(101), None), ExitCode::FAILURE);
+        assert_eq!(passed_on(None, None), ExitCode::FAILURE);
+        assert_eq!(passed_on(Some(0), None), ExitCode::SUCCESS);
+        // doas stopped by Ctrl+C at its password question: your input, too.
+        assert_eq!(passed_on(None, Some(libc::SIGINT)), your_input());
     }
 
     #[test]

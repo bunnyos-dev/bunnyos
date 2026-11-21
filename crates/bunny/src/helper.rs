@@ -24,6 +24,82 @@ struct PlanReply {
     ok: bool,
     #[serde(default)]
     merges: Vec<HelperMerge>,
+    /// Why there's no plan (helper 3 and later). Read one by one, so one
+    /// odd entry doesn't spoil the rest.
+    #[serde(default)]
+    problems: Vec<serde_json::Value>,
+}
+
+/// Why Portage couldn't work out a plan, as data from the helper. bunny
+/// explains these kinds from here instead of from emerge's text.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Problem {
+    /// Only a testing (`~amd64`) or live (`**`) version would do.
+    Keywords {
+        name: String,
+        version: String,
+        keyword: String,
+        #[serde(default)]
+        required_by: Vec<String>,
+    },
+    /// Every version that would do is masked.
+    Masked {
+        name: String,
+        /// Like `package.mask`, `~amd64 keyword`, `missing keyword`.
+        reasons: Vec<String>,
+        /// Gentoo's package.mask comment.
+        #[serde(default)]
+        comment: Option<String>,
+        #[serde(default)]
+        required_by: Vec<String>,
+    },
+    /// It has to be built with other USE flags: flag → on (true) or off.
+    Use {
+        name: String,
+        version: String,
+        changes: std::collections::BTreeMap<String, bool>,
+        #[serde(default)]
+        required_by: Vec<String>,
+    },
+}
+
+impl Problem {
+    fn sane(&self) -> bool {
+        let flag_ok = |f: &String| {
+            !f.is_empty()
+                && f.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "+_-@.".contains(c))
+        };
+        match self {
+            Problem::Keywords { name, keyword, .. } => {
+                crate::config::is_package_name(name)
+                    && (keyword == "**"
+                        || (keyword.starts_with('~') && flag_ok(&keyword[1..].to_string())))
+            }
+            Problem::Masked { name, reasons, .. } => {
+                crate::config::is_package_name(name) && !reasons.is_empty()
+            }
+            Problem::Use { name, changes, .. } => {
+                crate::config::is_package_name(name)
+                    && !changes.is_empty()
+                    && changes.keys().all(flag_ok)
+            }
+        }
+    }
+}
+
+/// The helper's answer to `plan`.
+#[derive(Debug, PartialEq)]
+pub enum PlanAnswer {
+    /// What emerge would install.
+    List(Vec<Merge>),
+    /// Portage couldn't work out a plan; these are the problems it found
+    /// that bunny can explain from data (maybe none).
+    Refused(Vec<Problem>),
+    /// No answer (no python3, an old helper, something unexpected): ask
+    /// emerge.
+    Unavailable,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,12 +123,33 @@ struct HelperWhy {
 }
 
 /// Parses the helper's answer to `plan`. `None` if it didn't work out a plan.
+#[cfg(test)]
 pub fn parse_plan(json: &str) -> Option<Vec<Merge>> {
-    let reply: PlanReply = serde_json::from_str(json.lines().last()?).ok()?;
-    if !reply.ok {
-        return None;
+    match parse_plan_answer(json) {
+        PlanAnswer::List(list) => Some(list),
+        _ => None,
     }
-    reply
+}
+
+/// Parses the helper's answer to `plan`, including why it failed.
+pub fn parse_plan_answer(json: &str) -> PlanAnswer {
+    let Some(reply) = json
+        .lines()
+        .last()
+        .and_then(|l| serde_json::from_str::<PlanReply>(l).ok())
+    else {
+        return PlanAnswer::Unavailable;
+    };
+    if !reply.ok {
+        let problems = reply
+            .problems
+            .into_iter()
+            .filter_map(|v| serde_json::from_value::<Problem>(v).ok())
+            .filter(Problem::sane)
+            .collect();
+        return PlanAnswer::Refused(problems);
+    }
+    let list: Option<Vec<Merge>> = reply
         .merges
         .into_iter()
         .map(|m| {
@@ -75,14 +172,17 @@ pub fn parse_plan(json: &str) -> Option<Vec<Merge>> {
                 },
             })
         })
-        .collect()
+        .collect();
+    list.map_or(PlanAnswer::Unavailable, PlanAnswer::List)
 }
 
 /// What `emerge --update --deep --newuse @world` would install, from Portage
-/// itself. `None` means "ask emerge instead".
-pub fn plan(runner: &mut dyn Runner) -> Option<Vec<Merge>> {
-    let out = runner.output(&command(&["plan"])).ok()??;
-    parse_plan(&out)
+/// itself, or why it can't.
+pub fn plan(runner: &mut dyn Runner) -> PlanAnswer {
+    match runner.output(&command(&["plan"])) {
+        Ok(Some(out)) => parse_plan_answer(&out),
+        _ => PlanAnswer::Unavailable,
+    }
 }
 
 /// A package `emerge --depclean` would remove.
@@ -226,6 +326,187 @@ mod tests {
         ] {
             assert!(parse_depclean(bad).is_none(), "{bad}");
         }
+    }
+
+    #[test]
+    fn reads_why_there_is_no_plan() {
+        let json = r#"{"ok": false, "reason": "portage couldn't work out a plan", "problems": [
+            {"kind": "keywords", "name": "dev-qt/qtbase", "version": "6.10.1", "keyword": "~amd64", "required_by": ["gui-apps/quickshell"]},
+            {"kind": "masked", "name": "www-client/oldbrowser", "atom": "www-client/oldbrowser", "reasons": ["package.mask"], "comment": "Unmaintained.", "required_by": []},
+            {"kind": "use", "name": "net-libs/gnutls", "version": "3.8.13", "changes": {"pkcs11": true, "tools": true}, "required_by": ["app-crypt/swtpm"]},
+            {"kind": "slot-conflict", "name": "a/b"}
+        ], "helper": 3}"#
+            .replace('\n', " ");
+        let PlanAnswer::Refused(problems) = parse_plan_answer(&json) else {
+            panic!("not a refusal");
+        };
+        // The kind this bunny doesn't know yet is left to emerge's text.
+        assert_eq!(problems.len(), 3);
+        assert_eq!(
+            problems[0],
+            Problem::Keywords {
+                name: "dev-qt/qtbase".into(),
+                version: "6.10.1".into(),
+                keyword: "~amd64".into(),
+                required_by: vec!["gui-apps/quickshell".into()],
+            }
+        );
+        assert!(
+            matches!(&problems[1], Problem::Masked { comment: Some(c), .. } if c == "Unmaintained.")
+        );
+        let Problem::Use { changes, .. } = &problems[2] else {
+            panic!()
+        };
+        assert_eq!(changes.get("pkcs11"), Some(&true));
+    }
+
+    #[test]
+    fn odd_problems_are_left_out_not_trusted() {
+        for bad in [
+            r#"{"kind": "keywords", "name": "qtbase", "version": "1", "keyword": "~amd64"}"#,
+            r#"{"kind": "keywords", "name": "a/b", "version": "1", "keyword": "amd64; rm -rf /"}"#,
+            r#"{"kind": "masked", "name": "a/b", "reasons": []}"#,
+            r#"{"kind": "use", "name": "a/b", "version": "1", "changes": {}}"#,
+            r#"{"kind": "use", "name": "a/b", "version": "1", "changes": {"x\"]\nfoo": true}}"#,
+            r#"{"kind": "use", "name": "a/b"}"#,
+        ] {
+            let json = format!(r#"{{"ok": false, "problems": [{bad}], "helper": 3}}"#);
+            assert_eq!(
+                parse_plan_answer(&json),
+                PlanAnswer::Refused(vec![]),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_older_helper_or_no_helper() {
+        // Helper 2: no problems listed. Still a refusal; emerge explains.
+        assert_eq!(
+            parse_plan_answer(
+                r#"{"ok": false, "reason": "portage couldn't work out a plan", "helper": 2}"#
+            ),
+            PlanAnswer::Refused(vec![])
+        );
+        assert_eq!(parse_plan_answer(""), PlanAnswer::Unavailable);
+        assert_eq!(
+            parse_plan_answer("Traceback (most recent call last):"),
+            PlanAnswer::Unavailable
+        );
+    }
+
+    /// `problems()` against a stand-in for Portage's depgraph, shaped like
+    /// Portage 3.0's (the real one is only checked on Gentoo). Checks the
+    /// script's own logic: the keyword it picks, the chain, the USE map, and
+    /// that a dependency with an unmasked version isn't called masked.
+    #[test]
+    fn problems_from_a_stand_in_depgraph() {
+        const STAND_IN: &str = r##"
+import sys, types, json
+portage = types.ModuleType("portage")
+MASKS = {"www-client/oldbrowser-52.0": ["package.mask"], "a/half-1": ["package.mask"], "a/half-2": []}
+portage.getmaskingstatus = lambda cpv, settings=None, portdb=None: MASKS[cpv]
+portage.getmaskingreason = lambda cpv, settings=None, portdb=None: "# Jane Dev (2026-10-01)\n# Unmaintained.\n# Removal soon.\n"
+sys.modules["portage"] = portage
+class Pkg:
+    def __init__(self, cp, version, repo="gentoo"):
+        self.cp, self.version, self.repo = cp, version, repo
+        self.cpv = cp + "-" + version
+class Arg:  # a command-line argument or set: not a package
+    pass
+class Atom(str):
+    cp = property(lambda self: self.split("[")[0])
+    without_use = property(lambda self: Atom(self.split("[")[0]))
+qt = Pkg("dev-qt/qtbase", "6.10.1")
+live = Pkg("dev-libs/openssl", "9999")
+gnutls = Pkg("net-libs/gnutls", "3.8.13")
+shell = Pkg("gui-apps/quickshell", "0.2.1", "guru")
+wm = Pkg("gui-wm/hyprland", "0.52")
+PARENTS = {id(qt): [Arg(), shell], id(shell): [wm], id(wm): [Arg()], id(gnutls): [Pkg("app-crypt/swtpm", "0.10.2")]}
+class Digraph:
+    def parent_nodes(self, node):
+        return PARENTS.get(id(node), [])
+class Dyn:
+    digraph = Digraph()
+    _needed_unstable_keywords = {qt, live}
+    _needed_p_mask_changes = set()
+    _needed_use_config_changes = {gnutls: (frozenset(["pkcs11", "tools"]), {"tools": True, "pkcs11": True, "static": False})}
+    _unsatisfied_deps_for_display = [
+        (("/", Atom("www-client/oldbrowser")), {}),
+        (("/", Atom("a/half[x]")), {}),
+        (("/", Atom("a/missing")), {}),
+    ]
+class Graph:
+    _dynamic_config = Dyn()
+class PortDb:
+    def aux_get(self, cpv, keys, myrepo=None):
+        return [{"dev-qt/qtbase-6.10.1": "~amd64 ~arm64", "dev-libs/openssl-9999": ""}[cpv]]
+    def xmatch(self, how, atom):
+        return {"www-client/oldbrowser": ["www-client/oldbrowser-52.0"], "a/half": ["a/half-1", "a/half-2"]}.get(str(atom), [])
+settings = {"EROOT": "/", "ARCH": "amd64"}
+trees = {"/": {"porttree": types.SimpleNamespace(dbapi=PortDb())}}
+print(json.dumps(problems(Graph(), settings, trees)))
+"##;
+        // The script's own definitions, without running its command line.
+        let script = SCRIPT.replace("if __name__ == \"__main__\":", "if False:");
+        let code = format!("{script}\n{STAND_IN}");
+        let Ok(out) = std::process::Command::new("python3")
+            .args(["-c", &code])
+            .output()
+        else {
+            eprintln!("python3 not available; skipped");
+            return;
+        };
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success(),
+            "{text}{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let json = format!(r#"{{"ok": false, "problems": {}}}"#, text.trim());
+        let PlanAnswer::Refused(found) = parse_plan_answer(&json) else {
+            panic!("{text}");
+        };
+        assert_eq!(
+            found[0],
+            Problem::Keywords {
+                name: "dev-libs/openssl".into(),
+                version: "9999".into(),
+                keyword: "**".into(),
+                required_by: vec![],
+            }
+        );
+        assert_eq!(
+            found[1],
+            Problem::Keywords {
+                name: "dev-qt/qtbase".into(),
+                version: "6.10.1".into(),
+                keyword: "~amd64".into(),
+                required_by: vec!["gui-apps/quickshell".into(), "gui-wm/hyprland".into()],
+            }
+        );
+        let Problem::Use {
+            changes,
+            required_by,
+            ..
+        } = &found[2]
+        else {
+            panic!("{found:#?}")
+        };
+        assert_eq!(changes.get("static"), Some(&false));
+        assert_eq!(required_by, &["app-crypt/swtpm"]);
+        assert_eq!(
+            found[3],
+            Problem::Masked {
+                name: "www-client/oldbrowser".into(),
+                reasons: vec!["package.mask".into()],
+                comment: Some("Unmaintained. Removal soon.".into()),
+                required_by: vec![],
+            }
+        );
+        // a/half has an unmasked version; a/missing has none at all: both
+        // are left to emerge's text.
+        assert_eq!(found.len(), 4, "{found:#?}");
     }
 
     #[test]

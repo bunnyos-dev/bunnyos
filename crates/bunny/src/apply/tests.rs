@@ -486,7 +486,9 @@ fn quiet(yes: bool, answer: bool) -> Options {
 }
 
 const PRETEND: &str = "[binary   N     ] acct-group/nullmail-0-r2::gentoo\n\
-                       [binary   N     ] app-misc/tmux-3.6a::gentoo\n";
+                       [binary   N     ] app-misc/tmux-3.6a::gentoo\n\
+                       [binary   N     ] app-editors/neovim-0.11.5::gentoo\n\
+                       [binary   N     ] app-shells/zsh-5.9-r6::gentoo\n";
 const INSTALL: &str = ">>> Emerging binary (1 of 2) acct-group/nullmail-0-r2::gentoo\n\
                        >>> Emerging binary (2 of 2) app-misc/tmux-3.6a::gentoo\n\
                        \n * Messages for package app-misc/tmux-3.6a:\n\n * Read the manual.\n";
@@ -536,6 +538,47 @@ fn quiet_install_asks_emerge_first_then_installs_without_its_questions() {
     assert!(std::fs::read_to_string(log)
         .unwrap()
         .contains(">>> Emerging binary (2 of 2)"));
+}
+
+/// emerge's answer for a package that only has a testing version, asked
+/// about by name.
+const MASKED: &str = "!!! All ebuilds that could satisfy \"app-shells/zsh\" have been masked.\n\
+                      !!! One of the following masked packages is required to complete your request:\n\
+                      - app-shells/zsh-5.9-r6::gentoo (masked by: ~amd64 keyword)\n";
+
+#[test]
+fn a_package_emerge_quietly_leaves_out_is_explained_not_ignored() {
+    // Updating @world, emerge skips a package it can't install (only a
+    // testing version) with a warning, and plans nothing for it. bunny
+    // must not then say the system matches the config.
+    let root = fake_system();
+    let world = portage::world_path(root.path());
+    let world_before = std::fs::read_to_string(&world).unwrap();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert!(plan.add_packages.contains(&"app-shells/zsh".to_string()));
+    let mut runner = Scripted {
+        replies: vec![
+            (
+                "--pretend --update",
+                true,
+                "[binary   N     ] app-editors/neovim-0.11.5::gentoo\n".into(),
+            ),
+            (
+                "--pretend --verbose --color=n --ask=n app-shells/zsh",
+                false,
+                MASKED.into(),
+            ),
+        ],
+        ..Scripted::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("nothing was changed"), "{err}");
+    assert!(err.contains("app-shells/zsh"), "{err}");
+    assert!(!runner.commands.iter().any(|c| c.contains("--quiet-build")));
+    assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
 }
 
 #[test]
@@ -603,6 +646,51 @@ fn a_refusal_before_installing_changes_nothing_and_is_explained() {
         "{err}"
     );
     assert!(err.contains("gnutls"), "{err}");
+    assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
+}
+
+#[test]
+fn a_refusal_is_explained_from_the_helpers_data() {
+    let root = fake_system();
+    let world = portage::world_path(root.path());
+    let world_before = std::fs::read_to_string(&world).unwrap();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    // The helper says why; emerge's text is still asked for the log, and
+    // says something only it knows about (a slot conflict).
+    let text = format!(
+        "{}\n\n{}",
+        fixture("keyword-testing.txt"),
+        fixture("slot-conflict.txt")
+    );
+    let mut runner = Scripted {
+        replies: vec![("--pretend --update", false, text)],
+        helper: vec![(
+            "plan",
+            r#"{"ok": false, "reason": "portage couldn't work out a plan", "problems": [{"kind": "keywords", "name": "dev-qt/qtbase", "version": "6.10.1", "keyword": "~amd64", "required_by": ["gui-apps/quickshell", "gui-wm/hyprland"]}], "helper": 3}"#
+                .into(),
+        )],
+        ..Scripted::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true))
+        .unwrap_err()
+        .to_string();
+    assert!(runner.commands.iter().any(|c| c == "(helper) plan"));
+    assert!(
+        err.contains("before installing anything, so nothing was changed"),
+        "{err}"
+    );
+    // From the data: the chain the text doesn't have, and only once.
+    assert!(err.contains("quickshell → hyprland"), "{err}");
+    assert_eq!(
+        err.matches("only available as a testing version").count(),
+        1,
+        "{err}"
+    );
+    // From the text: the kind the helper didn't report.
+    for e in crate::explain::explain(&fixture("slot-conflict.txt")) {
+        assert!(err.contains(&e.title), "{err}");
+    }
     assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
 }
 
@@ -943,6 +1031,99 @@ fn undo_entry_is_set_up_in_one_switch() {
     assert!(plan::make(&config, r).unwrap().boot.is_empty());
 }
 
+/// Gentoo's GRUB files, as a Gentoo install leaves them.
+fn add_gentoo_grub(r: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    write(
+        r,
+        "etc/default/grub",
+        "GRUB_THEME=\"/usr/share/grub/themes/gentoo_glass/theme.txt\"\nGRUB_DISTRIBUTOR=\"Bunny Linux\"\n",
+    );
+    for name in ["10_linux", "30_uefi-firmware", "31_efi_bootnext"] {
+        let path = format!("etc/grub.d/{name}");
+        write(r, &path, "#! /bin/sh\n");
+        std::fs::set_permissions(r.join(&path), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).unwrap().permissions().mode() & 0o111 != 0
+}
+
+#[test]
+fn a_switch_tidies_the_boot_menu_of_an_existing_system() {
+    use crate::boot::tidy::{self, Tidy};
+    let root = bootable_system();
+    let r = root.path();
+    add_gentoo_grub(r);
+    // bunny's own menu script is already there from an earlier switch.
+    write(r, crate::boot::GRUBD_SCRIPT, crate::boot::GRUBD_TEXT);
+    let config = Config::parse(BOOT_CONFIG).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(
+        plan.boot.tidy,
+        vec![Tidy::Theme, Tidy::Titles, Tidy::BootNext]
+    );
+    let shown = plan.render();
+    assert!(shown.contains("Boot menu, tidied:"), "{shown}");
+    assert!(shown.contains("turn off Gentoo's menu theme"), "{shown}");
+    assert!(shown.contains("\"(EFI BootNext)\""), "{shown}");
+
+    let mut runner = Builder {
+        root: r.to_path_buf(),
+        dracut_ok: true,
+        commands: vec![],
+        separate_boot: false,
+    };
+    let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+
+    let grub = std::fs::read_to_string(r.join(tidy::DEFAULT_GRUB)).unwrap();
+    assert!(grub.contains("#GRUB_THEME="), "{grub}");
+    assert!(is_executable(&r.join(tidy::OWN_SCRIPT)));
+    assert!(!is_executable(&r.join(tidy::LINUX_SCRIPT)));
+    assert!(!is_executable(&r.join(tidy::BOOTNEXT_SCRIPT)));
+    assert!(is_executable(&r.join("etc/grub.d/30_uefi-firmware")));
+    // Backed up as they were.
+    let backup = &outcome.backup_dir;
+    assert!(std::fs::read_to_string(backup.join(tidy::DEFAULT_GRUB))
+        .unwrap()
+        .starts_with("GRUB_THEME="));
+    assert!(is_executable(&backup.join(tidy::LINUX_SCRIPT)));
+    assert!(is_executable(&backup.join(tidy::BOOTNEXT_SCRIPT)));
+    // After the files changed, the menu is rebuilt once.
+    let mkconfig: Vec<_> = runner
+        .commands
+        .iter()
+        .filter(|c| c.starts_with("grub-mkconfig -o "))
+        .collect();
+    assert_eq!(mkconfig.len(), 1, "{:?}", runner.commands);
+    // In the snapshot? The files are in /etc, so undo puts them back: the
+    // snapshot is taken before they change.
+    let snap = runner
+        .commands
+        .iter()
+        .position(|c| c.starts_with("btrfs"))
+        .unwrap();
+    let rebuilt = runner
+        .commands
+        .iter()
+        .position(|c| c.starts_with("grub-mkconfig"))
+        .unwrap();
+    assert!(snap < rebuilt);
+
+    assert!(plan::make(&config, r).unwrap().boot.tidy.is_empty());
+}
+
+#[test]
+fn the_boot_menu_is_left_alone_without_undo_entry() {
+    let root = bootable_system();
+    let r = root.path();
+    add_gentoo_grub(r);
+    let config = Config::parse("packages = [\"app-editors/neovim\"]\n").unwrap();
+    assert!(plan::make(&config, r).unwrap().boot.tidy.is_empty());
+}
+
 #[test]
 fn a_failed_startup_image_build_changes_nothing() {
     let root = bootable_system();
@@ -1249,6 +1430,48 @@ fn a_misspelled_package_is_caught_after_the_new_repository_arrives() {
     assert!(err.contains("gui-wm/mangowmm"), "{err}");
     assert!(err.contains("nothing was installed"), "{err}");
     assert!(!runner.commands.iter().any(|l| l.starts_with("emerge")));
+}
+
+#[test]
+fn bunny_linuxs_own_repository_needs_no_list_and_no_warning() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/bin/git", "");
+    let config = Config::parse("repositories = [\"bunny\"]\n").unwrap();
+    assert!(config.problems().is_empty());
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(plan.add_repositories, ["bunny"]);
+    let shown = plan.render();
+    assert!(shown.contains("Repositories to add:\n  + bunny"), "{shown}");
+    assert!(!shown.contains("aren't checked"), "{shown}");
+    let mut runner = WithRepos {
+        root: r.to_path_buf(),
+        commands: Vec::new(),
+        emaint_says: None,
+    };
+    switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+    // Gentoo's list isn't downloaded: bunny knows where its own lives.
+    assert!(
+        !runner.commands.iter().any(|c| c.starts_with("wget")),
+        "{:#?}",
+        runner.commands
+    );
+    assert!(runner
+        .commands
+        .iter()
+        .any(|c| c == "emaint sync --repo bunny"));
+    let conf = std::fs::read_to_string(portage::repo_conf_path(r, "bunny")).unwrap();
+    assert!(
+        conf.contains("sync-uri = https://github.com/bunnyos-dev/bunny-overlay.git"),
+        "{conf}"
+    );
+
+    // With another repository too, the list is fetched for that one, and
+    // the warning is about it.
+    let both = Config::parse("repositories = [\"bunny\", \"guru\"]\n").unwrap();
+    let plan = plan::make(&both, r).unwrap();
+    assert_eq!(plan.add_repositories, ["guru"]);
+    assert!(plan.render().contains("aren't checked"));
 }
 
 #[test]

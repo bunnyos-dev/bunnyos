@@ -32,6 +32,10 @@ pub(super) fn install_quietly(
         "--ask=n",
     ];
     let (list, dry_run_log) = ask_portage(root, runner, opts, outcome, &update)?;
+    let left_out = left_out(plan, &list);
+    if !left_out.is_empty() {
+        return explain_left_out(root, &left_out, runner, opts, outcome);
+    }
     if list.is_empty() {
         println!("emerge has nothing to install.");
         return Ok(());
@@ -69,38 +73,90 @@ fn ask_portage(
     pretend.push("@world".into());
     // Portage's own answer, as data. emerge's screen text only when that
     // isn't available (and to explain a refusal).
-    Ok(match crate::helper::plan(runner) {
-        Some(list) => (
-            list,
-            "(the install list came from bunny's Portage helper)\n".to_string(),
-        ),
-        None => {
-            let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
-            // --color=n should mean no color codes, but strip any that slip through:
-            // an invisible code breaks reading the message.
-            let raw = output;
-            let output = explain::strip_ansi(&raw);
-            if !ok {
-                discard(root, runner, outcome)?;
-                let log = save_log(
-                    root,
-                    &opts.stamp,
-                    "emerge",
-                    &format!("$ {}\n{raw}", pretend.join(" ")),
-                );
-                let text = refusal_message(&output, log);
-                return Err(Refused(text).into());
-            }
-
-            let list = crate::emerge::parse_merge_list(&output);
-            (list, format!("$ {}\n{output}", pretend.join(" ")))
+    let problems = match crate::helper::plan(runner) {
+        crate::helper::PlanAnswer::List(list) => {
+            return Ok((
+                list,
+                "(the install list came from bunny's Portage helper)\n".to_string(),
+            ))
         }
-    })
+        crate::helper::PlanAnswer::Refused(problems) => problems,
+        crate::helper::PlanAnswer::Unavailable => Vec::new(),
+    };
+    // emerge's text: the install list when the helper couldn't answer, and
+    // the full message for the log (and for problems the helper doesn't
+    // report as data yet) when Portage refused.
+    let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
+    // --color=n should mean no color codes, but strip any that slip through:
+    // an invisible code breaks reading the message.
+    let raw = output;
+    let output = explain::strip_ansi(&raw);
+    if !ok {
+        discard(root, runner, outcome)?;
+        let log = save_log(
+            root,
+            &opts.stamp,
+            "emerge",
+            &format!("$ {}\n{raw}", pretend.join(" ")),
+        );
+        let text = refusal_message(&output, &problems, log);
+        return Err(Refused(text).into());
+    }
+    let list = crate::emerge::parse_merge_list(&output);
+    Ok((list, format!("$ {}\n{output}", pretend.join(" "))))
 }
 
-/// Explains why emerge refused before installing anything.
-fn refusal_message(output: &str, log: Option<PathBuf>) -> String {
-    let explained = explain::explain(output);
+/// Packages you added that emerge's plan doesn't install. Updating
+/// `@world`, emerge skips a package it can't install (only a testing
+/// version, masked) with a warning instead of failing, so the plan alone
+/// would say there's nothing to do.
+fn left_out(plan: &Plan, list: &[Merge]) -> Vec<String> {
+    plan.add_packages
+        .iter()
+        .filter(|p| !list.iter().any(|m| &m.name == *p))
+        .cloned()
+        .collect()
+}
+
+/// Asks emerge about the left-out packages by name, which fails with the
+/// reason instead of skipping them, and explains it. Nothing is changed.
+fn explain_left_out(
+    root: &Path,
+    left_out: &[String],
+    runner: &mut dyn Runner,
+    opts: &Options,
+    outcome: &mut Outcome,
+) -> Result<()> {
+    let mut pretend = cmd(&["emerge", "--pretend", "--verbose", "--color=n", "--ask=n"]);
+    pretend.extend(left_out.iter().cloned());
+    let (_ok, raw) = runner.run_quiet(&pretend, &mut |_| {})?;
+    let output = explain::strip_ansi(&raw);
+    discard(root, runner, outcome)?;
+    let log = save_log(
+        root,
+        &opts.stamp,
+        "emerge",
+        &format!("$ {}\n{raw}", pretend.join(" ")),
+    );
+    let mut text = refusal_message(&output, &[], log);
+    if explain::explain_with_problems(&output, &[]).is_empty() {
+        text = format!(
+            "emerge's plan leaves out {}, although your config asks for {}.\n{text}",
+            left_out.join(", "),
+            if left_out.len() == 1 { "it" } else { "them" },
+        );
+    }
+    Err(Refused(text).into())
+}
+
+/// Explains why emerge refused before installing anything: from the Portage
+/// helper's data where it has some, otherwise from emerge's text.
+fn refusal_message(
+    output: &str,
+    problems: &[crate::helper::Problem],
+    log: Option<PathBuf>,
+) -> String {
+    let explained = explain::explain_with_problems(output, problems);
     let mut text = String::from(
         "emerge found a problem before installing anything, so nothing was changed.\n",
     );

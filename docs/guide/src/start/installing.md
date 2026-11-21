@@ -118,7 +118,8 @@ It ends with "✓ You're online." when you are.
 bunny install --dry-run
 ```
 
-This goes through every question and then lists each step and what it
+This goes through every question (except the password: nothing is
+encrypted and no account is made) and then lists each step and what it
 does, without changing anything. It's a good way to see what's coming:
 
 ```
@@ -157,7 +158,10 @@ bunny asks a few things, one at a time:
 7. **Your keyboard layout**, like `us`, `uk`, `de` or `fr` (Enter for `us`).
 8. **A password**, typed twice. It's for your account **and** for unlocking
    the disk each time the computer starts, so pick one you'll remember. If
-   it's lost, the disk can't be read.
+   it's lost, the disk can't be read. A long one is safest: a few words
+   together is easy to remember and hard to guess. If it's under 8
+   characters, bunny says so; type it again to keep it anyway, or press
+   Enter to choose another.
 
 Then it works for 15 to 30 minutes, depending on your internet. You'll see
 each step: partitioning, encrypting, downloading Gentoo's base system,

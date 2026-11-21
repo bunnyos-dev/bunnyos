@@ -42,7 +42,7 @@ minimal system. It runs from a live USB.
 | `--config <file or repo>` | Install from your own config instead of the starter one: a `bunny.toml` file, or a git repository with `bunny.toml` at its top (`github:you/my-system` is short for `https://github.com/you/my-system`). It's fetched and checked **before** anything is erased. |
 | `--mounted <folder>` | Install onto partitions you made and mounted yourself, without erasing anything. See [Installing onto your own partitions](#installing-onto-your-own-partitions). |
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
-| `--dry-run` | Go through the questions, then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
+| `--dry-run` | Go through the questions (not the password, since nothing is encrypted and no account is made), then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
 
 Sizes are written like `512M`, `2G` or `1.5G`.
 
@@ -63,8 +63,10 @@ Sizes are written like `512M`, `2G` or `1.5G`.
    cancels, and nothing is changed.
 5. **Your account.** A user name, a name for the computer, the time zone
    (like `America/Toronto`; Enter for UTC), the keyboard layout (like `us`,
-   `uk` or `de`; Enter for `us`), and a password (at least 8 characters,
-   typed twice, not shown). With encryption, the same password unlocks the
+   `uk` or `de`; Enter for `us`), and a password (typed twice, not shown;
+   it can't be empty). Under 8 characters gets a warning that it's easy to
+   guess, then the second question as usual: type it again to keep it, or
+   press Enter to choose another. With encryption, the same password unlocks the
    disk.
 6. **The disk.** The old partition table is cleared, and a new one written:
    the EFI partition and one for Bunny Linux. The second is encrypted
@@ -118,14 +120,17 @@ it after you restart. See
 | `/etc/portage/package.use/bunny-install` | The kernel installer uses dracut and GRUB; sudo is built without a mail server. |
 | `/etc/dracut.conf.d/bunny.conf` | The startup image can mount btrfs, unlock the disk and resume from hibernation. |
 | `/etc/sudoers.d/bunny` | Admin rights for the `wheel` group, the same file [`[security]`](config.md#security) manages. |
-| `/etc/default/grub` | Adds `GRUB_DISTRIBUTOR="Bunny Linux"` and the kernel settings (`rd.luks.uuid=…`, `rootflags=subvol=@`, and `resume=…` with `--hibernate`). |
+| `/etc/default/grub` | Adds `GRUB_DISTRIBUTOR="Bunny Linux"` and the kernel settings (`rd.luks.uuid=…`, `rootflags=subvol=@`, and `resume=…` with `--hibernate`). Comments out Gentoo's `GRUB_THEME`. |
+| `/etc/grub.d/10_bunny` | Names the main boot menu entry "Bunny Linux" (not "Bunny Linux GNU/Linux"), with "Advanced options" under it. `10_linux` and `31_efi_bootnext` ("(EFI BootNext)" entries) are made non-executable; the originals are in `/var/lib/bunny/backups/as-installed/`. See [the boot menu](generations.md#undo-from-the-boot-menu). |
 | `/etc/init.d/swapfiles` | Only with a swapfile: turns it on once `/swap` is mounted (OpenRC's own swap service starts too early for a swapfile on its own subvolume). |
 | `/etc/conf.d/dmcrypt`, `/etc/bunny/keys/home.key` | Only with `--home-disk` and encryption: unlocks the `/home` disk at boot. The key is readable only by root. |
 
 | `/etc/bunny/bunny.toml` | Your config. |
 | `/etc/bunny/.git`, `/etc/bunny/.gitignore` | The config's git history (first commit "As installed"), and what's kept out of it. |
+| `/etc/gitconfig` | Adds `/etc/bunny` to git's `safe.directory`, so you can read its history (`git log`) as yourself, although the folder belongs to root. |
 | `/etc/bunny/hosts/<computer name>.toml` | What belongs to this computer only. |
 | `/etc/localtime`, `/etc/timezone`, `/etc/conf.d/keymaps` | Your time zone (the link in `/etc/localtime` is what's used) and keyboard layout. |
+| `/usr/local/share/consolefonts/bunny.psfu`, `/etc/conf.d/consolefont` | A console font that can draw bunny's marks (✓ ✗ ⚠), set by OpenRC's `consolefont` service at boot. It's kbd's `eurlatgr`, with ⚠ drawn as `!` (no console font has a ⚠). Only the text console uses it; desktops have their own fonts. |
 
 Passwords are never written to a file: they're passed straight to
 `cryptsetup` and `chpasswd`.
@@ -137,8 +142,10 @@ computer:
 
 - **`/etc/bunny/bunny.toml`** is everything you choose: your programs,
   services, who can use sudo, and the boot menu's Undo entry. The starter
-  one lists the minimal system's networking, log, sudo and git, and has
-  comments pointing to this Guide. Put it in git and use it on every
+  one lists the minimal system's networking, log, sudo and git, plus
+  `sys-apps/bunny-release` from Bunny Linux's own repository
+  (`repositories = ["bunny"]`), which makes the system say Bunny Linux
+  instead of Gentoo. It has comments pointing to this Guide. Put it in git and use it on every
   computer.
 - **`/etc/bunny/hosts/<computer name>.toml`** is what this computer needs to
   start (the kernel, firmware, GRUB, the filesystem tools, and `cryptsetup`

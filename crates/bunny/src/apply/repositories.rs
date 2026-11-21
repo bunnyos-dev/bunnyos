@@ -64,15 +64,24 @@ pub(super) fn set_up_repositories(
     }
 
     if !plan.add_repositories.is_empty() {
-        let list = if runner.dry() {
+        // Gentoo's list is only needed for repositories bunny doesn't know.
+        let needs_list = plan
+            .add_repositories
+            .iter()
+            .any(|name| overlays::built_in(name).is_none());
+        let list = if runner.dry() || !needs_list {
             None
         } else {
             Some(overlays::fetch_list(runner)?)
         };
         for name in &plan.add_repositories {
-            let uri = match &list {
-                None => "<git address from Gentoo's list>".to_string(),
-                Some(list) => {
+            let uri = match (overlays::built_in(name), &list) {
+                (Some(git), _) => {
+                    println!("\n==> Adding the {name} repository: Bunny Linux's own packages");
+                    git.to_string()
+                }
+                (None, None) => "<git address from Gentoo's list>".to_string(),
+                (None, Some(list)) => {
                     let Some(listed) = list.iter().find(|l| &l.name == name) else {
                         bail!(
                             "There's no repository called \"{name}\" in Gentoo's list of repositories.\n  \

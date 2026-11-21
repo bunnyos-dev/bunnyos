@@ -185,7 +185,7 @@ pub(crate) fn add_cmd(
     };
     let Some(found) = resolve_all(root, names, &listed, &mut ask)? else {
         eprintln!("Nothing was changed.");
-        return Ok(ExitCode::FAILURE);
+        return Ok(super::your_input());
     };
     let mut text = old.clone();
     for home in &found.homes {

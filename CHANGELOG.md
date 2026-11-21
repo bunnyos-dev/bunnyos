@@ -10,6 +10,40 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- When emerge refuses a switch because a package is a testing version, is
+  masked, or needs other USE flags, bunny now explains it from Portage's own
+  answer (through bunny's Portage helper), including which packages pulled
+  it in. Other problems are still read from emerge's message.
+- New installs say Bunny Linux instead of Gentoo (in `/etc/os-release`, so
+  in fastfetch too, with a placeholder logo): the starter config adds
+  `sys-apps/bunny-release` from Bunny Linux's own repository, `"bunny"`,
+  which bunny now knows by name.
+- Fixed: pressing Ctrl+C at doas's password question now gets the same
+  "nothing was changed" message as sudo.
+- The boot menu is tidier: no Gentoo theme, the main entry is "Bunny Linux"
+  (not "Bunny Linux GNU/Linux") with "Advanced options" under it, and the
+  "(EFI BootNext)" entries are gone. New installs get it straight away;
+  existing systems with the boot-menu undo entry get it on the next switch,
+  shown in `bunny plan` first and undone by undo.
+- Fixed: `git log` in `/etc/bunny` as your own user said "detected dubious
+  ownership". `bunny install` and `bunny publish` now add `/etc/bunny` to
+  git's `safe.directory` in `/etc/gitconfig`, once.
+- `bunny install` no longer refuses a password under 8 characters. It says
+  it's easy to guess and suggests a longer one, then lets you keep it (type
+  it again) or choose another (press Enter).
+- `bunny install --dry-run` no longer asks for a password: a dry run
+  encrypts nothing and makes no account.
+- Fixed: `bunny plan` without sudo said the boot menu's undo entry couldn't
+  be set up, when it just couldn't read `/boot`. It now says the boot menu
+  wasn't checked and to run `sudo bunny plan` to include it.
+- Developer mode's `"auto"` no longer sends a report when you mistype a
+  package name, make a config mistake, or don't give sudo your password
+  (Ctrl+C at its question). These now end with exit code 4 ("stopped
+  because of what was typed; nothing was changed") instead of 1.
+
+- A package you add that emerge can't install (for example one with only a
+  testing version) is now explained, instead of emerge quietly leaving it out
+  and bunny saying the system matches your config.
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.
@@ -73,6 +107,11 @@ a minor version can change how things work).
 - `bunny install --dry-run` now shows each step in plain words (its name
   and what it does) instead of a wall of commands. `--dry-run --verbose`
   shows every command and file, as before.
+- The live USB and newly installed systems use a console font that can draw
+  ✓ and ✗ (they showed as `v` and `x`); ⚠ shows as `!`.
+- `tools/bunny-vm.sh`: each VM remembers its own SSH key, so a new VM no
+  longer trips "REMOTE HOST IDENTIFICATION HAS CHANGED". New `forget-key`
+  for after a reinstall, and `VM_USER` for a VM whose user isn't `you`.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

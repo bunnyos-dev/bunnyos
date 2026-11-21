@@ -225,21 +225,8 @@ fn earlier_block(root: &Path, ctx: &MenuContext) -> String {
     crate::boot::render_earlier(&versions, all.len())
 }
 
-/// Makes sure GRUB reads bunny.cfg right after the system's own entries:
-/// installs `/etc/grub.d/11_bunny` and runs grub-mkconfig once. Returns a
-/// note if that couldn't be done.
-fn install_menu_script(root: &Path, runner: &mut dyn Runner) -> Result<Option<String>> {
-    use std::os::unix::fs::PermissionsExt;
-    let script = root.join(crate::boot::GRUBD_SCRIPT);
-    if std::fs::read_to_string(&script).ok().as_deref() == Some(crate::boot::GRUBD_TEXT) {
-        return Ok(None);
-    }
-    if let Some(dir) = script.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    std::fs::write(&script, crate::boot::GRUBD_TEXT)
-        .with_context(|| format!("Couldn't write {}", script.display()))?;
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))?;
+/// Rebuilds `/boot/grub/grub.cfg`. Returns a note if that failed.
+pub(super) fn rebuild_menu(root: &Path, runner: &mut dyn Runner) -> Result<Option<String>> {
     let cfg = root.join("boot/grub/grub.cfg");
     let (ok, _) = runner.run_quiet(
         &cmd(&["grub-mkconfig", "-o", &cfg.to_string_lossy()]),
@@ -248,12 +235,56 @@ fn install_menu_script(root: &Path, runner: &mut dyn Runner) -> Result<Option<St
     if ok || runner.dry() {
         Ok(None)
     } else {
-        Ok(Some(
-            "The boot menu wasn't rebuilt to show bunny's entries in their new place. \
-             Run `grub-mkconfig -o /boot/grub/grub.cfg` to fix it."
-                .to_string(),
-        ))
+        Ok(Some(format!(
+            "The boot menu wasn't rebuilt with its new entries. \
+             Run `{} grub-mkconfig -o /boot/grub/grub.cfg` to fix it.",
+            crate::security::admin()
+        )))
     }
+}
+
+/// Makes sure GRUB reads bunny.cfg right after the system's own entries:
+/// installs `/etc/grub.d/11_bunny` and runs grub-mkconfig once (or again,
+/// when `rebuild` says the menu's settings changed). Returns a note if that
+/// couldn't be done.
+fn install_menu_script(
+    root: &Path,
+    runner: &mut dyn Runner,
+    rebuild: bool,
+) -> Result<Option<String>> {
+    use std::os::unix::fs::PermissionsExt;
+    let script = root.join(crate::boot::GRUBD_SCRIPT);
+    if std::fs::read_to_string(&script).ok().as_deref() != Some(crate::boot::GRUBD_TEXT) {
+        if let Some(dir) = script.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(&script, crate::boot::GRUBD_TEXT)
+            .with_context(|| format!("Couldn't write {}", script.display()))?;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))?;
+    } else if !rebuild {
+        return Ok(None);
+    }
+    rebuild_menu(root, runner)
+}
+
+/// Tidies Gentoo's leftovers in the boot menu (its theme, "GNU/Linux",
+/// "(EFI BootNext)"), backing up each file into this switch's backup folder.
+/// Returns whether anything changed (so grub-mkconfig needs to run).
+pub(super) fn tidy_menu(
+    root: &Path,
+    plan: &crate::plan::Plan,
+    outcome: &mut Outcome,
+) -> Result<bool> {
+    if plan.boot.tidy.is_empty() {
+        return Ok(false);
+    }
+    crate::boot::tidy::apply(root, &plan.boot.tidy, &outcome.backup_dir)
+        .context("Couldn't tidy the boot menu")?;
+    outcome.notes.push(format!(
+        "Tidied the boot menu. The old files are in {}.",
+        outcome.backup_dir.display()
+    ));
+    Ok(true)
 }
 
 /// After a switch: the boot menu's "Undo the last change" (pointing at this
@@ -263,9 +294,13 @@ pub(super) fn write_menu(
     opts: &Options,
     outcome: &Outcome,
     runner: &mut dyn Runner,
+    tidied: bool,
 ) -> Result<Vec<String>> {
     use crate::boot;
     if outcome.snapshot.is_none() {
+        if tidied {
+            return Ok(rebuild_menu(root, runner)?.into_iter().collect());
+        }
         return Ok(Vec::new());
     }
     let mut notes = Vec::new();
@@ -298,7 +333,7 @@ pub(super) fn write_menu(
                 .with_context(|| format!("Couldn't write {}", custom.display()))?;
         }
     }
-    notes.extend(install_menu_script(root, runner)?);
+    notes.extend(install_menu_script(root, runner, tidied)?);
     if !undo.is_empty() {
         notes.push(
             "If this change stops the system from starting, pick \"Undo the last change\" \

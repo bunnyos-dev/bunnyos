@@ -284,7 +284,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       "Action: sync … returned code = 0"). Show one line per repository
       ("Downloading guru… ✓ 17.5 MB") and keep the rest in the log, like
       emerge's output.
-- [ ] **The repository trust warning counts as a problem in developer
+- [~] **The repository trust warning counts as a problem in developer
       mode.** Its ⚠ made `report = "auto"` send a report for a switch that
       worked. Use a symbol that isn't a problem marker (or skip plan
       warnings when deciding to auto-report).

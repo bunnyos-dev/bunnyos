@@ -16,6 +16,9 @@ a minor version can change how things work).
 - Fixed: a switch that stopped while setting up a repository (before
   changing anything) left its snapshot behind as a generation that changed
   nothing. It's deleted now, like a cancelled switch's.
+- The reminder to only add repositories you trust is now marked `·`
+  instead of ⚠, so with developer mode's `report = "auto"` a switch that
+  adds a repository and works isn't sent as a problem.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

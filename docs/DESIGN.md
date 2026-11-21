@@ -783,7 +783,10 @@ testing and decisions.
 ## Testing
 
 - All changes are tested in a QEMU VM with UEFI, Secure Boot (Setup Mode),
-  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`.
+  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`. Each VM (`VM=<name>`) keeps
+  its SSH host key in its own `known_hosts` file in its folder
+  (`StrictHostKeyChecking=accept-new`), because named VMs share port 2223;
+  `forget-key` clears it after a reinstall.
 - Snapshot before every test; restore afterwards.
 - Unit tests for everything that doesn't touch the system. Anything that writes
   to a system takes a `--root` so it can be tested against a fake root.

@@ -10,13 +10,19 @@
 #   ./bunny-vm.sh snaps            list snapshots
 #   ./bunny-vm.sh reset-keys       wipe Secure Boot keys (back to Setup Mode)
 #   ./bunny-vm.sh ssh [user]       SSH into the running VM (port 2222, default user "you")
-#   ./bunny-vm.sh put <file>...    Copy files into the running VM (to /home/you)
+#   ./bunny-vm.sh put <file>...    Copy files into the running VM (to the user's home)
+#   ./bunny-vm.sh forget-key       forget the VM's SSH key (after reinstalling it)
 #
 # Options (environment variables):
 #   MEM=8G CPUS=4 DISK_SIZE=60G GL=1   (GL=0 if 3D graphics won't start)
 #   VM=laptop   a second, separate VM (its own disk, snapshots and SSH port
 #               2223), for testing with the laptop's disk layout:
 #               VM=laptop ./bunny-vm.sh run
+#   VM_USER=bunny   the VM's user for ssh, put and stop (default "you")
+#
+# Each VM keeps its SSH key in its own file ($VM_DIR/known_hosts), so VMs
+# that share a port don't trip SSH's "REMOTE HOST IDENTIFICATION HAS
+# CHANGED" warning.
 
 set -eu
 
@@ -38,6 +44,8 @@ MEM="${MEM:-8G}"
 CPUS="${CPUS:-4}"
 DISK_SIZE="${DISK_SIZE:-60G}"
 GL="${GL:-1}"
+VM_USER="${VM_USER:-you}"
+KNOWN_HOSTS="$VM_DIR/known_hosts"
 
 # Find a matching Secure Boot firmware pair (code + vars must come from the same set)
 find_firmware() {
@@ -48,6 +56,7 @@ find_firmware() {
         "/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd /usr/share/edk2/ovmf/OVMF_VARS.fd" \
         "/usr/share/qemu/edk2-x86_64-secure-code.fd /usr/share/qemu/edk2-i386-vars.fd"
     do
+        # shellcheck disable=SC2086  # two paths, split on purpose
         set -- $pair
         if [ -f "$1" ] && [ -f "$2" ]; then
             CODE="$1"; VARS_TEMPLATE="$2"; return 0
@@ -120,13 +129,48 @@ run() {
         $CDROM
 }
 
+# ssh and scp with this VM's own known_hosts file. A new key is saved the
+# first time; a different one later is refused (see forget-key). The quotes
+# inside the option keep a folder name with spaces in one piece.
+vm_ssh() {
+    mkdir -p "$VM_DIR"
+    ssh -p "$PORT" -o "UserKnownHostsFile=\"$KNOWN_HOSTS\"" \
+        -o StrictHostKeyChecking=accept-new "$@"
+}
+vm_scp() {
+    mkdir -p "$VM_DIR"
+    scp -P "$PORT" -o "UserKnownHostsFile=\"$KNOWN_HOSTS\"" \
+        -o StrictHostKeyChecking=accept-new "$@"
+}
+
+# Runs ssh or scp; if it fails because of the key, says what to do.
+with_key_hint() {
+    status=0
+    "$@" || status=$?
+    if [ "$status" = 255 ]; then
+        echo "✗ Couldn't connect to the ${VM:-main} VM."
+        echo "  If SSH said the host key changed, the VM was reinstalled (or is"
+        echo "  running a different system). Forget the old key and try again:"
+        echo "  ${VM:+VM=$VM }$0 forget-key"
+    fi
+    return "$status"
+}
+
+forget_key() {
+    if [ -f "$KNOWN_HOSTS" ]; then
+        ssh-keygen -R "[localhost]:$PORT" -f "$KNOWN_HOSTS" >/dev/null 2>&1 || true
+        rm -f "$KNOWN_HOSTS.old"
+    fi
+    echo "✓ Forgot the ${VM:-main} VM's SSH key. The next ssh saves the new one."
+}
+
 stop() {
     if ! pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; then
         echo "✓ The VM is already off."
         return 0
     fi
     echo "→ Shutting the VM down (it may ask for your password in the VM)"
-    TERM=xterm-256color ssh -t -p "$PORT" -o StrictHostKeyChecking=no you@localhost \
+    TERM=xterm-256color vm_ssh -t "$VM_USER@localhost" \
         'if command -v doas >/dev/null; then doas poweroff; else sudo poweroff; fi' || true
     i=0
     while pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; do
@@ -148,8 +192,9 @@ case "${1:-run}" in
     snaps)      qemu-img snapshot -l "$DISK" ;;
     reset-keys) check_off; find_firmware; cp "$VARS_TEMPLATE" "$VARS"; echo "✓ Secure Boot keys wiped (Setup Mode)" ;;
     put)        shift; [ $# -gt 0 ] || { echo "✗ Name at least one file to copy."; exit 1; }
-                exec scp -P "$PORT" -o StrictHostKeyChecking=no "$@" you@localhost: ;;
+                with_key_hint vm_scp "$@" "$VM_USER@localhost:" ;;
     # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
-    ssh)        TERM=xterm-256color exec ssh -p "$PORT" -o StrictHostKeyChecking=no "${2:-you}"@localhost ;;
-    *)          sed -n '2,18p' "$0" ;;
+    ssh)        TERM=xterm-256color with_key_hint vm_ssh "${2:-$VM_USER}@localhost" ;;
+    forget-key) forget_key ;;
+    *)          sed -n '2,25p' "$0" ;;
 esac

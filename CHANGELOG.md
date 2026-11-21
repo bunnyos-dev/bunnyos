@@ -28,6 +28,9 @@ a minor version can change how things work).
 - Fixed: `git log` in `/etc/bunny` as your own user said "detected dubious
   ownership". `bunny install` and `bunny publish` now add `/etc/bunny` to
   git's `safe.directory` in `/etc/gitconfig`, once.
+- `bunny install` no longer refuses a password under 8 characters. It says
+  it's easy to guess and suggests a longer one, then lets you keep it (type
+  it again) or choose another (press Enter).
 
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also

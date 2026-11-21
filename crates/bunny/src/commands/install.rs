@@ -490,14 +490,24 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
     }
     let password = loop {
         let first = ask_secret("Password: ")?;
-        if first.len() < 8 {
-            println!("Use at least 8 characters.");
-            continue;
-        }
-        if ask_secret("Again: ")? == first {
+        let short = match password_check(&first) {
+            PasswordCheck::Empty => {
+                println!("The password can't be empty.");
+                continue;
+            }
+            PasswordCheck::Short(advice) => {
+                println!("{advice}");
+                true
+            }
+            PasswordCheck::Fine => false,
+        };
+        let again = ask_secret("Again: ")?;
+        if again == first {
             break first;
         }
-        println!("Those didn't match. Try again.");
+        if !(short && again.is_empty()) {
+            println!("Those didn't match. Try again.");
+        }
     };
 
     let account = Account {
@@ -543,9 +553,57 @@ pub(crate) fn install_cmd(args: Args) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// Shorter than this, a password gets a warning (not a refusal).
+const SHORT_PASSWORD: usize = 8;
+
+#[derive(Debug, PartialEq)]
+enum PasswordCheck {
+    Empty,
+    /// Allowed, with this advice first.
+    Short(String),
+    Fine,
+}
+
+/// Whether a password is long enough. A short one is your choice: bunny
+/// says why a longer one is safer and carries on.
+fn password_check(password: &str) -> PasswordCheck {
+    let length = password.chars().count();
+    if length == 0 {
+        PasswordCheck::Empty
+    } else if length < SHORT_PASSWORD {
+        PasswordCheck::Short(format!(
+            "⚠ That's short ({length} character{}), so it's easy to guess. A longer one is\n  \
+             safer: {SHORT_PASSWORD} characters or more, or a few words together. Type it again to keep\n  \
+             it, or press Enter to choose another.",
+            if length == 1 { "" } else { "s" }
+        ))
+    } else {
+        PasswordCheck::Fine
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_short_password_is_a_warning_not_a_refusal() {
+        let PasswordCheck::Short(advice) = password_check("bunny") else {
+            panic!("a short password should be allowed, with a warning");
+        };
+        assert!(advice.contains("(5 characters)"), "{advice}");
+        assert!(advice.contains("easy to guess"), "{advice}");
+        assert!(advice.contains("a few words together"), "{advice}");
+        assert!(advice.contains("press Enter to choose another"), "{advice}");
+        assert!(
+            matches!(password_check("x"), PasswordCheck::Short(a) if a.contains("(1 character)"))
+        );
+        // Characters, not bytes: "éééé" is 4 characters (8 bytes).
+        assert!(matches!(password_check("éééé"), PasswordCheck::Short(_)));
+        assert_eq!(password_check("correct horse"), PasswordCheck::Fine);
+        assert_eq!(password_check("12345678"), PasswordCheck::Fine);
+        assert_eq!(password_check(""), PasswordCheck::Empty);
+    }
 
     #[test]
     fn checks_names() {

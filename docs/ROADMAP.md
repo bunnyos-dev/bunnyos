@@ -375,7 +375,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       for undo, said in one line). At the end, print the same choices as
       options (`bunny install --no-encrypt --swap 8G`) to repeat it. Full
       control stays `--mounted` (the Guide's "Installing by hand").
-- [ ] **Short passwords: warn, don't refuse.** Under 8 characters, say it's
+- [~] **Short passwords: warn, don't refuse.** Under 8 characters, say it's
       easy to guess and suggest a longer one, then carry on.
 - [ ] **`bunny install --dry-run` asks for a password** although nothing is
       encrypted on a dry run. Skip it.

@@ -79,7 +79,9 @@ Sizes are written like `512M`, `2G` or `1.5G`.
    encryption, hibernation), the sudo file, and copies itself in.
 9. **Inside the new system** (chroot): the package list (Gentoo's
    announcements so far are marked read, since they're older than the
-   system), language and time zone, the packages, services (`dhcpcd`, `sysklogd`, and `sshd` with
+   system), language and time zone, the packages (plus a few of the base
+   system's own, swapped for prebuilt ones with Gentoo's usual settings:
+   the base system is built with some features off, see below), services (`dhcpcd`, `sysklogd`, and `sshd` with
    `--ssh`), the boot menu (GRUB, named "Bunny Linux", also at the EFI
    fallback path), the startup image, and your account.
 10. **Your config.** The starter `bunny.toml` (or yours) goes in
@@ -100,6 +102,14 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     finishes; `bunny publish` starts it later.
 13. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
+
+**Why a few base packages are replaced.** Gentoo builds its base system
+(stage3) with some USE flags turned off that its normal settings turn on:
+curl without HTTP/2 and HTTP/3, and libb2, gettext and portage-utils without
+OpenMP (the compiler it starts from can't do that yet). Left alone, the
+first `bunny switch` would show them as "(rebuild)". The install updates
+them from Gentoo's prebuilt packages instead, so the first switch has
+nothing to rebuild.
 
 If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run

@@ -631,6 +631,20 @@ mod tests {
         assert!(font < packages);
     }
 
+    /// The stage3's own packages are brought in line with the profile
+    /// during the install, so the first `bunny switch` rebuilds nothing.
+    #[test]
+    fn inside_script_rebuilds_the_stage3_packages_whose_flags_differ() {
+        let packages = INSIDE.find("emerge -q --noreplace $PACKAGES").unwrap();
+        let world = INSIDE
+            .find("emerge -q --update --deep --newuse @world")
+            .expect("a world update with bunny switch's options");
+        let kernel = INSIDE
+            .find("--config sys-kernel/gentoo-kernel-bin")
+            .unwrap();
+        assert!(packages < world && world < kernel);
+    }
+
     #[test]
     fn the_boot_menu_is_tidied_and_rebuilt() {
         let mnt = crate::boot::tidy::tests::gentoo_root();

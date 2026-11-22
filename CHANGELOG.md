@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: the first switch on a new install rebuilt curl, gettext, iputils,
+  libb2 and portage-utils. Gentoo's base system is built with a few
+  features off; the install now swaps those packages for Gentoo's prebuilt
+  ones with the usual settings, so the first switch rebuilds nothing.
+
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

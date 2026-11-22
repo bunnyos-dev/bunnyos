@@ -740,6 +740,12 @@ GPT
   `inside.sh` run in a chroot (packages from the binhost, GRUB named
   "Bunny Linux" plus the fallback path, the kernel's startup image, the
   user). One password unlocks the disk and logs in; root stays locked.
+  After the package list, `inside.sh` runs `emerge --update --deep
+  --newuse @world` (bunny switch's options): Gentoo's stage3 is built with
+  releng's `package.use` (`circular`: curl `-http2 -http3 -quic`;
+  `openmp`: libb2, gettext, portage-utils `-openmp`), so those differ from
+  the profile, and without this the first switch rebuilt them. Prebuilt
+  packages with the profile's flags replace them during the install.
   The password can't be empty; under 8 characters gets a warning (easy to
   guess, a few words are better) and can be kept by typing it again, or
   replaced by pressing Enter. It's your disk and your choice.

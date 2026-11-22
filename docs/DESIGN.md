@@ -891,7 +891,9 @@ testing and decisions.
 - **Developer mode (`[dev] report`):** testers' machines record every bunny
   command with util-linux `script` (terminal output exactly as seen, without
   changing behaviour), keeping recordings in `~/.local/state/bunny/sessions/`.
-  `bunny report` cleans them (colour codes, redrawn progress lines),
+  `bunny report` adds `bunny status` (run with a 60-second limit, saying
+  so first: glsa-check on a cold cache made `--dry-run` look hung) and
+  cleans them (colour codes, redrawn progress lines),
   swaps user names, home folders, the hostname, emails and `*.ts.net` names
   for placeholders, and files one issue in the private
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
@@ -907,7 +909,9 @@ testing and decisions.
   (CI builds that aren't releases, `PREVIEW=1 tools/build-iso.sh`) ship
   `/etc/bunny-preview.toml` with `[dev] report = true`, which bunny uses when
   the config doesn't turn recording on. Just before it unmounts, a recorded
-  `bunny install` copies its recording so far, with notes (exit code 0), to
+  `bunny install` copies its recording so far, with notes (exit code 0, and how long
+  it ran from the time in the recording's name, since the live USB's
+  filesystem has no creation times), to
   `/home/<user>/.local/state/bunny/sessions/` in the new system (owned by the
   user), so `bunny report` there sends it. A failed install leaves it on the
   USB. Release images record nothing.

@@ -18,7 +18,8 @@ A package another package needs to work. You don't list dependencies in
 ## Depclean
 
 emerge's command for removing packages nothing needs anymore. bunny runs it
-(and it always asks) when you remove something.
+when you remove something, and asks first whenever it would remove more
+than the plan showed you.
 
 ## ebuild
 

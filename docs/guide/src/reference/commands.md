@@ -36,7 +36,9 @@ That's useful for testing.
 `switch`, `add`, `remove` and `update` take:
 
 - `-y` / `--yes`: skip the questions. **Removing packages from the system
-  always asks**, even with `--yes`.
+  still asks**, even with `--yes`. Without `--yes`, it asks a second time
+  only when emerge wants to remove more than the plan showed (usually
+  dependencies nothing else uses).
 - `-v` / `--verbose`: show emerge's full output as it runs, and let emerge ask
   its own questions, instead of bunny's list and progress line.
 

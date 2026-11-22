@@ -26,12 +26,17 @@ name = "laptop"     # what to call this computer in reports
 | `reports` | `"owner/name"` | `"bunnyos-dev/bunny-reports"` | The GitHub repository reports are filed in. It should be private. |
 
 Sending uses the GitHub CLI with your own account, so install it and sign in
-once:
+once, as yourself (not with sudo or doas):
 
 ```sh
 bunny add dev-util/github-cli
 gh auth login
 ```
+
+Under `sudo bunny …` or `doas bunny …`, reports are still sent with your
+own sign-in, not root's: bunny runs `gh` as whoever ran sudo or doas, the
+same way `bunny publish` does. If root logged in directly, there's no one
+else to ask, so `gh` runs as root.
 
 ## Send what's been recorded
 

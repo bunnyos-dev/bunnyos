@@ -414,7 +414,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       report. Only bunny's own problems should.
 - [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
       them?"). One question for a plain remove.
-- [ ] **`bunny status` shows times in UTC**; the boot menu now uses local
+- [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).
 - [ ] **"before − tree" in Earlier versions reads oddly.** Find clearer
       wording for "the version before this change".

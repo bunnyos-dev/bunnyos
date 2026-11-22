@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny status`, `bunny generations`, `bunny rollback` and `bunny clean`
+  now show times in your own time zone (like "Nov 18, 7:03 PM"), the same
+  as the boot menu, instead of UTC.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

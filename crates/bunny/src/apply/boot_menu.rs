@@ -166,7 +166,7 @@ fn summary(root: &Path, generation: &crate::rollback::Generation) -> String {
             .map(|to| {
                 format!(
                     "going back to {}",
-                    crate::rollback::Generation { name: to }.when_local()
+                    crate::rollback::Generation { name: to }.when()
                 )
             })
             .unwrap_or_default(),
@@ -199,7 +199,7 @@ impl MenuContext {
         generation: &crate::rollback::Generation,
     ) -> std::result::Result<crate::boot::MenuVersion, &'static str> {
         Ok(crate::boot::MenuVersion {
-            when: generation.when_local(),
+            when: generation.when(),
             summary: summary(root, generation),
             bootable: bootable(
                 root,

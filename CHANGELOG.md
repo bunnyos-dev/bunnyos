@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
+  only new installs did): the next `bunny switch` sets it up, shown in the
+  plan first, and undo takes it away again. A font you chose yourself is
+  left alone.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

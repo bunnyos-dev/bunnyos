@@ -807,7 +807,11 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
-  **Console font** (also set by `bunny install`): the Linux console's usual
+  **Console font** (also set by `bunny install`, and by a switch on
+  systems that don't have it yet: `console_font.rs`, shown in the plan,
+  `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;
+  a font the user set themselves is left alone, and a failure is a note,
+  never a stop): the Linux console's usual
   font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
   console fonts don't have them either (only its full, 1356-glyph BDF
   does). kbd's `eurlatgr` (part of every Gentoo system) has ✓ ✗ · but no

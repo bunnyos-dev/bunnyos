@@ -6,6 +6,7 @@ mod boot;
 mod commands;
 mod config;
 mod config_repo;
+mod console_font;
 mod desktop;
 mod dev;
 mod diff;

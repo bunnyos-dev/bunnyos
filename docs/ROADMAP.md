@@ -405,7 +405,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [x] **`bunny plan` without sudo says the undo entry can't be set up**
       (it can't read `/boot`). Say "run with sudo to check the boot menu"
       instead of guessing.
-- [ ] **`bunny plan <copy>` silently drops the host file.** A copy of
+- [~] **`bunny plan <copy>` silently drops the host file.** A copy of
       `bunny.toml` elsewhere has no `hosts/` next to it, so this computer's
       packages (GRUB, the kernel…) show as "would be removed". Use this
       computer's host file, or say clearly that it isn't included.

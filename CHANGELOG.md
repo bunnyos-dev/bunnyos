@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: `bunny plan` (and `check`, `switch`, `diff`) with a copy of
+  `bunny.toml` somewhere else left out this computer's host file, so GRUB,
+  the kernel and the rest showed as "would be removed". A copy with no
+  `hosts/` folder next to it now uses this computer's file from
+  `/etc/bunny/hosts/`, and says so.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

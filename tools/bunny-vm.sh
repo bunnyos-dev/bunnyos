@@ -9,20 +9,24 @@
 #   ./bunny-vm.sh restore <name>   go back to a snapshot (VM must be off)
 #   ./bunny-vm.sh snaps            list snapshots
 #   ./bunny-vm.sh reset-keys       wipe Secure Boot keys (back to Setup Mode)
-#   ./bunny-vm.sh ssh [user]       SSH into the running VM (port 2222, default user "you")
+#   ./bunny-vm.sh ssh [user]       SSH into the running VM (default user "you")
 #   ./bunny-vm.sh put <file>...    Copy files into the running VM (to the user's home)
 #   ./bunny-vm.sh forget-key       forget the VM's SSH key (after reinstalling it)
+#   ./bunny-vm.sh port             show the VM's SSH port
 #
 # Options (environment variables):
 #   MEM=8G CPUS=4 DISK_SIZE=60G GL=1   (GL=0 if 3D graphics won't start)
-#   VM=laptop   a second, separate VM (its own disk, snapshots and SSH port
-#               2223), for testing with the laptop's disk layout:
+#   VM=laptop   a second, separate VM (its own disk, snapshots and SSH
+#               port), for testing with the laptop's disk layout:
 #               VM=laptop ./bunny-vm.sh run
+#   PORT=2230   use this SSH port instead (just this once)
 #   VM_USER=bunny   the VM's user for ssh, put and stop (default "you")
 #
-# Each VM keeps its SSH key in its own file ($VM_DIR/known_hosts), so VMs
-# that share a port don't trip SSH's "REMOTE HOST IDENTIFICATION HAS
-# CHANGED" warning.
+# SSH ports: the main VM uses 2222. Each named VM gets its own port the
+# first time it's used, the lowest from 2223 up that no other named VM has,
+# kept in $VM_DIR/port, so several VMs can run at once. Each VM also keeps
+# its SSH key in its own file ($VM_DIR/known_hosts), so SSH never mixes up
+# two VMs ("REMOTE HOST IDENTIFICATION HAS CHANGED").
 
 set -eu
 
@@ -31,7 +35,6 @@ if [ -n "$VM" ]; then
     case "$VM" in *[!a-z0-9-]*) echo "✗ VM names use a-z, 0-9 and -"; exit 1 ;; esac
     VM_DIR="${VM_DIR:-$HOME/bunny-vm-$VM}"
     NAME="bunny-$VM"
-    PORT="${PORT:-2223}"
 else
     VM_DIR="${VM_DIR:-$HOME/bunny-vm}"
     NAME="bunnyos-test"
@@ -46,6 +49,50 @@ DISK_SIZE="${DISK_SIZE:-60G}"
 GL="${GL:-1}"
 VM_USER="${VM_USER:-you}"
 KNOWN_HOSTS="$VM_DIR/known_hosts"
+
+# Prints the SSH port this named VM keeps in $VM_DIR/port. A VM without one
+# gets the lowest port from 2223 up that no other VM's port file names (and
+# that nothing is listening on, when ss is there to check). It's saved once
+# the VM's folder exists, so it stays the same from then on.
+named_vm_port() {
+    if [ -f "$VM_DIR/port" ]; then
+        read -r saved < "$VM_DIR/port" || true
+        case "$saved" in
+            ''|*[!0-9]*) ;;
+            *) echo "$saved"; return ;;
+        esac
+    fi
+    taken=" "
+    for file in "$HOME"/bunny-vm-*/port; do
+        [ -f "$file" ] && [ "$file" != "$VM_DIR/port" ] || continue
+        read -r other < "$file" || true
+        taken="$taken$other "
+    done
+    candidate=2223
+    while :; do
+        case "$taken" in
+            *" $candidate "*) ;;
+            *)
+                if ! command -v ss >/dev/null 2>&1 \
+                    || ! ss -Hltn "sport = :$candidate" 2>/dev/null | grep -q .; then
+                    break
+                fi
+                ;;
+        esac
+        candidate=$((candidate + 1))
+    done
+    if [ -d "$VM_DIR" ]; then
+        echo "$candidate" > "$VM_DIR/port"
+    fi
+    echo "$candidate"
+}
+
+PORT_GIVEN="${PORT:+yes}"
+if [ -n "$VM" ]; then
+    PORT="${PORT:-$(named_vm_port)}"
+else
+    PORT="${PORT:-2222}"
+fi
 
 # Find a matching Secure Boot firmware pair (code + vars must come from the same set)
 find_firmware() {
@@ -71,6 +118,10 @@ find_firmware() {
 setup() {
     find_firmware
     mkdir -p "$VM_DIR" "$TPM_DIR"
+    # A new named VM keeps the port it was just given (not a PORT=… one).
+    if [ -n "$VM" ] && [ -z "$PORT_GIVEN" ] && [ ! -f "$VM_DIR/port" ]; then
+        echo "$PORT" > "$VM_DIR/port"
+    fi
     if [ ! -f "$DISK" ]; then
         echo "→ Creating $DISK_SIZE virtual disk"
         qemu-img create -f qcow2 "$DISK" "$DISK_SIZE" >/dev/null
@@ -196,5 +247,6 @@ case "${1:-run}" in
     # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
     ssh)        TERM=xterm-256color with_key_hint vm_ssh "${2:-$VM_USER}@localhost" ;;
     forget-key) forget_key ;;
-    *)          sed -n '2,25p' "$0" ;;
+    port)       echo "$PORT" ;;
+    *)          sed -n '2,30p' "$0" ;;
 esac

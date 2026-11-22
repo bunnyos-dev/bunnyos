@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Test VMs: each named VM (`VM=…`) now has its own SSH port (2223, 2224, …,
+  kept in its folder and shown when it starts), so two can run at once. The
+  main VM stays on 2222. `tools/bunny-vm.sh port` prints it.
+
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

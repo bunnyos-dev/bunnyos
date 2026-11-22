@@ -421,7 +421,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [ ] **The install's recording says "0 s"**, and the first
       `bunny report --dry-run` seemed to hang (Ctrl+C) before working the
       second time.
-- [ ] **Two test VMs can't run at once**: both use port 2223. Give each
+- [~] **Two test VMs can't run at once**: both use port 2223. Give each
       named VM its own port (with its own known_hosts).
 
 ### Fixes from the Saturday test

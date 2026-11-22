@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The live USB starts quietly: OpenRC's "Starting … [ ok ]" lines only show
+  with the boot menu's "show start-up messages" entry. Errors still show.
+
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

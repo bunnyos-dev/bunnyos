@@ -428,7 +428,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Found while testing #78–#93 together on `test/saturday`, issue #91.)
 
-- [ ] **The live USB's normal entry shows OpenRC's start-up lines**
+- [~] **The live USB's normal entry shows OpenRC's start-up lines**
       ("Starting dbus … [ ok ]"). Only "show start-up messages" should.
 - [ ] **⚠ shows as `!` on the console.** The new console font has ✓ and ✗
       but not ⚠: add the glyph, or use a mark the font has.

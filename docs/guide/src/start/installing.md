@@ -63,7 +63,10 @@ then write. (With Rufus, choose **DD image mode** when it asks.)
 3. Pick the USB entry that starts with **UEFI**.
 
 A menu titled "Bunny Linux live USB" appears and starts by itself after 5
-seconds. A minute later you're at a terminal with a welcome:
+seconds. It starts quietly: only errors are shown on the way. To watch every
+start-up message instead (handy when something doesn't start), pick
+**Bunny Linux live USB (show start-up messages)** in that menu. A minute
+later you're at a terminal with a welcome:
 
 ```
   Bunny Linux  ·  live USB

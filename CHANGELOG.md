@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny install` is quieter: each step is its heading and one "✓ Done"
+  line, instead of what wipefs, mkfs, btrfs and cryptsetup print. Their
+  output goes to `/var/log/bunny/<time>-install.log` (copied into the new
+  system); a failing tool shows its last lines. `--verbose` shows it all.
+
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

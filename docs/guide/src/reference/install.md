@@ -44,6 +44,8 @@ minimal system. It runs from a live USB.
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
 | `--dry-run` | Go through the questions (not the password, since nothing is encrypted and no account is made), then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
 
+| `--verbose` | On a real install, show everything the tools print as they run (it's kept in the log either way). With `--dry-run`, see above. |
+
 Sizes are written like `512M`, `2G` or `1.5G`.
 
 ## Step by step
@@ -100,6 +102,17 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     finishes; `bunny publish` starts it later.
 13. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
+
+**What you see.** Each step prints its `==> ` heading, then `✓ Done` (with
+the time, when it took 2 seconds or more). What the tools themselves print
+(wipefs, mkfs, btrfs, cryptsetup, tar, grub-mkconfig, git) isn't shown: it
+goes to `/var/log/bunny/<time>-install.log` on the USB, which is copied to
+the same place in the new system at the end. Three things keep the screen,
+because their output is the progress: the base system's download bar, the
+part inside the new system (its own `==> ` headings and emerge's short
+lines), and the first `bunny switch`. If a tool fails, bunny shows `✗`, the
+last 12 lines it printed, and where the rest is, then says what it means.
+`--verbose` shows everything as it runs, and still keeps the log.
 
 If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run

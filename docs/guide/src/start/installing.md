@@ -166,7 +166,19 @@ bunny asks a few things, one at a time:
 Then it works for 15 to 30 minutes, depending on your internet. You'll see
 each step: partitioning, encrypting, downloading Gentoo's base system,
 installing packages, the boot menu, your account, and last, applying your
-config. It ends with:
+config. Each step is one heading and one line when it's done:
+
+```
+==> Partitioning /dev/nvme0n1
+  ✓ Done
+
+==> Encrypting the disk (LUKS2)
+  ✓ Done (3 s)
+```
+
+What the disk tools print along the way is kept in a log instead
+(`/var/log/bunny/…-install.log`, copied into the new system too). To watch
+all of it as it happens, use `bunny install --verbose`. It ends with:
 
 ```
 ✓ Bunny Linux is installed on /dev/nvme0n1.

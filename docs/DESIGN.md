@@ -483,6 +483,10 @@ admins = ["you"]
 - Rust code talks to the init system through one interface (enable, disable,
   start, stop, status) so systemd can be added later as a second implementation.
 - The init system is chosen at install time, never switched later.
+- **After 0.1 (decided November 22, 2026):** OpenRC stays the only one the
+  maintainer works on. systemd is the likely second, only if it turns out
+  easy to add (Gentoo supports it officially). Others (dinit, runit, s6) are
+  left to contributors, who add them as a new `InitSystem` implementation.
 
 ## Packages and apps
 

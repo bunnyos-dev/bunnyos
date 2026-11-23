@@ -54,6 +54,9 @@ a minor version can change how things work).
   over a minute.
 - The live USB starts quietly: OpenRC's "Starting … [ ok ]" lines only show
   with the boot menu's "show start-up messages" entry. Errors still show.
+- Test VMs: each named VM (`VM=…`) now has its own SSH port (2223, 2224, …,
+  kept in its folder and shown when it starts), so two can run at once. The
+  main VM stays on 2222. `tools/bunny-vm.sh port` prints it.
 
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own

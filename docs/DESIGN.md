@@ -987,10 +987,14 @@ testing and decisions.
 ## Testing
 
 - All changes are tested in a QEMU VM with UEFI, Secure Boot (Setup Mode),
-  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`. Each VM (`VM=<name>`) keeps
-  its SSH host key in its own `known_hosts` file in its folder
-  (`StrictHostKeyChecking=accept-new`), because named VMs share port 2223;
-  `forget-key` clears it after a reinstall.
+  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`. The main VM's SSH port is
+  2222; each named VM (`VM=<name>`) gets the lowest port from 2223 up that
+  no other VM's `~/bunny-vm-*/port` file names (and nothing listens on),
+  saved in its own `port` file on first use, so several run at once
+  (`PORT=` overrides once; `port` prints it). Each keeps its SSH host key
+  in its own `known_hosts` file in its folder
+  (`StrictHostKeyChecking=accept-new`); `forget-key` clears it after a
+  reinstall.
 - Snapshot before every test; restore afterwards.
 - Unit tests for everything that doesn't touch the system. Anything that writes
   to a system takes a `--root` so it can be tested against a fake root.

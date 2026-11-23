@@ -263,10 +263,35 @@ pub(crate) fn timestamp() -> String {
     )
 }
 
+/// Says that this computer's host file isn't part of the plan.
+pub(crate) fn host_left_out_note(config: &Path, left_out: &Path) -> String {
+    let folder = config
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("hosts")
+        .display()
+        .to_string();
+    let name = left_out
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    format!(
+        "  ⚠ This computer's host file ({}) isn't included: {folder} has no {name}.\n    \
+         Packages only this computer has (like GRUB and the kernel) will show as\n    \
+         \"would be removed\". Copy it there to include it.",
+        left_out.display()
+    )
+}
+
 /// Prints any problems in the config. Returns failure if there were some.
 pub(crate) fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode {
     let problems = cfg.problems();
     let shown = match &cfg.host {
+        Some(host) if host.borrowed => format!(
+            "{} (with this computer's {}, since there's no hosts/ folder next to it)",
+            path.display(),
+            host.path.display()
+        ),
         Some(host) => format!(
             "{} (with {}, for this computer)",
             path.display(),
@@ -276,6 +301,9 @@ pub(crate) fn report_problems(cfg: &Config, path: &std::path::Path) -> ExitCode 
     };
     if problems.is_empty() {
         println!("✓ {shown} looks good.");
+        if let Some(left_out) = &cfg.host_left_out {
+            println!("{}", host_left_out_note(path, left_out));
+        }
         return ExitCode::SUCCESS;
     }
     let count = problems.len();
@@ -314,6 +342,22 @@ mod tests {
         Default, ELEVATED_FAILURE, YOUR_INPUT,
     };
     use std::process::ExitCode;
+
+    #[test]
+    fn says_when_this_computers_host_file_is_left_out() {
+        let note = super::host_left_out_note(
+            std::path::Path::new("/home/you/test/bunny.toml"),
+            std::path::Path::new("/etc/bunny/hosts/desktop.toml"),
+        );
+        assert!(
+            note.contains(
+                "This computer's host file (/etc/bunny/hosts/desktop.toml) isn't included: \
+                 /home/you/test/hosts has no desktop.toml."
+            ),
+            "{note}"
+        );
+        assert!(note.contains("would be removed"), "{note}");
+    }
 
     #[test]
     fn sudo_refusing_is_told_apart_from_bunny_failing() {

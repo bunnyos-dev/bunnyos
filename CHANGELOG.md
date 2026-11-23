@@ -13,6 +13,15 @@ a minor version can change how things work).
 - `bunny remove` asks once instead of twice when it removes exactly what
   the plan showed. It still asks again when emerge wants to remove more
   (like dependencies nothing else uses), and always with `--yes`.
+- Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
+  only new installs did): the next `bunny switch` sets it up, shown in the
+  plan first, and undo takes it away again. A font you chose yourself is
+  left alone.
+- Fixed: `bunny plan` (and `check`, `switch`, `diff`) with a copy of
+  `bunny.toml` somewhere else left out this computer's host file, so GRUB,
+  the kernel and the rest showed as "would be removed". A copy with no
+  `hosts/` folder next to it now uses this computer's file from
+  `/etc/bunny/hosts/`, and says so.
 - The boot menu's "Earlier versions" and `bunny generations` say what each
   version was before in words: "before removing tree" or "before adding
   tmux and cronie" instead of "before − tree" or "before a switch: + tmux".

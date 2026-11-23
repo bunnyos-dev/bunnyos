@@ -14,6 +14,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/etc/sudoers.d/bunny` or `/etc/doas.conf` | Admin rights for the `wheel` group, from [`[security]`](config.md#security). Only if that section is in your config. |
 | `/etc/group` (`wheel` only) | `admins` from `[security]` are added with `gpasswd`. Nobody is ever removed. |
 | `/etc/runlevels/default/*` | Services from `services` (and `[desktop]`), added with `rc-update`. `elogind` goes in `/etc/runlevels/boot/`. |
+| `/usr/local/share/consolefonts/bunny.psfu`, `/etc/conf.d/consolefont`, `/etc/runlevels/boot/consolefont` | A console font that can draw bunny's marks (✓ ✗ ⚠) on the text console: kbd's `eurlatgr`, with ⚠ drawn as `!`. `bunny install` sets it up; on other systems the first switch does (shown in the plan as "Console font", the settings file backed up). Skipped if you chose your own font in `/etc/conf.d/consolefont`. |
 | `bunny.lock` (next to the config) | Exact versions. |
 | `/.snapshots/bunny-*` | Generations, plus small `.toml` notes. |
 | `/usr/lib/dracut/modules.d/90bunny-rollback/` | The boot menu's undo step, with [`[boot] undo_entry`](config.md#boot). Added to the startup image (`/boot/initramfs-<version>.img`), which is rebuilt once; the old image goes to the backup folder. |
@@ -50,6 +51,7 @@ config, nothing is lost:
 | Remove unused | `emerge --depclean =<each package shown>` (after bunny asks, always); plain `emerge --depclean` when the list came from emerge's text |
 | New repositories | `wget -qO- https://api.gentoo.org/overlays/repositories.xml` (Gentoo's list), then `emaint sync --repo <name>`, right after the snapshot |
 | Services | `rc-update add <name> default` (`boot` for elogind), `rc-service <name> start` |
+| Console font | `psfgettable` and `psfaddtable` (kbd) to copy eurlatgr with ⚠ added, `rc-update add consolefont boot`, `rc-service consolefont restart` |
 | Admin rights | `visudo -cf <file>` or `doas -C <file>` to check, `gpasswd -a <user> wheel` |
 | Update | `emerge --sync` first |
 

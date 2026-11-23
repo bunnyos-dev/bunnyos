@@ -125,15 +125,40 @@ printf 'Bunny Linux %s, bunny %s, built %s from %s\n' \
     "$kind" "$version" "$(date -u +%Y-%m-%d)" "$file" > "$iso/bunny-live.txt"
 cp "$iso/bunny-live.txt" "$root/etc/bunny-live"
 
+# What takes the space, for keeping the image small (CI shows it on the
+# run's page).
+sizes="$work/sizes.md"
+sh "$here/iso/sizes.sh" "$root" > "$sizes" || fail "Couldn't measure the image."
+
 mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp zstd -Xcompression-level 19 \
     -noappend -quiet -e boot/grub
 grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL" >/dev/null 2>&1 \
     || grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL"
 (cd "$(dirname "$out")" && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
 
+mb() { echo $(( ($(stat -c %s "$1") + 524288) / 1048576 )); }
+{
+    echo
+    echo "### The ISO's parts (compressed)"
+    echo
+    echo "| Part | MB |"
+    echo "|---|---:|"
+    echo "| The live system (\`LiveOS/squashfs.img\`) | $(mb "$iso/LiveOS/squashfs.img") |"
+    echo "| Kernel (\`boot/vmlinuz\`) | $(mb "$iso/boot/vmlinuz") |"
+    echo "| Startup image (\`boot/initramfs.img\`) | $(mb "$iso/boot/initramfs.img") |"
+    echo "| **The whole ISO** | **$(mb "$out")** |"
+    echo
+    echo "Boot records (El Torito):"
+    echo
+    echo '```'
+    xorriso -indev "$out" -report_el_torito plain 2>/dev/null || true
+    echo '```'
+} >> "$sizes"
+
 size="$(du -h "$out" | cut -f1)"
 say "Done: $out ($size)"
 echo "  Its SHA256 is in $out.sha256."
+echo "  What takes the space: $sizes"
 echo "  Try it:        tools/bunny-vm.sh run $out"
 echo "  Write a USB:   doas dd if=$out of=/dev/sdX bs=4M status=progress oflag=sync"
 echo "  (The work folder $work can be deleted.)"

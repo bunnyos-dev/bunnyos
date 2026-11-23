@@ -766,6 +766,83 @@ fn quiet_removal_lists_and_always_asks() {
         .any(|c| c == "emerge --depclean --color=n --ask=n"));
 }
 
+#[test]
+fn a_plain_remove_asks_once() {
+    // The plan showed "- app-misc/old" and the user said yes to it (not
+    // --yes). emerge wants to remove exactly that, so bunny doesn't ask a
+    // second time. (The answer here would be no, so a second question
+    // would leave it installed.)
+    let root = fake_system();
+    let config = Config::parse(r#"packages = ["app-editors/neovim"]"#).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert_eq!(plan.remove_packages, ["app-misc/old"]);
+    let just_that = "All selected packages: =app-misc/old-1.0\n\nNumber to remove:     1\n";
+    let mut runner = Scripted {
+        replies: vec![("--depclean --pretend", true, just_that.into())],
+        ..Scripted::default()
+    };
+    let outcome = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(false, false),
+    )
+    .unwrap();
+    assert!(
+        runner
+            .commands
+            .iter()
+            .any(|c| c == "emerge --depclean --color=n --ask=n"),
+        "{:#?}",
+        runner.commands
+    );
+    assert!(!outcome.notes.iter().any(|n| n.contains("weren't removed")));
+
+    // emerge wants more than the plan showed: ask (and the answer is no).
+    let more = "All selected packages: =app-misc/old-1.0 =dev-libs/libold-2\n\n\
+                Number to remove:     2\n";
+    let mut runner = Scripted {
+        replies: vec![("--depclean --pretend", true, more.into())],
+        ..Scripted::default()
+    };
+    let outcome = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(false, false),
+    )
+    .unwrap();
+    assert!(!runner
+        .commands
+        .iter()
+        .any(|c| c == "emerge --depclean --color=n --ask=n"));
+    assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
+}
+
+#[test]
+fn compares_the_removal_list_with_the_plan() {
+    use super::install::same_as_planned;
+    let r = |name: &str| crate::helper::Removal {
+        name: name.into(),
+        version: "1".into(),
+        needed_by: vec![],
+    };
+    let planned = vec!["app-text/tree".to_string()];
+    assert!(same_as_planned(&[r("app-text/tree")], &planned));
+    assert!(same_as_planned(
+        &[r("app-text/tree")],
+        &["app-text/tree:0".into()]
+    ));
+    assert!(!same_as_planned(
+        &[r("app-text/tree"), r("dev-libs/x")],
+        &planned
+    ));
+    assert!(!same_as_planned(&[r("dev-libs/x")], &planned));
+    assert!(!same_as_planned(&[], &[]));
+}
+
 const HELPER_DEPCLEAN: &str = r#"{"ok": true, "removals": [{"name": "acct-user/nullmail", "version": "0-r2", "slot": "0", "needed_by": ["mail-mta/nullmailer"]}, {"name": "mail-mta/nullmailer", "version": "2.2-r2", "slot": "0", "needed_by": []}], "helper": 2}"#;
 
 #[test]

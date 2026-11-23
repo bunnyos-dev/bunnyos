@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny remove` asks once instead of twice when it removes exactly what
+  the plan showed. It still asks again when emerge wants to remove more
+  (like dependencies nothing else uses), and always with `--yes`.
 - Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
   only new installs did): the next `bunny switch` sets it up, shown in the
   plan first, and undo takes it away again. A font you chose yourself is

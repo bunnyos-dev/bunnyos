@@ -733,10 +733,29 @@ new is doing it through bunny.
       them as skipped). Add a small global setting, e.g.
       `[hardware] video_cards = ["intel", "nvidia"]`, that bunny writes as
       `package.use/00video_cards`, shown in the plan, backed up, undone.
+      `[hardware]` belongs in the **host file** (`hosts/<name>.toml`), since
+      it differs per computer (an AMD desktop and an Intel/Nvidia laptop
+      share one bunny.toml).
       On a hybrid laptop list both GPUs (the integrated one keeps the screen
       and power saving working); `-* nvidia` alone suits a desktop. This is a
       slice of the `make.conf`-in-bunny.toml work, pulled forward because the
       G16 week needs it.
+- [ ] **CPU flags (`CPU_FLAGS_X86`) in `[hardware]`**, same shape as
+      `video_cards` and the same gap today (Gentoo's Handbook writes
+      `cpuid2cpuflags` output to `package.use/00cpu-flags` as a `*/*` line).
+      Plan: `cpu_flags = "auto"` runs `cpuid2cpuflags` and writes the file;
+      off by default. Say plainly in the plan what it costs: CPU flags are
+      USE flags, so packages that use them (ffmpeg, codecs, crypto
+      libraries…) no longer match Gentoo's prebuilt packages and compile
+      from source. `-march=native` belongs to the `make.conf` work, with the
+      same warning.
+- [ ] **Touchpads: nothing to do, write it down.** On Wayland the compositor
+      uses libinput directly, and Gentoo's distribution kernel has the
+      touchpad drivers (I2C HID, hid-multitouch) as modules, which is why
+      touchpads "just work". The Gentoo wiki's Synaptics page is the old
+      Xorg driver, replaced by libinput. Tap-to-click and scrolling are
+      compositor settings (Hyprland/Mango config), not bunny.toml. Check
+      the G16's touchpad works from the live USB, and add a short Guide note.
 - [ ] **Nvidia through bunny.toml**: `x11-drivers/nvidia-drivers` with
       `kernel-open` (the wiki recommends the open module for Turing and newer,
       and newer drivers use it regardless; an RTX 50-series needs it) and

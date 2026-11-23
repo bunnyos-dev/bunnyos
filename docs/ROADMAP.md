@@ -68,6 +68,26 @@ plan, backs it up, and undo restores it. Warn when a change rebuilds a lot
 (new CFLAGS or global USE means recompiling), and say that changing CFLAGS
 means no more prebuilt packages for what it affects.
 
+**Learning to customize, without examples that go stale (decided November
+23, 2026).** Teach people to read Gentoo's own information instead of
+copying flags that change:
+
+- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+      read a package's flags on packages.gentoo.org and the Gentoo wiki,
+      what `+`/`-` and defaults mean, and how to write what you found in
+      `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
+      worked example, but teach the method, not a fixed list of flags.
+- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+      each thing is written (a package with USE flags, a testing keyword, a
+      service), each pointing to its Guide page. Only stable, structural
+      examples; a test uncomments them and runs `bunny check`.
+- [ ] **After alpha: `bunny check` reads Gentoo's own flag list** (Portage's
+      metadata on this computer) and warns about a flag a package doesn't
+      have ("firefox has no USE flag `pgoo`; did you mean `pgo`?"), plus a
+      way to list a package's flags with Gentoo's descriptions. Then a
+      renamed or removed flag is caught on your own system, with nothing
+      for Bunny Linux to keep up to date by hand.
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,

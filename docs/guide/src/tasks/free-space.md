@@ -9,7 +9,7 @@ bunny clean
 
 ```
 Old generations to remove (keeping the newest 5):
-  - 2026-11-01 10:00:00 UTC   bunny-20261101-100000
+  - Nov 1, 10:00 AM   bunny-20261101-100000
 Old systems left behind by rollbacks:
   - @replaced-20261116-212536   (with /srv inside it)
 

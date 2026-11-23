@@ -38,7 +38,11 @@ emerge -q --noreplace --usepkg --getbinpkg \
     net-misc/dhcpcd \
     net-wireless/iwd \
     net-misc/chrony \
-    dev-vcs/git
+    dev-vcs/git \
+    dev-libs/libinput \
+    x11-libs/libxkbcommon \
+    media-libs/fontconfig \
+    media-fonts/dejavu
 
 say "Start-up: log in as root on the screen, with the welcome"
 # A live USB has no password: the person at the keyboard owns it.
@@ -102,10 +106,5 @@ dracut --force --no-hostonly --kver "$kver" \
     /boot/initramfs-live.img
 rm -f /boot/vmlinuz-"$kver" /boot/initramfs-"$kver".img /boot/System.map-"$kver" /boot/config-"$kver"
 
-say "Making it smaller"
-# Things a live USB never needs: the package tree and downloads (bunny
-# install fetches its own inside the new system), documentation, and
-# Portage's caches.
-rm -rf /var/db/repos/gentoo /var/cache/distfiles/* /var/cache/binpkgs/* \
-    /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/gtk-doc \
-    /var/tmp/portage/* /var/log/emerge*.log /usr/src/linux-*
+# Making it smaller (removing what the USB doesn't need) is
+# tools/iso/smaller.sh, which build-iso.sh runs right after this script.

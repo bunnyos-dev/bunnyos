@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Test VMs: each named VM (`VM=…`) now has its own SSH port (2223, 2224, …,
+  kept in its folder and shown when it starts), so two can run at once. The
+  main VM stays on 2222. `tools/bunny-vm.sh port` prints it.
+
 - `bunny status`, `bunny generations`, `bunny rollback` and `bunny clean`
   now show times in your own time zone (like "Nov 18, 7:03 PM"), the same
   as the boot menu, instead of UTC.

@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The boot menu's "Earlier versions" and `bunny generations` say what each
+  version was before in words: "before removing tree" or "before adding
+  tmux and cronie" instead of "before − tree" or "before a switch: + tmux".
 - `bunny install` is quieter: each step is its heading and one "✓ Done"
   line, instead of what wipefs, mkfs, btrfs and cryptsetup print. Their
   output goes to `/var/log/bunny/<time>-install.log` (copied into the new

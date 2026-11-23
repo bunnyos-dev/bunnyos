@@ -232,8 +232,11 @@ isolated = false       # compile inside a clean container
   `/etc/grub.d/11_bunny`, right after `10_linux`'s entries; installed once
   with one `grub-mkconfig`, then read at boot so later changes need none):
   "Undo the last change" (summary and local time) plus an "Earlier versions"
-  submenu (newest 10 bootable generations, each with "Go back to this
-  version" and its summary as do-nothing lines), in separate markers so the
+  submenu (newest 10 bootable generations, each labelled "<time> · before
+  <what came after it, in words>", like "before removing tree" or "before
+  adding tmux and cronie" (`notes::before_words`, also used by `bunny
+  generations`), with "Go back to this version" and its summary as
+  do-nothing lines), in separate markers so the
   hook only drops the undo entry. That undo block that boots the kernel and
   initramfs **from the generation's snapshot** (`/@snapshots/<gen>/boot/…`)
   with the running system's command line plus `bunny.rollback=<gen>`, so

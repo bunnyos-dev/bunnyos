@@ -38,7 +38,11 @@ emerge -q --noreplace --usepkg --getbinpkg \
     net-misc/dhcpcd \
     net-wireless/iwd \
     net-misc/chrony \
-    dev-vcs/git
+    dev-vcs/git \
+    dev-libs/libinput \
+    x11-libs/libxkbcommon \
+    media-libs/fontconfig \
+    media-fonts/dejavu
 
 say "Start-up: log in as root on the screen, with the welcome"
 # A live USB has no password: the person at the keyboard owns it.

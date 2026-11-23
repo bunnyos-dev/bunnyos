@@ -62,8 +62,17 @@ then write. (With Rufus, choose **DD image mode** when it asks.)
    is often F12, F11, F8 or Esc, shown briefly at start-up.
 3. Pick the USB entry that starts with **UEFI**.
 
-A menu titled "Bunny Linux live USB" appears and starts by itself after 5
-seconds. A minute later you're at a terminal with a welcome:
+A menu appears and starts its first entry, **Install Bunny Linux**, by
+itself after 5 seconds. A minute later the **graphical installer** opens:
+one question per screen (the disk, the setup, you and this computer, a
+password), then exactly what will happen, and the install itself. It asks
+the same things as `bunny install` below, which does the work behind it.
+
+The graphical installer is new and being tested, and it can't connect to
+Wi-Fi yet: on Wi-Fi, or if you'd rather type, pick **Use the terminal
+instead** on its first screen (or **Bunny Linux live USB (terminal)** in
+the menu). The rest of this page follows the terminal. You're at a
+terminal with a welcome:
 
 ```
   Bunny Linux  ·  live USB
@@ -146,17 +155,29 @@ bunny asks a few things, one at a time:
 1. **Which disk.** It lists the disks with their size and model, and leaves
    out ones it can't use (the USB stick, for one) with the reason. With only
    one disk, it picks that one.
-2. **What will be erased, and what you'll get.** Every partition on the disk
-   (like "NTFS (Windows)"), then the new layout: a small EFI partition, and
-   the rest encrypted.
-3. **Confirm by typing the disk's name** (like `nvme0n1`). Anything else
+2. **Use the recommended setup?** Press Enter for yes: the disk encrypted
+   (if the computer is lost or stolen, nobody can read your files without
+   the password) and swap compressed in memory (zram), so the computer
+   slows down instead of closing apps when memory runs out. Type `n` to
+   choose instead:
+   - **Encrypt the disk?** Recommended: yes.
+   - **Swap:** Enter for zram; a size like `8G` for zram plus a swap file
+     on disk (encrypted with the system); `hibernate` for a swap file big
+     enough to sleep to disk (bunny sizes it from your memory); or `none`.
+3. **What will be erased, and what you'll get.** Every partition on the
+   disk (like "NTFS (Windows)"), then the new layout in plain words, and
+   which disks aren't touched. If you chose anything besides the
+   recommended answers, bunny also shows the same choices as options
+   (like `bunny install --swap 8G`), to install the same way on another
+   computer.
+4. **Confirm by typing the disk's name** (like `nvme0n1`). Anything else
    stops here, and nothing is changed.
-4. **Your user name**, in lowercase (like `you`).
-5. **A name for this computer** (like `laptop`).
-6. **Your time zone**, like `America/Toronto` or `Europe/London` (Enter for
+5. **Your user name**, in lowercase (like `you`).
+6. **A name for this computer** (like `laptop`).
+7. **Your time zone**, like `America/Toronto` or `Europe/London` (Enter for
    UTC).
-7. **Your keyboard layout**, like `us`, `uk`, `de` or `fr` (Enter for `us`).
-8. **A password**, typed twice. It's for your account **and** for unlocking
+8. **Your keyboard layout**, like `us`, `uk`, `de` or `fr` (Enter for `us`).
+9. **A password**, typed twice. It's for your account **and** for unlocking
    the disk each time the computer starts, so pick one you'll remember. If
    it's lost, the disk can't be read. A long one is safest: a few words
    together is easy to remember and hard to guess. If it's under 8
@@ -176,14 +197,16 @@ If a step fails, bunny says which and why, puts the disk back to a state
 where you can simply run `bunny install` again, and changes nothing else.
 The most common cause is the network dropping.
 
-Useful options (all of them are in
-[bunny install, in detail](../reference/install.md)):
+Options answer those questions ahead of time, so they aren't asked (all of
+them are in [bunny install, in detail](../reference/install.md)):
 
 | Option | What it does |
 |---|---|
-| `--swap 8G` | A swapfile (8 GB here). |
+| `--swap 8G` | A swap file on disk too (8 GB here). |
+| `--no-zram` | No compressed swap in memory. |
 | `--hibernate` | Set up hibernation (a swapfile as big as your memory). |
 | `--no-encrypt` | Don't encrypt the disk. Anyone with the computer can then read it. |
+| `--home-disk sda` | Keep `/home` on a second disk (erased too, unlocked with the same password). |
 | `--edit` | Change the config before it's applied. |
 | `--config github:you/my-system` | Install from your own config instead. |
 

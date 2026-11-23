@@ -24,32 +24,11 @@ pub struct Generation {
 }
 
 impl Generation {
-    /// `bunny-20261116-204336` → `2026-11-16 20:43:36 UTC`
+    /// When it was saved, in this computer's time zone, the way a person
+    /// says it: `Nov 18, 7:03 PM` (with the year when it isn't this one).
+    /// The same wording as the boot menu. Falls back to the name.
     pub fn when(&self) -> String {
-        let stamp = self
-            .name
-            .trim_start_matches("bunny-")
-            .split('-')
-            .take(2)
-            .collect::<Vec<_>>();
-        match stamp.as_slice() {
-            [d, t] if d.len() == 8 && t.len() == 6 => format!(
-                "{}-{}-{} {}:{}:{} UTC",
-                &d[..4],
-                &d[4..6],
-                &d[6..],
-                &t[..2],
-                &t[2..4],
-                &t[4..]
-            ),
-            _ => self.name.clone(),
-        }
-    }
-
-    /// The same moment in this computer's time zone, the way a person says
-    /// it: `Nov 18, 7:03 PM`. Falls back to [`when`](Self::when).
-    pub fn when_local(&self) -> String {
-        local_time(&self.name).unwrap_or_else(|| self.when())
+        local_time(&self.name).unwrap_or_else(|| self.name.clone())
     }
 
     pub fn is_pre_rollback(&self) -> bool {
@@ -57,8 +36,9 @@ impl Generation {
     }
 }
 
-/// `bunny-YYYYMMDD-HHMMSS…` (UTC) in local time, like `Nov 18, 7:03 PM`.
-pub fn local_time(name: &str) -> Option<String> {
+/// Seconds since 1970 from `bunny-YYYYMMDD-HHMMSS…` (or the bare stamp),
+/// which is UTC.
+fn stamp_epoch(name: &str) -> Option<i64> {
     let stamp = name.trim_start_matches("bunny-");
     let (d, rest) = stamp.split_once('-')?;
     let t = rest.get(..6)?;
@@ -68,38 +48,56 @@ pub fn local_time(name: &str) -> Option<String> {
     {
         return None;
     }
-    let n = |s: &str| s.parse::<i32>().ok();
-    // SAFETY: tm is plain data; timegm and localtime_r only read and write
-    // the structs passed in.
+    crate::status::parse_stamp(&format!("{d}-{t}"))
+}
+
+/// `bunny-YYYYMMDD-HHMMSS…` (UTC) in local time, like `Nov 18, 7:03 PM`.
+pub fn local_time(name: &str) -> Option<String> {
+    let epoch = stamp_epoch(name)?;
+    let local = local_tm(epoch)?;
+    // SAFETY: time(NULL) only returns the current time.
+    let now = unsafe { libc::time(std::ptr::null_mut()) };
+    let this_year = local_tm(now).map_or(local.tm_year, |t| t.tm_year);
+    format_tm(&local, this_year)
+}
+
+/// `epoch` broken down in this computer's time zone.
+fn local_tm(epoch: i64) -> Option<libc::tm> {
+    let epoch = libc::time_t::try_from(epoch).ok()?;
+    // SAFETY: tm is plain data; localtime_r only reads and writes the
+    // structs passed in.
     unsafe {
-        let mut tm: libc::tm = std::mem::zeroed();
-        tm.tm_year = n(&d[..4])? - 1900;
-        tm.tm_mon = n(&d[4..6])? - 1;
-        tm.tm_mday = n(&d[6..])?;
-        tm.tm_hour = n(&t[..2])?;
-        tm.tm_min = n(&t[2..4])?;
-        tm.tm_sec = n(&t[4..])?;
-        let epoch = libc::timegm(&mut tm);
         let mut local: libc::tm = std::mem::zeroed();
         if libc::localtime_r(&epoch, &mut local).is_null() {
             return None;
         }
-        const MONTHS: [&str; 12] = [
-            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-        ];
-        let hour = match local.tm_hour % 12 {
-            0 => 12,
-            h => h,
-        };
-        Some(format!(
-            "{} {}, {}:{:02} {}",
-            MONTHS.get(local.tm_mon as usize)?,
-            local.tm_mday,
-            hour,
-            local.tm_min,
-            if local.tm_hour < 12 { "AM" } else { "PM" }
-        ))
+        Some(local)
     }
+}
+
+/// `Nov 18, 7:03 PM`, or `Nov 18 2025, 7:03 PM` when `t` isn't in
+/// `this_year` (both as `tm_year`, years since 1900).
+fn format_tm(t: &libc::tm, this_year: i32) -> Option<String> {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let hour = match t.tm_hour % 12 {
+        0 => 12,
+        h => h,
+    };
+    let year = if t.tm_year == this_year {
+        String::new()
+    } else {
+        format!(" {}", t.tm_year + 1900)
+    };
+    Some(format!(
+        "{} {}{year}, {}:{:02} {}",
+        MONTHS.get(usize::try_from(t.tm_mon).ok()?)?,
+        t.tm_mday,
+        hour,
+        t.tm_min,
+        if t.tm_hour < 12 { "AM" } else { "PM" }
+    ))
 }
 
 /// Snapshots bunny made, oldest first.
@@ -534,15 +532,41 @@ mod tests {
         let g = Generation {
             name: "bunny-20261119-000331".into(),
         };
-        let local = g.when_local();
+        let local = g.when();
         let re_ok = local.contains(", ") && (local.ends_with(" AM") || local.ends_with(" PM"));
         assert!(re_ok, "{local}");
-        assert!(local.starts_with("Nov ") || local.starts_with("Nov") || local.starts_with("Dec"));
+        assert!(!local.contains("UTC"), "{local}");
+        assert!(
+            local.starts_with("Nov ") || local.starts_with("Dec "),
+            "{local}"
+        );
         assert_eq!(local_time("bunny-garbage"), None);
         let odd = Generation {
             name: "bunny-x".into(),
         };
-        assert_eq!(odd.when_local(), "bunny-x");
+        assert_eq!(odd.when(), "bunny-x");
+        assert_eq!(stamp_epoch("bunny-20261117-091500"), Some(1_794_906_900));
+        assert_eq!(
+            stamp_epoch("bunny-20261117-091500-before-rollback"),
+            Some(1_794_906_900)
+        );
+    }
+
+    #[test]
+    fn local_times_read_like_a_person_says_them() {
+        // SAFETY: tm is plain data.
+        let mut t: libc::tm = unsafe { std::mem::zeroed() };
+        t.tm_year = 126;
+        t.tm_mon = 10;
+        t.tm_mday = 18;
+        t.tm_hour = 19;
+        t.tm_min = 3;
+        assert_eq!(format_tm(&t, 126).unwrap(), "Nov 18, 7:03 PM");
+        assert_eq!(format_tm(&t, 127).unwrap(), "Nov 18 2026, 7:03 PM");
+        t.tm_hour = 0;
+        assert_eq!(format_tm(&t, 126).unwrap(), "Nov 18, 12:03 AM");
+        t.tm_hour = 12;
+        assert_eq!(format_tm(&t, 126).unwrap(), "Nov 18, 12:03 PM");
     }
 
     #[derive(Default)]
@@ -593,7 +617,7 @@ mod tests {
         let gens = list(root.path()).unwrap();
         let names: Vec<_> = gens.iter().map(|g| g.name.as_str()).collect();
         assert_eq!(names, ["bunny-20261101-090000", "bunny-20261116-204336"]);
-        assert_eq!(gens[1].when(), "2026-11-16 20:43:36 UTC");
+        assert_eq!(gens[1].when(), local_time("bunny-20261116-204336").unwrap());
     }
 
     #[test]

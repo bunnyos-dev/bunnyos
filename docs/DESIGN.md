@@ -779,6 +779,12 @@ GPT
   `inside.sh` run in a chroot (packages from the binhost, GRUB named
   "Bunny Linux" plus the fallback path, the kernel's startup image, the
   user). One password unlocks the disk and logs in; root stays locked.
+  After the package list, `inside.sh` runs `emerge --update --deep
+  --newuse @world` (bunny switch's options): Gentoo's stage3 is built with
+  releng's `package.use` (`circular`: curl `-http2 -http3 -quic`;
+  `openmp`: libb2, gettext, portage-utils `-openmp`), so those differ from
+  the profile, and without this the first switch rebuilt them. Prebuilt
+  packages with the profile's flags replace them during the install.
   The password can't be empty; under 8 characters gets a warning (easy to
   guess, a few words are better) and can be kept by typing it again, or
   replaced by pressing Enter. It's your disk and your choice.
@@ -789,7 +795,15 @@ GPT
   `--dry-run` doesn't ask for the password (it stands in a placeholder that
   nothing uses) and shows each step's name and what it does in plain words
   (StepsRunner); `--dry-run --verbose` prints every command and file
-  (PrintRunner).
+  (PrintRunner). A real install (QuietRunner around SystemRunner) prints
+  each step's `==> ` heading (unchanged: the graphical installer reads
+  them), then `✓ Done` (with the time from 2 s), and appends what each tool
+  printed to `/var/log/bunny/<time>-install.log` on the USB, copied into the
+  new system at the end. A failed tool shows `✗`, its last 12 lines
+  (colour codes removed) and the log's path, before bunny's explanation.
+  The stage3's progress bar, `inside.sh` and the first `bunny switch`/`lock`
+  keep the screen (no `✓` after the chroot ones; their output says how it
+  went). `--verbose` shows all of it live and still keeps the log.
 - **Your config's history (current behaviour):** after the first switch,
   `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
   main`, run with the USB's git), with a repository-only identity from the
@@ -846,6 +860,16 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  **Quiet start-up:** the normal menu entries have `quiet` on the kernel
+  line; `/etc/inittab` runs every runlevel through
+  `/usr/local/sbin/bunny-openrc` (`tools/iso/openrc-quiet.sh`), which sets
+  `EINFO_QUIET=YES` (what `openrc --quiet` sets) when the kernel line says
+  `quiet`, so OpenRC's "Starting …" lines and warnings are left out and
+  errors still show. "Show start-up messages" has no `quiet`. Chosen over
+  `rc_verbose` (it only adds detail), over sending OpenRC's output to a
+  log (errors would disappear too) and over a different inittab per entry
+  (one squashfs serves every entry). The CI boot check boots without
+  `quiet`, so it still sees "Starting local".
   **Console font** (also set by `bunny install`): the Linux console's usual
   font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
   console fonts don't have them either (only its full, 1356-glyph BDF

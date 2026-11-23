@@ -29,6 +29,9 @@ a minor version can change how things work).
 - Fixed: reports sent under `sudo bunny …` or `doas bunny …` said "gh
   isn't signed in", because they used root's GitHub sign-in. They now use
   the sign-in of whoever ran sudo or doas, like `bunny publish`.
+- `bunny status`, `bunny generations`, `bunny rollback` and `bunny clean`
+  now show times in your own time zone (like "Nov 18, 7:03 PM"), the same
+  as the boot menu, instead of UTC.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

@@ -41,6 +41,8 @@ pub struct Choices {
     pub efi_mib: u64,
     /// Size of the swapfile in MiB; 0 for none.
     pub swap_mib: u64,
+    /// Compressed swap in memory (zram), as big as memory up to 8 GB.
+    pub zram: bool,
     /// Set up resuming from the swapfile (hibernation).
     pub hibernate: bool,
     /// A second disk, all of it for /home.
@@ -60,6 +62,7 @@ impl Default for Choices {
             encrypt: true,
             efi_mib: 2048,
             swap_mib: 0,
+            zram: true,
             hibernate: false,
             home_disk: None,
             mnt: PathBuf::from("/mnt/bunny"),
@@ -157,12 +160,23 @@ impl Choices {
             "   Your files (/home), logs and caches are kept apart from the system, so undo never touches them."
                 .into(),
         );
+        if self.zram {
+            out.push(
+                "   Swap: compressed, in memory (zram), as big as your memory up to 8 GB".into(),
+            );
+        }
         if self.swap_mib > 0 {
             out.push(format!(
-                "   A {} swapfile in /swap{}",
+                "   {}: {}, a file in /swap{}{}",
+                if self.zram { "Then on disk" } else { "Swap" },
                 mib(self.swap_mib),
+                if self.encrypt {
+                    ", encrypted with the system"
+                } else {
+                    ""
+                },
                 if self.hibernate {
-                    ", set up for hibernation"
+                    "; set up for hibernation"
                 } else {
                     ""
                 }
@@ -493,7 +507,7 @@ pub fn prepare(
         say(
             runner,
             "Making the swapfile",
-            &format!("Makes a {} swapfile in /swap.", mib(choices.swap_mib)),
+            &format!("Makes the swap file in /swap ({}).", mib(choices.swap_mib)),
         );
         step(
             runner,

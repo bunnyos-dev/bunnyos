@@ -12,9 +12,9 @@ bunny rollback list
 ```
 Saved generations (oldest first):
 
-   1. Nov 16, 9:24 PM   before a switch: + tmux, + cronie, start cronie
+   1. Nov 16, 9:24 PM   before adding tmux and cronie, starting cronie
       bunny-20261116-212417
-   2. Nov 17, 9:15 AM   before a switch: + mpv
+   2. Nov 17, 9:15 AM   before adding mpv
       bunny-20261117-091500
 
 Running now: your system after the switch at Nov 17, 9:15 AM.
@@ -24,7 +24,7 @@ Times are in your computer's time zone, the same as in the boot menu
 (the year is added for anything from an earlier year). The name under each
 one, like `bunny-20261117-091500`, is the moment in UTC.
 
-Each one says what came **right after** it. So "before a switch: + mpv" is
+Each one says what came **right after** it. So "before adding mpv" is
 your system as it was just before mpv was added.
 
 ## Go back
@@ -107,7 +107,8 @@ rollback`.) If it's somehow picked twice for the same change, the second
 time does nothing and the computer starts normally.
 
 **Earlier versions** lists the newest 10 saved versions, newest first, like
-`Nov 18, 7:03 PM · before + repository guru, + mangowm, + dejavu`. Pick one
+`Nov 18, 7:03 PM · before adding the repository guru, adding mangowm and dejavu`
+(that version is your system just before those were added). Pick one
 to see what came after it, one change per line, and **Go back to this
 version** to start from it. That's undoable too. (The lines describing the
 changes do nothing when picked: GRUB can only show menu entries.) `bunny

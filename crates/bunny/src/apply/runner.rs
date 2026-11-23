@@ -38,9 +38,33 @@ pub trait Runner {
         self.run(cmd)
     }
 
+    /// Like [`Runner::run_with_input`], without showing the output:
+    /// returns whether it succeeded and what it printed (never the input).
+    fn run_with_input_quiet(
+        &mut self,
+        cmd: &[String],
+        input: &str,
+        secret: bool,
+    ) -> Result<(bool, String)> {
+        Ok((self.run_with_input(cmd, input, secret)?, String::new()))
+    }
+
     /// True if commands are only printed, not run (a test root).
     fn dry(&self) -> bool {
         false
+    }
+
+    /// `bunny install` started a step (its `==> ` line comes next). A
+    /// runner that hides the tools' output closes the step before with a
+    /// `✓` line.
+    fn step_started(&self, _title: &str) {}
+
+    /// `bunny install` has no more steps (`ok`: the last one worked).
+    fn steps_finished(&self, _ok: bool) {}
+
+    /// Where the tools' output was kept, if anywhere.
+    fn log_file(&self) -> Option<std::path::PathBuf> {
+        None
     }
 
     /// True for a dry run that describes each step in plain words instead
@@ -180,6 +204,32 @@ impl Runner for SystemRunner {
             let _ = stdin.write_all(input.as_bytes());
         }
         Ok(child.wait()?.success())
+    }
+
+    fn run_with_input_quiet(
+        &mut self,
+        cmd: &[String],
+        input: &str,
+        _secret: bool,
+    ) -> Result<(bool, String)> {
+        use std::io::Write;
+        use std::process::Stdio;
+        let mut child = std::process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            // As in run_with_input: the exit status says what went wrong.
+            let _ = stdin.write_all(input.as_bytes());
+        }
+        // Both streams are read until the command ends, so neither fills up.
+        let out = child.wait_with_output()?;
+        let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+        text.push_str(&String::from_utf8_lossy(&out.stderr));
+        Ok((out.status.success(), text))
     }
 
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {

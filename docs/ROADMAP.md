@@ -773,6 +773,41 @@ new is doing it through bunny.
       Rufus): does the boot menu find it (os-prober), and does bunny leave
       it alone. Not in the installer yet.
 
+## A test machine at home (self-hosted runner)
+
+Decided November 23, 2026. A spare laptop becomes a dedicated test machine
+that runs Bunny Linux and picks up test jobs on its own, so nightly tests
+happen on real hardware without the maintainer. The maintainer's desktop
+stays out of it (a test going wrong there is what we don't want).
+
+The machine: Dell Precision 7520, Intel Core i7-7820HQ (4 cores, VT-x),
+32 GB RAM, hybrid graphics (Intel HD 630 + NVIDIA Quadro M1200, Maxwell).
+Ethernet for everyday jobs (through the access point's LAN ports or a small
+switch); Wi-Fi checked on its own now and then.
+
+- [ ] **Install Bunny Linux on it** (whole disk), developer mode on.
+- [ ] **Make it a GitHub Actions self-hosted runner** for bunnyos-dev/bunnyos.
+      It connects out to GitHub; no token from Claude sessions sits on it.
+      The repository is public, so the runner takes **only** scheduled jobs,
+      manual runs (`workflow_dispatch`) and pushes to the maintainer's own
+      branches, **never** `pull_request` jobs from forks (GitHub's own
+      warning for public repos). Its own label (e.g. `bunny-hw`), and jobs
+      that need it say so.
+- [ ] **Nightly job, part 1: a full install in a VM** (QEMU/KVM) from the
+      newest USB image built by the ISO workflow, both installers in turn,
+      checking the result (zram, `bunny status`, no compiles), and posting
+      a summary the daily session reads.
+- [ ] **Nightly job, part 2: the machine itself**: `bunny update`, `bunny
+      switch`, a reboot, `bunny status`, and now and then `bunny rollback`,
+      so updates are tried on real hardware first. Problems arrive as
+      developer-mode reports.
+- [ ] **Older Nvidia**: the Quadro M1200 is Maxwell, so it can't use
+      `kernel-open` and needs Nvidia's older driver branch (pinned
+      `nvidia-drivers`). With the G16's new card, both kinds of Nvidia get
+      tested. Check which branch Gentoo currently keeps for Maxwell.
+- [ ] **Later**: the other older laptops for more hardware (Intel graphics,
+      different Wi-Fi), the same way.
+
 ## Known issues / small fixes
 
 - [x] Ctrl+C at doas's password question stopped bunny with no words of its

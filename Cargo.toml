@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/bunny"]
+members = ["crates/bunny", "crates/bunny-installer"]
+# A plain `cargo build` makes bunny only (static builds included). The
+# graphical installer needs GUI libraries: `cargo build -p bunny-installer`.
+default-members = ["crates/bunny"]
 
 [workspace.package]
 version = "0.1.0"

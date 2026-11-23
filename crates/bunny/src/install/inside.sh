@@ -50,6 +50,14 @@ say "Installing the system (prebuilt packages; this takes a while)"
 # shellcheck disable=SC2086  # a list of package names
 emerge -q --noreplace $PACKAGES
 
+# Gentoo builds its stage3 with a few USE flags turned off that its profile
+# turns on (releng's package.use: curl without http2/http3/quic, libb2,
+# gettext and portage-utils without openmp, because the stage1 compiler
+# can't do it yet). Bring those in line now, from the prebuilt packages,
+# with the same options bunny switch uses, so the first switch has nothing
+# to rebuild.
+emerge -q --update --deep --newuse @world
+
 # Gentoo's announcements so far are older than this system: mark them read,
 # so bunny only mentions new ones.
 eselect news read --quiet all >/dev/null 2>&1 || true

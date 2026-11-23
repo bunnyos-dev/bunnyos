@@ -56,11 +56,17 @@ pub(crate) struct Args {
 
 /// Runs the install for real, or for a dry run: in plain words (each
 /// step and what it does) by default, every command and file with
-/// `--verbose`.
+/// `--verbose`. A real install shows one line per step and keeps what the
+/// tools print in its log (all of it on the screen too with `--verbose`).
 fn runner_for(args: &Args) -> Box<dyn Runner> {
+    let verbose = crate::VERBOSE.load(std::sync::atomic::Ordering::Relaxed);
     if !args.dry_run {
-        Box::new(apply::SystemRunner)
-    } else if crate::VERBOSE.load(std::sync::atomic::Ordering::Relaxed) {
+        Box::new(crate::install::quiet::QuietRunner::new(
+            Box::new(apply::SystemRunner),
+            verbose,
+            Some(crate::install::quiet::log_path()),
+        ))
+    } else if verbose {
         Box::new(apply::PrintRunner)
     } else {
         Box::new(apply::StepsRunner)

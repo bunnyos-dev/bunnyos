@@ -50,6 +50,8 @@ minimal system. It runs from a live USB.
 | `--yes` | Ask nothing (needs `--disk`): no typing the disk's name, the recommended answer for anything not given, UTC and `us` unless given, and `--user`, `--hostname` and the password (`--password-stdin`, except on a dry run) must be given. |
 | `--list-disks` | Print the disks as JSON (name, path, a description, what's on them, and why one can't be used) and stop. Used by the graphical installer. |
 
+| `--verbose` | On a real install, show everything the tools print as they run (it's kept in the log either way). With `--dry-run`, see above. |
+
 Sizes are written like `512M`, `2G` or `1.5G`.
 
 ## Step by step
@@ -98,7 +100,9 @@ Sizes are written like `512M`, `2G` or `1.5G`.
    encryption, hibernation), the sudo file, and copies itself in.
 10. **Inside the new system** (chroot): the package list (Gentoo's
    announcements so far are marked read, since they're older than the
-   system), language and time zone, the packages, services (`dhcpcd`, `sysklogd`, and `sshd` with
+   system), language and time zone, the packages (plus a few of the base
+   system's own, swapped for prebuilt ones with Gentoo's usual settings:
+   the base system is built with some features off, see below), services (`dhcpcd`, `sysklogd`, and `sshd` with
    `--ssh`), the boot menu (GRUB, named "Bunny Linux", also at the EFI
    fallback path), the startup image, and your account.
 11. **Your config.** The starter `bunny.toml` (or yours) goes in
@@ -119,6 +123,25 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     finishes; `bunny publish` starts it later.
 14. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
+
+**What you see.** Each step prints its `==> ` heading, then `✓ Done` (with
+the time, when it took 2 seconds or more). What the tools themselves print
+(wipefs, mkfs, btrfs, cryptsetup, tar, grub-mkconfig, git) isn't shown: it
+goes to `/var/log/bunny/<time>-install.log` on the USB, which is copied to
+the same place in the new system at the end. Three things keep the screen,
+because their output is the progress: the base system's download bar, the
+part inside the new system (its own `==> ` headings and emerge's short
+lines), and the first `bunny switch`. If a tool fails, bunny shows `✗`, the
+last 12 lines it printed, and where the rest is, then says what it means.
+`--verbose` shows everything as it runs, and still keeps the log.
+
+**Why a few base packages are replaced.** Gentoo builds its base system
+(stage3) with some USE flags turned off that its normal settings turn on:
+curl without HTTP/2 and HTTP/3, and libb2, gettext and portage-utils without
+OpenMP (the compiler it starts from can't do that yet). Left alone, the
+first `bunny switch` would show them as "(rebuild)". The install updates
+them from Gentoo's prebuilt packages instead, so the first switch has
+nothing to rebuild.
 
 If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run

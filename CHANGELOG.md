@@ -13,6 +13,22 @@ a minor version can change how things work).
 - `bunny remove` asks once instead of twice when it removes exactly what
   the plan showed. It still asks again when emerge wants to remove more
   (like dependencies nothing else uses), and always with `--yes`.
+- The boot menu's "Earlier versions" and `bunny generations` say what each
+  version was before in words: "before removing tree" or "before adding
+  tmux and cronie" instead of "before − tree" or "before a switch: + tmux".
+- `bunny install` is quieter: each step is its heading and one "✓ Done"
+  line, instead of what wipefs, mkfs, btrfs and cryptsetup print. Their
+  output goes to `/var/log/bunny/<time>-install.log` (copied into the new
+  system); a failing tool shows its last lines. `--verbose` shows it all.
+
+- Fixed: the first switch on a new install rebuilt curl, gettext, iputils,
+  libb2 and portage-utils. Gentoo's base system is built with a few
+  features off; the install now swaps those packages for Gentoo's prebuilt
+  ones with the usual settings, so the first switch rebuilds nothing.
+
+- The live USB starts quietly: OpenRC's "Starting … [ ok ]" lines only show
+  with the boot menu's "show start-up messages" entry. Errors still show.
+
 - The live USB image is about 850 MB instead of about 1.45 GB, so a 1 GB
   USB stick is enough. It no longer carries a compiler, Portage, Python or
   firmware for phone chips, cameras and sound; network and graphics drivers

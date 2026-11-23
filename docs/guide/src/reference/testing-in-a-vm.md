@@ -93,6 +93,10 @@ tools/bunny-vm.sh snap clean-install
 The VM's user is `you` unless you say otherwise: `VM_USER=bunny tools/bunny-vm.sh ssh`
 (also for `put` and `stop`).
 
+To test `/home` on a second disk, start the VM with `HOME_DISK=24G` (any
+size of 20 GB or more): it attaches a second disk, made the first time and
+kept in the VM's folder.
+
 To test a build of bunny: `cargo build --release`,
 `tools/bunny-vm.sh put target/release/bunny`, then run `./bunny …` in the VM.
 
@@ -151,3 +155,21 @@ Every command takes `VM=laptop` the same way: `VM=laptop tools/bunny-vm.sh ssh`,
   lines there aren't used any more.)
 - **Paste commands that ask questions one at a time**, or the next pasted line
   becomes the answer.
+
+## Trying the graphical installer
+
+The graphical installer (`crates/bunny-installer`) runs on your desktop too,
+in a window, with two pretend disks. It only does dry runs there, so nothing
+is changed:
+
+```sh
+cargo build -p bunny -p bunny-installer
+```
+```sh
+target/debug/bunny-installer --demo --bunny target/debug/bunny
+```
+
+`--screenshots <folder>` draws every screen to PNG files instead, with no
+window. The installer is a thin window over `bunny install`: it builds the
+command (`--yes`, `--user`, `--password-stdin` and the rest), and bunny
+checks the answers, shows the preview and does the work.

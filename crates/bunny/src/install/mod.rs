@@ -21,6 +21,7 @@ pub mod disks;
 pub mod first_config;
 pub mod layout;
 pub mod mounted;
+pub mod questions;
 pub mod starter;
 pub mod system;
 

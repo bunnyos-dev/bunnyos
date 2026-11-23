@@ -107,7 +107,13 @@ config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
 kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
 plus a `[machine]` record from `bunny install` that's read but never acted on
 (the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
-main file. Rollback restores the main config, its lock and this computer's
+main file. A config with no `hosts/` folder next to it (a copy elsewhere,
+for `bunny plan ~/test/bunny.toml`) borrows this computer's file from
+`/etc/bunny/hosts/`, and the "looks good" line says so. Chosen over leaving
+it out because leaving it out makes GRUB and the kernel look unwanted, and
+a switch from the copy would remove them; borrowing can only keep more.
+A copy with its own `hosts/` folder but no file for this computer uses
+none, and bunny says this computer's file isn't included. Rollback restores the main config, its lock and this computer's
 host file. The Baseline layer is still planned.
 
 Modules expand one line into packages + services + config files, for example
@@ -311,7 +317,12 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   Package messages (elog) are shown at the end, a few lines each. Removal
   asks the Portage helper what depclean would remove (or reads `emerge
   --depclean --pretend`'s "All selected packages" line, falling back to
-  emerge's own `--ask` if the count doesn't match), and always asks. Cleanup also runs after USE changes and
+  emerge's own `--ask` if the count doesn't match), and asks. Exception,
+  so a plain `bunny remove` asks once: when the user answered yes to the
+  plan (not `--yes`) and the list is exactly the plan's "would be removed"
+  packages (names compared, slots ignored), it removes without asking
+  again; more than the plan showed (dependencies, leftovers after USE
+  changes) still asks. Cleanup also runs after USE changes and
   updates, since both can orphan dependencies. `--verbose` restores the old
   live, emerge-asks behaviour.
 - **Ctrl+C:** stops bunny at once, except at a question during a switch
@@ -378,7 +389,8 @@ when nothing is set and both are installed).
    plus `00-bunny-kept` (lines bunny can't manage yet, word for word).
 5. Writes the world file from `packages`.
 6. Runs `emerge --update --deep --newuse @world` (with `--ask` unless `--yes`).
-7. Runs `emerge --depclean --ask` if packages were removed. **Always asks.**
+7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
+   said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
@@ -870,7 +882,11 @@ Needs the Baseline image (phases 6 and 7).
   log (errors would disappear too) and over a different inittab per entry
   (one squashfs serves every entry). The CI boot check boots without
   `quiet`, so it still sees "Starting local".
-  **Console font** (also set by `bunny install`): the Linux console's usual
+  **Console font** (also set by `bunny install`, and by a switch on
+  systems that don't have it yet: `console_font.rs`, shown in the plan,
+  `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;
+  a font the user set themselves is left alone, and a failure is a note,
+  never a stop): the Linux console's usual
   font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
   console fonts don't have them either (only its full, 1356-glyph BDF
   does). kbd's `eurlatgr` (part of every Gentoo system) has ✓ ✗ · but no

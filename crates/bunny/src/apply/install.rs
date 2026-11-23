@@ -319,7 +319,12 @@ fn run_install(
 }
 
 /// Shows which packages aren't needed anymore and asks before removing them
-/// (always, even with --yes). Returns false if they weren't removed.
+/// (even with --yes). Returns false if they weren't removed.
+///
+/// One exception, so a plain `bunny remove` asks once: when the user
+/// already said yes to the plan (not `--yes`) and the list is exactly the
+/// packages the plan showed as removed (`planned`), nothing more, bunny
+/// doesn't ask again.
 ///
 /// The list comes from bunny's Portage helper when it can answer; then
 /// exactly the packages shown are removed (`emerge --depclean =cat/pkg-1.0
@@ -329,6 +334,7 @@ pub(super) fn remove_quietly(
     runner: &mut dyn Runner,
     opts: &Options,
     outcome: &Outcome,
+    planned: &[String],
 ) -> Result<bool> {
     let (list, from_helper) = match crate::helper::depclean(runner) {
         Some(list) => (list, true),
@@ -344,7 +350,9 @@ pub(super) fn remove_quietly(
     }
     print!("{}", describe_removals(&list));
     let undoable = outcome.snapshot.is_some();
-    if !(opts.confirm)("Remove them?", undoable)? {
+    if !opts.yes && same_as_planned(&list, planned) {
+        println!("  These are the packages the plan showed, so removing them now.");
+    } else if !(opts.confirm)("Remove them?", undoable)? {
         return Ok(false);
     }
     let mut progress = crate::progress::Ticker::new();
@@ -370,6 +378,22 @@ pub(super) fn remove_quietly(
         );
     }
     Ok(ok)
+}
+
+/// Whether emerge wants to remove exactly the packages the plan showed as
+/// leaving the config (world entries, maybe with a `:slot`), and nothing
+/// more.
+pub(super) fn same_as_planned(list: &[crate::helper::Removal], planned: &[String]) -> bool {
+    let mut removing: Vec<&str> = list.iter().map(|r| r.name.as_str()).collect();
+    let mut shown: Vec<&str> = planned
+        .iter()
+        .map(|atom| atom.split(':').next().unwrap_or(atom))
+        .collect();
+    removing.sort_unstable();
+    removing.dedup();
+    shown.sort_unstable();
+    shown.dedup();
+    !removing.is_empty() && removing == shown
 }
 
 /// What `emerge --depclean --pretend` said it would remove.

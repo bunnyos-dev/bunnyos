@@ -239,6 +239,41 @@ const CONFIG: &str = r#"
 "#;
 
 #[test]
+fn a_switch_sets_up_the_console_font_on_an_existing_system() {
+    // An existing Gentoo system: kbd's font and OpenRC's consolefont
+    // service, with Gentoo's stock setting. Only bunny install set the
+    // font up before.
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/share/consolefonts/eurlatgr.psfu.gz", "font");
+    write(r, "etc/init.d/consolefont", "");
+    write(r, "etc/conf.d/consolefont", "consolefont=\"default8x16\"\n");
+    let config = Config::parse(r#"packages = ["app-editors/neovim", "app-misc/old"]"#).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(plan.console_font.len(), 3, "{:?}", plan.console_font);
+    let shown = plan.render();
+    assert!(shown.contains("Console font, so ✓ ✗ ⚠ show"), "{shown}");
+    assert!(plan.summary().contains("console font"));
+
+    let mut runner = Recorder::default();
+    let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+    let c = &runner.commands;
+    assert!(c.iter().any(|l| l.starts_with("sh -c set -e;")), "{c:#?}");
+    assert!(
+        c.iter().any(|l| l == "rc-update add consolefont boot"),
+        "{c:#?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(r.join("etc/conf.d/consolefont")).unwrap(),
+        "consolefont=\"/usr/local/share/consolefonts/bunny.psfu\"\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(outcome.backup_dir.join("etc/conf.d/consolefont")).unwrap(),
+        "consolefont=\"default8x16\"\n"
+    );
+}
+
+#[test]
 fn switches_a_system() {
     let root = fake_system();
     let config = Config::parse(CONFIG).unwrap();
@@ -729,6 +764,83 @@ fn quiet_removal_lists_and_always_asks() {
         .commands
         .iter()
         .any(|c| c == "emerge --depclean --color=n --ask=n"));
+}
+
+#[test]
+fn a_plain_remove_asks_once() {
+    // The plan showed "- app-misc/old" and the user said yes to it (not
+    // --yes). emerge wants to remove exactly that, so bunny doesn't ask a
+    // second time. (The answer here would be no, so a second question
+    // would leave it installed.)
+    let root = fake_system();
+    let config = Config::parse(r#"packages = ["app-editors/neovim"]"#).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert_eq!(plan.remove_packages, ["app-misc/old"]);
+    let just_that = "All selected packages: =app-misc/old-1.0\n\nNumber to remove:     1\n";
+    let mut runner = Scripted {
+        replies: vec![("--depclean --pretend", true, just_that.into())],
+        ..Scripted::default()
+    };
+    let outcome = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(false, false),
+    )
+    .unwrap();
+    assert!(
+        runner
+            .commands
+            .iter()
+            .any(|c| c == "emerge --depclean --color=n --ask=n"),
+        "{:#?}",
+        runner.commands
+    );
+    assert!(!outcome.notes.iter().any(|n| n.contains("weren't removed")));
+
+    // emerge wants more than the plan showed: ask (and the answer is no).
+    let more = "All selected packages: =app-misc/old-1.0 =dev-libs/libold-2\n\n\
+                Number to remove:     2\n";
+    let mut runner = Scripted {
+        replies: vec![("--depclean --pretend", true, more.into())],
+        ..Scripted::default()
+    };
+    let outcome = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(false, false),
+    )
+    .unwrap();
+    assert!(!runner
+        .commands
+        .iter()
+        .any(|c| c == "emerge --depclean --color=n --ask=n"));
+    assert!(outcome.notes.iter().any(|n| n.contains("weren't removed")));
+}
+
+#[test]
+fn compares_the_removal_list_with_the_plan() {
+    use super::install::same_as_planned;
+    let r = |name: &str| crate::helper::Removal {
+        name: name.into(),
+        version: "1".into(),
+        needed_by: vec![],
+    };
+    let planned = vec!["app-text/tree".to_string()];
+    assert!(same_as_planned(&[r("app-text/tree")], &planned));
+    assert!(same_as_planned(
+        &[r("app-text/tree")],
+        &["app-text/tree:0".into()]
+    ));
+    assert!(!same_as_planned(
+        &[r("app-text/tree"), r("dev-libs/x")],
+        &planned
+    ));
+    assert!(!same_as_planned(&[r("dev-libs/x")], &planned));
+    assert!(!same_as_planned(&[], &[]));
 }
 
 const HELPER_DEPCLEAN: &str = r#"{"ok": true, "removals": [{"name": "acct-user/nullmail", "version": "0-r2", "slot": "0", "needed_by": ["mail-mta/nullmailer"]}, {"name": "mail-mta/nullmailer", "version": "2.2-r2", "slot": "0", "needed_by": []}], "helper": 2}"#;

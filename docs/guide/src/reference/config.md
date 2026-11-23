@@ -292,6 +292,25 @@ When bunny runs on `laptop`, it reads `bunny.toml`, then
 `✓ /etc/bunny/bunny.toml (with /etc/bunny/hosts/laptop.toml, for this computer) looks good.`
 The computer's name comes from `/etc/conf.d/hostname`.
 
+**A copy somewhere else** (say `~/test/bunny.toml`, to try a change with
+`bunny plan ~/test/bunny.toml`) usually has no `hosts/` folder next to it.
+Then bunny uses this computer's host file from `/etc/bunny/hosts/` and says
+so:
+
+```
+✓ /home/you/test/bunny.toml (with this computer's /etc/bunny/hosts/laptop.toml, since there's no hosts/ folder next to it) looks good.
+```
+
+Without it, everything only this computer has (GRUB, the kernel, firmware)
+would show as "would be removed", and a switch from that copy would remove
+them. If the copy has its own `hosts/` folder, bunny uses only that folder;
+when there's no file for this computer in it, it says this computer's host
+file isn't included, and what that means:
+
+```
+  ⚠ This computer's host file (/etc/bunny/hosts/laptop.toml) isn't included: /home/you/test/hosts has no laptop.toml.
+```
+
 A host file can have:
 
 | Setting | What it does |

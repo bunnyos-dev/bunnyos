@@ -458,14 +458,14 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [x] **`bunny plan` without sudo says the undo entry can't be set up**
       (it can't read `/boot`). Say "run with sudo to check the boot menu"
       instead of guessing.
-- [ ] **`bunny plan <copy>` silently drops the host file.** A copy of
+- [~] **`bunny plan <copy>` silently drops the host file.** A copy of
       `bunny.toml` elsewhere has no `hosts/` next to it, so this computer's
       packages (GRUB, the kernel…) show as "would be removed". Use this
       computer's host file, or say clearly that it isn't included.
 - [x] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
       sudo's password and a package name that doesn't exist each sent a
       report. Only bunny's own problems should.
-- [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
+- [~] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
       them?"). One question for a plain remove.
 - [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).
@@ -492,7 +492,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       gettext, iputils, libb2, portage-utils) for USE changes. Find why the
       starter config and Gentoo's prebuilt packages disagree, so a fresh
       install rebuilds nothing.
-- [ ] **Existing systems don't get the console font**; only `bunny install`
+- [~] **Existing systems don't get the console font**; only `bunny install`
       sets it. A switch should set it up too.
 - [ ] **Reports under `sudo bunny` use root's GitHub sign-in** ("gh isn't
       signed in"). Use the sign-in of whoever ran sudo or doas, like

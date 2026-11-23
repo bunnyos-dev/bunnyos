@@ -15,6 +15,7 @@ pub const MIRROR: &str = "https://distfiles.gentoo.org/releases/amd64/autobuilds
 const INSIDE: &str = include_str!("inside.sh");
 /// Turns swap on after `/swap` is mounted (OpenRC's swap service runs too early).
 const SWAPFILES: &str = include_str!("swapfiles.initd");
+const ZRAM: &str = include_str!("zram.initd");
 
 /// What goes into the new system besides the disk layout.
 #[derive(Debug, Clone, PartialEq)]
@@ -287,6 +288,10 @@ pub fn configure(
     let mut boot_services = Vec::new();
     if uuids.home_luks.is_some() {
         boot_services.push("dmcrypt");
+    }
+    if choices.zram {
+        put(runner, &mnt.join("etc/init.d/zram"), ZRAM, Some(0o755))?;
+        boot_services.push("zram");
     }
     if choices.swap_mib > 0 {
         put(
@@ -604,7 +609,8 @@ mod tests {
         // repository is set up: the install script's emerge can't see them.
         assert!(!env.contains("bunny-release"), "{env}");
         assert!(env.contains("SERVICES=\"dhcpcd sysklogd sshd\""), "{env}");
-        assert!(env.contains("BOOT_SERVICES=\"swapfiles\""), "{env}");
+        assert!(env.contains("BOOT_SERVICES=\"zram swapfiles\""), "{env}");
+        assert!(read("etc/init.d/zram").contains("swapon --priority 100"));
         assert!(read("etc/init.d/swapfiles").contains("need localmount"));
         let inside = read("root/bunny-inside.sh");
         assert!(inside.contains("grub-install"));
@@ -629,6 +635,20 @@ mod tests {
         let font = INSIDE.find("consolefont boot").unwrap();
         let packages = INSIDE.find("emerge -q --noreplace $PACKAGES").unwrap();
         assert!(font < packages);
+    }
+
+    /// The stage3's own packages are brought in line with the profile
+    /// during the install, so the first `bunny switch` rebuilds nothing.
+    #[test]
+    fn inside_script_rebuilds_the_stage3_packages_whose_flags_differ() {
+        let packages = INSIDE.find("emerge -q --noreplace $PACKAGES").unwrap();
+        let world = INSIDE
+            .find("emerge -q --update --deep --newuse @world")
+            .expect("a world update with bunny switch's options");
+        let kernel = INSIDE
+            .find("--config sys-kernel/gentoo-kernel-bin")
+            .unwrap();
+        assert!(packages < world && world < kernel);
     }
 
     #[test]

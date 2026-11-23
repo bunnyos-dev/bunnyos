@@ -173,6 +173,13 @@ isolated = false       # compile inside a clean container
 ### Rollback (current behaviour)
 
 - `bunny generations` lists the snapshots in `/.snapshots/bunny-*`.
+- **Times are local:** everything bunny shows a person (`status`,
+  `generations`, `rollback`, `clean`, the boot menu) says when in this
+  computer's time zone, like `Nov 18, 7:03 PM` (the year added when it
+  isn't this year), from one function, `rollback::local_time`. Snapshot
+  and backup names stay UTC (they sort and don't jump when the clock
+  changes). Report headers stay UTC too, marked as such: they're read on
+  GitHub, often from another time zone, next to other reports.
 - `bunny rollback [name]` (default: the latest switch) mounts the btrfs top
   level, snapshots the current `@` as `bunny-<time>-before-rollback` (so the
   rollback can be undone), moves `@` aside to `@replaced-<time>`, and makes a
@@ -483,6 +490,10 @@ admins = ["you"]
 - Rust code talks to the init system through one interface (enable, disable,
   start, stop, status) so systemd can be added later as a second implementation.
 - The init system is chosen at install time, never switched later.
+- **After 0.1 (decided November 22, 2026):** OpenRC stays the only one the
+  maintainer works on. systemd is the likely second, only if it turns out
+  easy to add (Gentoo supports it officially). Others (dinit, runit, s6) are
+  left to contributors, who add them as a new `InitSystem` implementation.
 
 ## Packages and apps
 
@@ -682,6 +693,18 @@ GPT
 - UI toolkit: **Slint** (Rust, draws directly to the screen via `linuxkms`, no
   compositor, software-render fallback). Plain Qt Quick is the fallback choice.
 - The installer only writes a `bunny.toml`; `bunny install` does the work.
+- **Current behaviour (part 1):** `crates/bunny-installer`, Slint with the
+  software renderer (works without a GPU), `linuxkms` on the USB and
+  `winit` in a window for `--demo`. Screens: welcome (or "use the terminal
+  instead") → disk (from `bunny install --list-disks`) → setup (Recommended,
+  or choose encryption and swap) → account → password (short: a warning,
+  not a refusal) → review (bunny's own preview from a dry run with the
+  answers, which also checks them; type the disk's name) → installing
+  (bunny's `==>` steps as they start, the full output behind "Show the
+  details") → done (Restart) or stopped (Back). It decides nothing: it
+  builds `bunny install --yes --disk … --user … --password-stdin` and shows
+  what bunny prints. Not yet: the step counter and top bar, Utilities, the
+  map, the `bunny.toml` panel, the desktop choice, Wi-Fi.
 - **Layout (decided November 2026):** not the sidebar-and-steps layout
   most Linux installers share. Full-screen black with a centered column, a
   small top bar (installer name, a Utilities menu, language, Wi-Fi, battery,
@@ -728,7 +751,20 @@ GPT
   (see "Lockfile").
 - **Current behaviour (part 1, guided):** `bunny install` lists whole disks
   from `lsblk --json` and leaves out any in use (anything mounted, swap, or
-  something opened on it like LUKS or LVM), read-only or under 20 GB. The
+  something opened on it like LUKS or LVM), read-only or under 20 GB. After
+  the disk, "Use the recommended setup? [Y/n]" (`install::questions`):
+  Enter takes it (encrypted, zram swap); `n` asks encrypt ([Y/n]) and swap
+  (Enter zram; a size for zram plus a swap file; `hibernate`; `none`). An
+  option answers its question (`--no-encrypt`; `--swap`, `--hibernate` or
+  `--no-zram`). zram is bunny's own small OpenRC service (`zram`, boot
+  runlevel), not sys-block/zram-init (its `maxs` setting breaks on kernels
+  from 6.15): as big as memory up to 8 GB like Fedora, zstd when the kernel
+  has it, priority 100 so it's used before a swap file. `/home` on a second
+  disk isn't asked yet (on hold; `--home-disk` works). No partition sizes,
+  mount points or filesystem choice: btrfs is needed for undo, and full
+  control is `--mounted`. The preview then names the disks left untouched
+  and, when the answers differ from the recommended setup, the options that
+  repeat them (without `--disk`, which differs per computer). The
   preview lists every partition that will be erased and the layout you get;
   you confirm by typing the disk's name. Layout: GPT, EFI (2 GB, FAT32) at
   `/boot`, the rest LUKS2 (opened as `bunny-root`) with btrfs subvolumes
@@ -740,6 +776,12 @@ GPT
   `inside.sh` run in a chroot (packages from the binhost, GRUB named
   "Bunny Linux" plus the fallback path, the kernel's startup image, the
   user). One password unlocks the disk and logs in; root stays locked.
+  After the package list, `inside.sh` runs `emerge --update --deep
+  --newuse @world` (bunny switch's options): Gentoo's stage3 is built with
+  releng's `package.use` (`circular`: curl `-http2 -http3 -quic`;
+  `openmp`: libb2, gettext, portage-utils `-openmp`), so those differ from
+  the profile, and without this the first switch rebuilt them. Prebuilt
+  packages with the profile's flags replace them during the install.
   The password can't be empty; under 8 characters gets a warning (easy to
   guess, a few words are better) and can be kept by typing it again, or
   replaced by pressing Enter. It's your disk and your choice.
@@ -815,6 +857,16 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  **Quiet start-up:** the normal menu entries have `quiet` on the kernel
+  line; `/etc/inittab` runs every runlevel through
+  `/usr/local/sbin/bunny-openrc` (`tools/iso/openrc-quiet.sh`), which sets
+  `EINFO_QUIET=YES` (what `openrc --quiet` sets) when the kernel line says
+  `quiet`, so OpenRC's "Starting …" lines and warnings are left out and
+  errors still show. "Show start-up messages" has no `quiet`. Chosen over
+  `rc_verbose` (it only adds detail), over sending OpenRC's output to a
+  log (errors would disappear too) and over a different inittab per entry
+  (one squashfs serves every entry). The CI boot check boots without
+  `quiet`, so it still sees "Starting local".
   **Console font** (also set by `bunny install`): the Linux console's usual
   font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
   console fonts don't have them either (only its full, 1356-glyph BDF
@@ -824,9 +876,21 @@ Needs the Baseline image (phases 6 and 7).
   `/etc/conf.d/consolefont` with the `consolefont` service in the boot
   runlevel. The ISO build checks the font has all four marks. A real ⚠
   glyph would need our own font (later, with the logo work).
-  Portage and Python are still in it (removing them is later work), so it's
-  bigger than the target; the package tree, docs and kernel sources are
-  removed.
+  **Size (November 2026):** about 850 MB (it was about 1.45 GB), with a
+  1 GB budget for this image. `tools/iso/smaller.sh` removes what the USB
+  never needs, since everything `bunny install` builds or installs happens
+  inside the new system (a full stage3 with its own compiler, Portage and
+  Python): the package tree and downloaded packages, docs, translations,
+  headers and static libraries, the compiler (its runtime libraries stay),
+  build tools, Portage, Python and Perl, Qualcomm's Snapdragon firmware
+  (except what x86 hardware can ask for, like mobile broadband cards),
+  Intel's camera, AI, sensor and sound firmware, and sound and camera
+  drivers. Network (Wi-Fi, Ethernet, Bluetooth) and graphics drivers and
+  firmware all stay. The system is packed with xz (1 MB blocks, x86
+  filter). `tools/iso/check.sh` then checks every program still has its
+  libraries and the commands the USB uses start, and the build fails
+  otherwise; `tools/iso/sizes.sh` shows what takes the space on each CI
+  run's page.
 - Without a Microsoft-signed shim, Secure Boot must be off to boot the USB.
 
 ### Hosting
@@ -923,10 +987,14 @@ testing and decisions.
 ## Testing
 
 - All changes are tested in a QEMU VM with UEFI, Secure Boot (Setup Mode),
-  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`. Each VM (`VM=<name>`) keeps
-  its SSH host key in its own `known_hosts` file in its folder
-  (`StrictHostKeyChecking=accept-new`), because named VMs share port 2223;
-  `forget-key` clears it after a reinstall.
+  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`. The main VM's SSH port is
+  2222; each named VM (`VM=<name>`) gets the lowest port from 2223 up that
+  no other VM's `~/bunny-vm-*/port` file names (and nothing listens on),
+  saved in its own `port` file on first use, so several run at once
+  (`PORT=` overrides once; `port` prints it). Each keeps its SSH host key
+  in its own `known_hosts` file in its folder
+  (`StrictHostKeyChecking=accept-new`); `forget-key` clears it after a
+  reinstall.
 - Snapshot before every test; restore afterwards.
 - Unit tests for everything that doesn't touch the system. Anything that writes
   to a system takes a `--root` so it can be tested against a fake root.

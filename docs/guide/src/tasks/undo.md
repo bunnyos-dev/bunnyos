@@ -12,13 +12,17 @@ bunny rollback list
 ```
 Saved generations (oldest first):
 
-   1. 2026-11-16 21:24:17 UTC   before a switch: + tmux, + cronie, start cronie
+   1. Nov 16, 9:24 PM   before a switch: + tmux, + cronie, start cronie
       bunny-20261116-212417
-   2. 2026-11-17 09:15:00 UTC   before a switch: + mpv
+   2. Nov 17, 9:15 AM   before a switch: + mpv
       bunny-20261117-091500
 
-Running now: your system after the switch at 2026-11-17 09:15:00 UTC.
+Running now: your system after the switch at Nov 17, 9:15 AM.
 ```
+
+Times are in your computer's time zone, the same as in the boot menu
+(the year is added for anything from an earlier year). The name under each
+one, like `bunny-20261117-091500`, is the moment in UTC.
 
 Each one says what came **right after** it. So "before a switch: + mpv" is
 your system as it was just before mpv was added.

@@ -843,6 +843,16 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  **Quiet start-up:** the normal menu entries have `quiet` on the kernel
+  line; `/etc/inittab` runs every runlevel through
+  `/usr/local/sbin/bunny-openrc` (`tools/iso/openrc-quiet.sh`), which sets
+  `EINFO_QUIET=YES` (what `openrc --quiet` sets) when the kernel line says
+  `quiet`, so OpenRC's "Starting …" lines and warnings are left out and
+  errors still show. "Show start-up messages" has no `quiet`. Chosen over
+  `rc_verbose` (it only adds detail), over sending OpenRC's output to a
+  log (errors would disappear too) and over a different inittab per entry
+  (one squashfs serves every entry). The CI boot check boots without
+  `quiet`, so it still sees "Starting local".
   **Console font** (also set by `bunny install`): the Linux console's usual
   font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
   console fonts don't have them either (only its full, 1356-glyph BDF

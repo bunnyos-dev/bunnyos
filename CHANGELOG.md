@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The live USB starts quietly: OpenRC's "Starting … [ ok ]" lines only show
+  with the boot menu's "show start-up messages" entry. Errors still show.
+
 - The live USB image is about 850 MB instead of about 1.45 GB, so a 1 GB
   USB stick is enough. It no longer carries a compiler, Portage, Python or
   firmware for phone chips, cameras and sound; network and graphics drivers

@@ -63,10 +63,13 @@ then write. (With Rufus, choose **DD image mode** when it asks.)
 3. Pick the USB entry that starts with **UEFI**.
 
 A menu appears and starts its first entry, **Install Bunny Linux**, by
-itself after 5 seconds. A minute later the **graphical installer** opens:
-one question per screen (the disk, the setup, you and this computer, a
-password), then exactly what will happen, and the install itself. It asks
-the same things as `bunny install` below, which does the work behind it.
+itself after 5 seconds. It starts quietly: only errors are shown on the
+way. To watch every start-up message instead (handy when something doesn't
+start), pick **Bunny Linux live USB (show start-up messages)** in that menu.
+A minute later the **graphical installer** opens: one question per screen
+(the disk, the setup, you and this computer, a password), then exactly what
+will happen, and the install itself. It asks the same things as
+`bunny install` below, which does the work behind it.
 
 The graphical installer is new and being tested, and it can't connect to
 Wi-Fi yet: on Wi-Fi, or if you'd rather type, pick **Use the terminal

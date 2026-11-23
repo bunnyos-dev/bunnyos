@@ -52,6 +52,7 @@ biggest_in usr/lib 25
 biggest_in usr/libexec 10
 biggest_in usr/share 20
 biggest_in "$firmware" 40
+biggest_in "$firmware/intel" 15
 [ -n "$modules" ] && biggest_in "$modules/kernel" 15
 [ -n "$modules" ] && biggest_in "$modules/kernel/drivers" 30
 

@@ -10,6 +10,7 @@
 # (emerge, GRUB, dracut, the first switch) runs inside the new system,
 # which is Gentoo's full stage3 with its own compiler, Portage and Python.
 set -eu
+export LC_ALL=C
 
 say() { printf '\n==> %s\n' "$*"; }
 
@@ -120,3 +121,44 @@ rm -rf /usr/share/gcc-data/*/*/python /usr/lib/python3* /usr/lib/python-exec
 find /usr/bin /usr/sbin /usr/local/bin -xtype l -delete
 ldconfig
 echo "Removed about $(( before - $(mb /usr) )) MB."
+
+say "Making it smaller: firmware for hardware that isn't a network card or graphics"
+# Never network (Wi-Fi, Ethernet, Bluetooth, mobile broadband) or graphics
+# firmware. What goes:
+# - qcom: Qualcomm's phone and Arm-laptop chips (sound, modem, graphics and
+#   video for Snapdragon), which can't start this USB anyway. Files a
+#   driver of this kernel can ask for stay (Qualcomm's mobile broadband
+#   cards in Intel and AMD laptops); Qualcomm Wi-Fi and Bluetooth are in
+#   ath10k, ath11k, ath12k and qca, which all stay.
+# - intel: cameras (ipu), AI chips (vpu), sensors (ish) and sound (avs,
+#   catpt). Intel Wi-Fi, Bluetooth, Ethernet and graphics stay.
+# - cirrus: laptop speaker amplifiers (the USB plays no sound).
+fw="$(readlink -f /lib/firmware)"
+before="$(mb "$fw")"
+declared="$(mktemp)"
+find "/lib/modules/$kver" -name '*.ko*' -exec modinfo -F firmware {} + 2>/dev/null \
+    | grep '^qcom/' | sort -u > "$declared" || true
+keep="$(mktemp)"
+while IFS= read -r file; do
+    [ -e "$fw/$file" ] || continue
+    echo "$fw/$file"
+    readlink -f "$fw/$file"
+done < "$declared" > "$keep.list"
+# Mobile broadband (5G/LTE) cards in x86 laptops and Qualcomm's 5G network
+# card load these by name, without declaring them.
+find "$fw/qcom" -mindepth 1 -maxdepth 1 \( -name 'sdx*' -o -name qdu100 -o -name prairie \) \
+    -exec find {} \( -type f -o -type l \) \; 2>/dev/null >> "$keep.list" || true
+# And anything elsewhere that's a link into qcom.
+find "$fw" -type l ! -path "$fw/qcom/*" -exec readlink -f {} + | grep "^$fw/qcom/" >> "$keep.list" || true
+sort -u "$keep.list" > "$keep"
+rm -f "$keep.list"
+echo "Keeping $(wc -l < "$keep") Qualcomm files that x86 hardware can ask for."
+find "$fw/qcom" \( -type f -o -type l \) 2>/dev/null | sort | comm -23 - "$keep" \
+    | while IFS= read -r file; do rm -f -- "$file"; done
+rm -f "$declared" "$keep"
+rm -rf "$fw/intel/ipu" "$fw/intel/vpu" "$fw/intel/ish" "$fw/intel/avs" \
+    "$fw/intel/catpt" "$fw/cirrus"
+# Links left pointing at removed files, then empty folders.
+find "$fw" -xtype l -delete
+find "$fw" -mindepth 1 -type d -empty -delete
+echo "Removed about $(( before - $(mb "$fw") )) MB of firmware."

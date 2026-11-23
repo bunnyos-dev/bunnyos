@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: the first switch on a new install rebuilt curl, gettext, iputils,
+  libb2 and portage-utils. Gentoo's base system is built with a few
+  features off; the install now swaps those packages for Gentoo's prebuilt
+  ones with the usual settings, so the first switch rebuilds nothing.
+
 - The live USB starts quietly: OpenRC's "Starting … [ ok ]" lines only show
   with the boot menu's "show start-up messages" entry. Errors still show.
 

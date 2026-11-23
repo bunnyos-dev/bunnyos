@@ -488,7 +488,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [ ] **`bunny install` prints raw tool output**: wipefs (in red),
       mkfs.fat, btrfs's whole table. One quiet line per step, like the
       emerge part, with the full output in the log.
-- [ ] **The first switch on a fresh install rebuilds packages** (curl,
+- [~] **The first switch on a fresh install rebuilds packages** (curl,
       gettext, iputils, libb2, portage-utils) for USE changes. Find why the
       starter config and Gentoo's prebuilt packages disagree, so a fresh
       install rebuilds nothing.

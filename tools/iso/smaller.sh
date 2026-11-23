@@ -60,3 +60,63 @@ rm -rf /var/cache/binhost/*
 rm -f /lib/modules/*/vmlinuz /lib/modules/*/System.map /lib/modules/*/config
 find /lib/modules -mindepth 2 -maxdepth 2 \( -name build -o -name source \) -xtype l -delete
 echo "Removed about $before MB."
+
+# Removes installed packages the way Portage would (every file and link
+# its record lists, then its empty folders and the record itself), without
+# Portage, so Portage and Python can go too. Takes patterns like
+# dev-python/* or sys-apps/portage; ones that aren't installed are skipped.
+drop_packages() {
+    local pattern vdb line path dir
+    for pattern in "$@"; do
+        for vdb in /var/db/pkg/$pattern-[0-9]*/; do
+            [ -f "$vdb/CONTENTS" ] || continue
+            local dirs=()
+            while IFS= read -r line; do
+                case "$line" in
+                    "obj "*) path="${line#obj }"; rm -f -- "${path% * *}" ;;
+                    "sym "*) path="${line#sym }"; rm -f -- "${path%% -> *}" ;;
+                    "dir "*) dirs+=("${line#dir }") ;;
+                esac
+            done < "$vdb/CONTENTS"
+            if [ "${#dirs[@]}" -gt 0 ]; then
+                printf '%s\n' "${dirs[@]}" | sort -r | while IFS= read -r dir; do
+                    rmdir -- "$dir" 2>/dev/null || true
+                done
+            fi
+            rm -rf -- "$vdb"
+            path="${vdb#/var/db/pkg/}"
+            echo "  removed ${path%/}"
+        done
+    done
+}
+
+say "Making it smaller: build tools, Portage, Python and Perl"
+# The new system compiles and installs packages itself (it's Gentoo's full
+# stage3), so the USB needs none of this. The compiler's runtime libraries
+# (libstdc++, libgcc_s, which programs here use) stay; the compiler goes.
+before="$(mb /usr)"
+drop_packages \
+    sys-devel/binutils sys-devel/bison sys-devel/flex sys-devel/m4 sys-devel/patch \
+    dev-build/autoconf dev-build/autoconf-wrapper dev-build/autoconf-archive \
+    dev-build/automake dev-build/automake-wrapper dev-build/libtool dev-build/make \
+    dev-build/meson dev-build/meson-format-array dev-build/ninja dev-build/cmake \
+    dev-build/gtk-doc-am dev-util/pkgconf dev-util/gperf dev-util/re2c \
+    app-text/docbook-xml-dtd app-text/docbook-xsl-stylesheets \
+    app-text/docbook-xsl-ns-stylesheets app-text/docbook-sgml-dtd \
+    app-text/sgml-common app-text/build-docbook-catalog app-text/xmlto \
+    app-text/po4a app-text/opensp dev-util/pahole \
+    sys-apps/texinfo sys-apps/groff sys-apps/man-db sys-apps/man-pages \
+    media-fonts/urw-fonts \
+    'dev-perl/*' 'perl-core/*' dev-lang/perl \
+    'app-portage/*' sys-apps/portage 'dev-python/*' dev-lang/python \
+    dev-lang/python-exec dev-lang/python-exec-conf
+rm -rf /usr/libexec/gcc /usr/x86_64-pc-linux-gnu/gcc-bin
+for dir in /usr/lib/gcc/*/*/; do
+    rm -rf "$dir"include "$dir"include-fixed "$dir"plugin "$dir"finclude "$dir"install-tools
+    find "$dir" -maxdepth 1 -type f ! -name '*.so*' -delete
+done
+rm -rf /usr/share/gcc-data/*/*/python /usr/lib/python3* /usr/lib/python-exec
+# Links left pointing at removed programs (cc, gcc, ld, python…).
+find /usr/bin /usr/sbin /usr/local/bin -xtype l -delete
+ldconfig
+echo "Removed about $(( before - $(mb /usr) )) MB."

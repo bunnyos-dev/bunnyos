@@ -15,9 +15,14 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 slint::include_modules!();
+
+/// The same spinner frames `bunny install`'s quiet progress line uses in the
+/// terminal (`crates/bunny/src/progress.rs`), so a step that's still running
+/// looks alive here too, not frozen.
+const SPINNER_FRAMES: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /// Two pretend disks for `--demo` (lsblk's JSON, read by bunny itself).
 const DEMO_DISKS: &str = r#"{"blockdevices":[
@@ -81,6 +86,25 @@ fn main() -> Result<()> {
     let ui = Installer::new()?;
     ui.set_demo(opts.demo);
     load_disks(&ui, &opts.bunny, lsblk.as_deref())?;
+
+    // Keeps the current install step's marker spinning so it doesn't look
+    // frozen; harmless to run even when nothing's installing, since it's
+    // only ever drawn on the install screen.
+    let spinner_timer = Timer::default();
+    {
+        let weak = ui.as_weak();
+        let mut frame = 0usize;
+        spinner_timer.start(
+            TimerMode::Repeated,
+            std::time::Duration::from_millis(90),
+            move || {
+                if let Some(ui) = weak.upgrade() {
+                    frame = (frame + 1) % SPINNER_FRAMES.len();
+                    ui.set_spinner_frame(SPINNER_FRAMES[frame].to_string().into());
+                }
+            },
+        );
+    }
 
     ui.on_quit_to_terminal(|| std::process::exit(0));
     {

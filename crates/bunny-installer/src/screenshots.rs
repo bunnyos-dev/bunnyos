@@ -54,7 +54,8 @@ pub fn draw_all(dir: &str) -> Result<()> {
             ui.set_password("bunny".into());
             ui.set_password_again("bun".into());
         }),
-        (5, "6-review", |ui| ui.set_confirm_name("nvme0n1".into())),
+        (5, "6-review", |_| {}),
+        (5, "6b-review-confirm", |ui| ui.set_confirming(true)),
         (6, "7-installing", |_| {}),
         (7, "8-done", |ui| ui.set_steps(steps(6, 6))),
     ];

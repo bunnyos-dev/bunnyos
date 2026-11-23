@@ -515,7 +515,9 @@ to-do list. Appearance work comes last and a little at a time.
       the mockups' finished look comes in phase 9. Part 1 (PR): the screens
       over `bunny install`, `--demo` and `--screenshots`, on the live USB.
       Still to do: step counter and top bar, Utilities, the map, the
-      `bunny.toml` panel, the desktop choice, Wi-Fi
+      `bunny.toml` panel, the desktop choice, Wi-Fi, a searchable time
+      zone/city and keyboard-layout dropdown (plain text fields for now,
+      noted in testing November 23, 2026)
 - [ ] Installer terminal mode: a console with a welcome, how to get back to
       the graphical installer, the install guide's URL, and the commands to
       start from the Baseline or your own config

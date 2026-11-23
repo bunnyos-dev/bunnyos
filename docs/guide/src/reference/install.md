@@ -35,7 +35,8 @@ minimal system. It runs from a live USB.
 | `--disk <disk>` | The disk to erase, like `/dev/nvme0n1` or `nvme0n1`. Without it, bunny lists the disks and asks. |
 | `--no-encrypt` | Don't encrypt. Anyone with the computer can then read the disk. |
 | `--efi-size <size>` | Size of the EFI partition. Default `2G`; at least `512M`. |
-| `--swap <size>` | Make a swapfile of this size, like `8G`, in its own subvolume (`/swap/swapfile`). Default: no swapfile. |
+| `--swap <size>` | Also make a swap file on disk of this size, like `8G`, in its own subvolume (`/swap/swapfile`), used after zram. Default: none. |
+| `--no-zram` | No compressed swap in memory. By default bunny sets up zram (a `zram` service in the boot runlevel): as big as memory, up to 8 GB, used before any swap file. |
 | `--hibernate` | Set up hibernation: a swapfile as big as your memory (unless `--swap` says otherwise), and the kernel settings to resume from it. |
 | `--home-disk <disk>` | Use a second disk, all of it, for `/home`. It's erased too, encrypted with the same password, and unlocked at boot with a key file kept on the encrypted system (so you only type the password once). |
 | `--ssh` | Start the SSH server at boot. Off by default. |
@@ -43,6 +44,11 @@ minimal system. It runs from a live USB.
 | `--mounted <folder>` | Install onto partitions you made and mounted yourself, without erasing anything. See [Installing onto your own partitions](#installing-onto-your-own-partitions). |
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
 | `--dry-run` | Go through the questions (not the password, since nothing is encrypted and no account is made), then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
+| `--recommended` | Take the recommended setup (encrypted, zram swap) without asking. |
+| `--user <name>`, `--hostname <name>`, `--timezone <zone>`, `--keymap <layout>` | The account's answers, given instead of asked. Checked the same way; a wrong one stops with the reason. |
+| `--password-stdin` | Read the password as one line on standard input instead of asking. Used by the graphical installer. |
+| `--yes` | Ask nothing (needs `--disk`): no typing the disk's name, the recommended answer for anything not given, UTC and `us` unless given, and `--user`, `--hostname` and the password (`--password-stdin`, except on a dry run) must be given. |
+| `--list-disks` | Print the disks as JSON (name, path, a description, what's on them, and why one can't be used) and stop. Used by the graphical installer. |
 
 Sizes are written like `512M`, `2G` or `1.5G`.
 
@@ -56,43 +62,56 @@ Sizes are written like `512M`, `2G` or `1.5G`.
    is left out, with the reason, if it's in use: anything on it mounted (the
    USB stick you started from always is), used as swap, or unlocked. Disks
    under 20 GB and read-only ones are left out too.
-3. **The preview.** Everything on the disk that will be erased (each
+3. **The recommended setup, or your own.** "Use the recommended setup?
+   [Y/n]": Enter takes it: the disk encrypted, and swap compressed in
+   memory (zram, as big as the computer's memory up to 8 GB, like Fedora),
+   with no swap file on disk. `n` asks, each with the recommended answer on
+   Enter: encrypt ([Y/n]), then swap: Enter for zram; a size (zram plus a
+   swap file on disk, used after zram); `hibernate` (zram plus a swap file
+   as big as memory, and resuming from it); or `none`. An option answers
+   its question, which isn't asked: `--no-encrypt`; `--swap`,
+   `--hibernate` or `--no-zram`. Given both, nothing is asked. `/home` on
+   a second disk isn't asked: use `--home-disk`.
+4. **The preview.** Everything on the disk that will be erased (each
    partition, its size, what it holds, like "NTFS (Windows)"), then exactly
-   what you'll get.
-4. **Confirming.** You type the disk's name (like `nvme0n1`). Anything else
+   what you'll get, and which other disks aren't touched. If any answer
+   differs from the recommended setup, the options that repeat it follow
+   (like `bunny install --no-encrypt --swap 8G`). The disk isn't in them,
+   since it's named differently on each computer.
+5. **Confirming.** You type the disk's name (like `nvme0n1`). Anything else
    cancels, and nothing is changed.
-5. **Your account.** A user name, a name for the computer, the time zone
+6. **Your account.** A user name, a name for the computer, the time zone
    (like `America/Toronto`; Enter for UTC), the keyboard layout (like `us`,
    `uk` or `de`; Enter for `us`), and a password (typed twice, not shown;
    it can't be empty). Under 8 characters gets a warning that it's easy to
    guess, then the second question as usual: type it again to keep it, or
    press Enter to choose another. With encryption, the same password unlocks the
    disk.
-6. **The disk.** The old partition table is cleared, and a new one written:
+7. **The disk.** The old partition table is cleared, and a new one written:
    the EFI partition and one for Bunny Linux. The second is encrypted
    (LUKS2) and opened as `bunny-root`, formatted as btrfs, and the
    subvolumes are created and mounted at `/mnt/bunny`.
-7. **The base system.** Gentoo's newest OpenRC base system (stage3) is
+8. **The base system.** Gentoo's newest OpenRC base system (stage3) is
    downloaded, its SHA512 checksum is checked, and it's unpacked.
-8. **Settings.** bunny writes `/etc/fstab`, Portage settings (prebuilt
+9. **Settings.** bunny writes `/etc/fstab`, Portage settings (prebuilt
    packages with signatures checked), the startup image's settings (btrfs,
    encryption, hibernation), the sudo file, and copies itself in.
-9. **Inside the new system** (chroot): the package list (Gentoo's
+10. **Inside the new system** (chroot): the package list (Gentoo's
    announcements so far are marked read, since they're older than the
    system), language and time zone, the packages (plus a few of the base
    system's own, swapped for prebuilt ones with Gentoo's usual settings:
    the base system is built with some features off, see below), services (`dhcpcd`, `sysklogd`, and `sshd` with
    `--ssh`), the boot menu (GRUB, named "Bunny Linux", also at the EFI
    fallback path), the startup image, and your account.
-10. **Your config.** The starter `bunny.toml` (or yours) goes in
+11. **Your config.** The starter `bunny.toml` (or yours) goes in
     `/etc/bunny/`, with this computer's host file. With `--edit`, you edit
     it now.
-11. **The first switch.** `bunny switch` and `bunny lock` run inside the new
+12. **The first switch.** `bunny switch` and `bunny lock` run inside the new
     system, so it starts already matching its config: `bunny status` shows ✓.
     If the switch fails, the install still finishes (the system starts
     either way) and bunny tells you to run `sudo bunny switch` after
     restarting.
-12. **Your config's history.** `/etc/bunny` becomes a git repository
+13. **Your config's history.** `/etc/bunny` becomes a git repository
     (`git init -b main`) with its own name and email for commits: your user
     name and `<user>@<computer name>.local` (a placeholder, only written on
     commits). A `.gitignore` keeps out the `/home` disk's key (`keys/`) and
@@ -100,7 +119,7 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     A config from a git repository (`--config github:…`) keeps that
     repository's history instead. If this fails, the install still
     finishes; `bunny publish` starts it later.
-13. **Done.** Everything is unmounted and the disk locked again. Restart,
+14. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
 
 **Why a few base packages are replaced.** Gentoo builds its base system
@@ -132,6 +151,7 @@ it after you restart. See
 | `/etc/sudoers.d/bunny` | Admin rights for the `wheel` group, the same file [`[security]`](config.md#security) manages. |
 | `/etc/default/grub` | Adds `GRUB_DISTRIBUTOR="Bunny Linux"` and the kernel settings (`rd.luks.uuid=…`, `rootflags=subvol=@`, and `resume=…` with `--hibernate`). Comments out Gentoo's `GRUB_THEME`. |
 | `/etc/grub.d/10_bunny` | Names the main boot menu entry "Bunny Linux" (not "Bunny Linux GNU/Linux"), with "Advanced options" under it. `10_linux` and `31_efi_bootnext` ("(EFI BootNext)" entries) are made non-executable; the originals are in `/var/lib/bunny/backups/as-installed/`. See [the boot menu](generations.md#undo-from-the-boot-menu). |
+| `/etc/init.d/zram` | Unless `--no-zram`: compressed swap in memory, started at boot. |
 | `/etc/init.d/swapfiles` | Only with a swapfile: turns it on once `/swap` is mounted (OpenRC's own swap service starts too early for a swapfile on its own subvolume). |
 | `/etc/conf.d/dmcrypt`, `/etc/bunny/keys/home.key` | Only with `--home-disk` and encryption: unlocks the `/home` disk at boot. The key is readable only by root. |
 

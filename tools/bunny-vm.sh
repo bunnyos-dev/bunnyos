@@ -19,6 +19,8 @@
 #               2223), for testing with the laptop's disk layout:
 #               VM=laptop ./bunny-vm.sh run
 #   VM_USER=bunny   the VM's user for ssh, put and stop (default "you")
+#   HOME_DISK=20G   also attach a second disk of this size (made once, kept
+#                   in the VM's folder), for testing /home on another disk
 #
 # Each VM keeps its SSH key in its own file ($VM_DIR/known_hosts), so VMs
 # that share a port don't trip SSH's "REMOTE HOST IDENTIFICATION HAS
@@ -46,6 +48,7 @@ DISK_SIZE="${DISK_SIZE:-60G}"
 GL="${GL:-1}"
 VM_USER="${VM_USER:-you}"
 KNOWN_HOSTS="$VM_DIR/known_hosts"
+HOME_DISK_FILE="$VM_DIR/home.qcow2"
 
 # Find a matching Secure Boot firmware pair (code + vars must come from the same set)
 find_firmware() {
@@ -74,6 +77,10 @@ setup() {
     if [ ! -f "$DISK" ]; then
         echo "→ Creating $DISK_SIZE virtual disk"
         qemu-img create -f qcow2 "$DISK" "$DISK_SIZE" >/dev/null
+    fi
+    if [ -n "${HOME_DISK:-}" ] && [ ! -f "$HOME_DISK_FILE" ]; then
+        echo "→ Creating a second $HOME_DISK virtual disk (for /home)"
+        qemu-img create -f qcow2 "$HOME_DISK_FILE" "$HOME_DISK" >/dev/null
     fi
     if [ ! -f "$VARS" ]; then
         echo "→ Creating fresh UEFI settings (Secure Boot in Setup Mode)"
@@ -109,6 +116,10 @@ run() {
         [ -f "$1" ] || { echo "✗ ISO not found: $1"; exit 1; }
         CDROM="-cdrom $1"
     fi
+    SECOND=""
+    if [ -n "${HOME_DISK:-}" ]; then
+        SECOND="-drive file=$HOME_DISK_FILE,if=virtio,format=qcow2"
+    fi
 
     echo "→ Starting the ${VM:-main} Bunny Linux test VM ($CPUS CPUs, $MEM RAM, SSH on port $PORT)"
     # shellcheck disable=SC2086
@@ -119,6 +130,7 @@ run() {
         -drive if=pflash,format=raw,unit=0,file="$CODE",readonly=on \
         -drive if=pflash,format=raw,unit=1,file="$VARS" \
         -drive file="$DISK",if=virtio,format=qcow2 \
+        $SECOND \
         -chardev socket,id=chrtpm,path="$TPM_DIR/sock" \
         -tpmdev emulator,id=tpm0,chardev=chrtpm \
         -device tpm-tis,tpmdev=tpm0 \

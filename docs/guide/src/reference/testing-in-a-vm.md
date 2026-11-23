@@ -93,6 +93,10 @@ tools/bunny-vm.sh snap clean-install
 The VM's user is `you` unless you say otherwise: `VM_USER=bunny tools/bunny-vm.sh ssh`
 (also for `put` and `stop`).
 
+To test `/home` on a second disk, start the VM with `HOME_DISK=24G` (any
+size of 20 GB or more): it attaches a second disk, made the first time and
+kept in the VM's folder.
+
 To test a build of bunny: `cargo build --release`,
 `tools/bunny-vm.sh put target/release/bunny`, then run `./bunny …` in the VM.
 

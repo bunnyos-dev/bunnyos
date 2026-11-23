@@ -12,6 +12,7 @@ use crate::apply::{self, Runner};
 use crate::install::disks::{self, Disk};
 use crate::install::first_config;
 use crate::install::layout::{self, Choices};
+use crate::install::questions;
 use crate::install::system::Account;
 use crate::interrupt;
 
@@ -21,6 +22,7 @@ pub(crate) struct Args {
     pub no_encrypt: bool,
     pub efi_size: Option<String>,
     pub swap: Option<String>,
+    pub no_zram: bool,
     pub hibernate: bool,
     pub home_disk: Option<String>,
     pub ssh: bool,
@@ -353,9 +355,11 @@ fn erase_disk_flow(
     let mut choices = Choices {
         disk: disk.path.clone(),
         encrypt: !args.no_encrypt,
+        zram: !args.no_zram,
         home_disk: home_disk.as_ref().map(|d| d.path.clone()),
         ..Default::default()
     };
+    let ram = ram_mib();
     if let Some(size) = &args.efi_size {
         choices.efi_mib = layout::parse_size(size)
             .filter(|m| *m >= 512)
@@ -371,12 +375,29 @@ fn erase_disk_flow(
         choices.hibernate = true;
         if choices.swap_mib == 0 {
             // Hibernating writes memory to the swapfile, so it needs to fit.
-            choices.swap_mib = ram_mib().unwrap_or(8192);
+            choices.swap_mib = ram.unwrap_or(8192);
         }
     }
 
+    // The questions the options above didn't answer: use the recommended
+    // setup, or encrypt and swap one at a time.
+    let given = questions::Given {
+        no_encrypt: args.no_encrypt,
+        swap: args.swap.is_some() || args.hibernate || args.no_zram,
+    };
+    questions::ask(&mut choices, &given, ram, &mut |q: &str| ask_line(q))?;
+    let others: Vec<&Disk> = all
+        .iter()
+        .filter(|d| d.path != disk.path && d.unusable().is_none())
+        .collect();
+    let home_disk = choices
+        .home_disk
+        .as_ref()
+        .and_then(|p| all.iter().find(|d| &d.path == p))
+        .cloned();
+
     // The preview: exactly what goes, and what you get.
-    println!("This ERASES everything on {}:", disk.describe());
+    println!("\nThis ERASES everything on {}:", disk.describe());
     for line in disk.contents() {
         println!("  - {line}");
     }
@@ -394,7 +415,20 @@ fn erase_disk_flow(
         "  A minimal system: OpenRC, a kernel, networking, your account with sudo, and bunny.\n  \
          No desktop yet: adding one with bunny is the first thing the Guide shows."
     );
+    let untouched: Vec<&str> = others
+        .iter()
+        .filter(|d| Some(&d.path) != choices.home_disk.as_ref())
+        .map(|d| d.name.as_str())
+        .collect();
+    if !untouched.is_empty() {
+        println!("  Not touched: {}.", untouched.join(", "));
+    }
     show_config_line(source, args.edit);
+    if let Some(command) =
+        questions::repeat_command(&choices, home_disk.as_ref().map(|d| d.name.as_str()))
+    {
+        println!("\nTo repeat this on another computer:\n  {command}");
+    }
 
     if args.dry_run {
         println!("{}", dry_run_note(true));

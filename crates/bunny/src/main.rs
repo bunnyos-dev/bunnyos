@@ -257,9 +257,12 @@ enum Command {
         /// Size of the EFI partition (default 2G)
         #[arg(long, value_name = "SIZE")]
         efi_size: Option<String>,
-        /// Make a swapfile of this size, e.g. 8G (default: none)
+        /// Also make a swap file on disk of this size, e.g. 8G (default: none)
         #[arg(long, value_name = "SIZE")]
         swap: Option<String>,
+        /// No compressed swap in memory (zram, on by default)
+        #[arg(long)]
+        no_zram: bool,
         /// Set up hibernation (a swapfile as big as your memory, unless --swap says otherwise)
         #[arg(long)]
         hibernate: bool,
@@ -283,7 +286,7 @@ enum Command {
         lsblk: Option<PathBuf>,
         /// Install onto partitions you made and mounted here yourself (nothing is erased)
         #[arg(long, value_name = "FOLDER",
-              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "hibernate", "home_disk"])]
+              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "no_zram", "hibernate", "home_disk"])]
         mounted: Option<PathBuf>,
         /// Read what's mounted from this file (findmnt --json output) instead of findmnt
         #[arg(long, hide = true)]
@@ -406,6 +409,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             no_encrypt,
             efi_size,
             swap,
+            no_zram,
             hibernate,
             home_disk,
             ssh,
@@ -420,6 +424,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             no_encrypt,
             efi_size,
             swap,
+            no_zram,
             hibernate,
             home_disk,
             ssh,

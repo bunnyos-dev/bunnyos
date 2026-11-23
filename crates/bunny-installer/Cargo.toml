@@ -1,0 +1,27 @@
+[package]
+name = "bunny-installer"
+description = "Bunny Linux's graphical installer: a thin window over `bunny install`"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+png = "0.17"
+# The software renderer works everywhere, GPU or not (VMs included).
+# linuxkms draws straight to the screen with no desktop behind it (the USB);
+# winit opens a normal window (trying it on a desktop, --demo).
+slint = { version = "1.19", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "backend-linuxkms-noseat",
+    "renderer-software",
+    "software-renderer-systemfonts",
+] }
+
+[build-dependencies]
+slint-build = "1.19"

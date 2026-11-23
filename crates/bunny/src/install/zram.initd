@@ -1,0 +1,40 @@
+#!/sbin/openrc-run
+# Added by Bunny Linux. Compressed swap in memory (zram), like Fedora's
+# default: as big as your memory, up to 8 GB. Used before any swap file on
+# disk (higher priority).
+
+description="Compressed swap in memory (zram)"
+
+# Where the device this service made is noted, so stopping only touches it.
+DEVICE_FILE=/run/bunny-zram
+
+depend() {
+	need localmount
+	before swapfiles
+	keyword -docker -podman -jail -lxc -openvz -prefix -systemd-nspawn -vserver -wsl
+}
+
+start() {
+	ebegin "Setting up compressed swap in memory (zram)"
+	modprobe zram 2>/dev/null
+	mem_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+	max_kb=8388608
+	size_kb=$(( mem_kb < max_kb ? mem_kb : max_kb ))
+	# zstd compresses best; older kernels may not have it for zram.
+	dev=$(zramctl --find --size "${size_kb}K" --algorithm zstd 2>/dev/null) \
+		|| dev=$(zramctl --find --size "${size_kb}K")
+	[ -n "$dev" ] && mkswap "$dev" >/dev/null && swapon --priority 100 "$dev" \
+		&& echo "$dev" > "$DEVICE_FILE"
+	eend $?
+}
+
+stop() {
+	ebegin "Turning off compressed swap in memory"
+	if [ -f "$DEVICE_FILE" ]; then
+		dev=$(cat "$DEVICE_FILE")
+		swapoff "$dev" 2>/dev/null
+		zramctl --reset "$dev" 2>/dev/null
+		rm -f "$DEVICE_FILE"
+	fi
+	eend 0
+}

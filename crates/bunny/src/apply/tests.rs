@@ -239,6 +239,41 @@ const CONFIG: &str = r#"
 "#;
 
 #[test]
+fn a_switch_sets_up_the_console_font_on_an_existing_system() {
+    // An existing Gentoo system: kbd's font and OpenRC's consolefont
+    // service, with Gentoo's stock setting. Only bunny install set the
+    // font up before.
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/share/consolefonts/eurlatgr.psfu.gz", "font");
+    write(r, "etc/init.d/consolefont", "");
+    write(r, "etc/conf.d/consolefont", "consolefont=\"default8x16\"\n");
+    let config = Config::parse(r#"packages = ["app-editors/neovim", "app-misc/old"]"#).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(plan.console_font.len(), 3, "{:?}", plan.console_font);
+    let shown = plan.render();
+    assert!(shown.contains("Console font, so ✓ ✗ ⚠ show"), "{shown}");
+    assert!(plan.summary().contains("console font"));
+
+    let mut runner = Recorder::default();
+    let outcome = switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+    let c = &runner.commands;
+    assert!(c.iter().any(|l| l.starts_with("sh -c set -e;")), "{c:#?}");
+    assert!(
+        c.iter().any(|l| l == "rc-update add consolefont boot"),
+        "{c:#?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(r.join("etc/conf.d/consolefont")).unwrap(),
+        "consolefont=\"/usr/local/share/consolefonts/bunny.psfu\"\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(outcome.backup_dir.join("etc/conf.d/consolefont")).unwrap(),
+        "consolefont=\"default8x16\"\n"
+    );
+}
+
+#[test]
 fn switches_a_system() {
     let root = fake_system();
     let config = Config::parse(CONFIG).unwrap();

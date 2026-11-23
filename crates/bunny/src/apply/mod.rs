@@ -185,6 +185,11 @@ pub fn switch(
                 .into(),
         );
     }
+    // 7b. The console font that draws ✓ ✗ ⚠ (bunny install sets it up;
+    //     existing systems get it here). Problems are notes, never a stop.
+    let font_notes =
+        crate::console_font::apply(root, &plan.console_font, &outcome.backup_dir, runner)?;
+    outcome.notes.extend(font_notes);
     // 8. The boot menu's undo entry, pointing at this switch's snapshot.
     update_boot_menu(config, root, plan, opts, runner, &mut outcome)?;
 

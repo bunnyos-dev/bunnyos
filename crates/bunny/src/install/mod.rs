@@ -16,12 +16,15 @@
 //! - `first_config`: your config in the new system, its first switch, and
 //!   its git history
 //! - `mounted`: `--mounted`, partitions you made and mounted yourself
+//! - `quiet`: a real install's runner: one line per step, the tools'
+//!   output in the install's log
 
 pub mod disks;
 pub mod first_config;
 pub mod layout;
 pub mod mounted;
 pub mod questions;
+pub mod quiet;
 pub mod starter;
 pub mod system;
 
@@ -77,7 +80,9 @@ pub fn run(
         first_config::start_history(config, choices, account, runner)?;
         Ok(Finished { switched })
     })();
+    runner.steps_finished(result.is_ok());
     if result.is_ok() {
+        keep_log(runner.log_file().as_deref(), choices, runner);
         let args: Vec<String> = std::env::args().skip(1).collect();
         keep_recording(
             crate::dev::current_recording().as_deref(),
@@ -93,6 +98,25 @@ pub fn run(
         let _ = std::fs::remove_file(&home_key);
     }
     result
+}
+
+/// Copies the install's log (what the tools printed) into the new system's
+/// `/var/log/bunny/`, so it's still there after restarting. Never stops the
+/// install.
+fn keep_log(log: Option<&std::path::Path>, choices: &Choices, runner: &dyn Runner) {
+    let (Some(log), false) = (log, runner.dry()) else {
+        return;
+    };
+    let Some(name) = log.file_name() else {
+        return;
+    };
+    let dir = choices.mnt.join("var/log/bunny");
+    if std::fs::create_dir_all(&dir).is_ok() && std::fs::copy(log, dir.join(name)).is_ok() {
+        println!(
+            "\n  What each tool printed is in /var/log/bunny/{} (in the new system too).",
+            name.to_string_lossy()
+        );
+    }
 }
 
 /// When this install is being recorded (developer mode, on by default on a
@@ -154,6 +178,7 @@ fn keep_recording(
 /// (`--dry-run` without `--verbose`) it's followed by what the step does,
 /// since its commands aren't shown.
 pub(crate) fn say(runner: &dyn Runner, title: &str, what: &str) {
+    runner.step_started(title);
     print!("{}", heading(runner.describes_steps(), title, what));
 }
 

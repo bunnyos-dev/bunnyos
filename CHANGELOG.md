@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: the install's recording said it took "0 s". It now says how long
+  the install ran.
+- `bunny report` says "Adding `bunny status` to the report…" while it
+  works that out, instead of seeming to hang, and leaves it out if it takes
+  over a minute.
 - `bunny remove` asks once instead of twice when it removes exactly what
   the plan showed. It still asks again when emerge wants to remove more
   (like dependencies nothing else uses), and always with `--yes`.

@@ -4,6 +4,9 @@
 #
 #   doas tools/build-iso.sh <bunny binary> [output.iso]
 #   doas env PREVIEW=1 tools/build-iso.sh ...   (a preview image, for testing)
+#   doas env INSTALLER=target/release/bunny-installer tools/build-iso.sh ...
+#       (adds the graphical installer: the USB starts in it, and the terminal
+#       is a boot menu choice)
 #
 # A preview image records every bunny command (developer mode, without
 # sending anything), and bunny install copies its recording into the new
@@ -40,6 +43,7 @@ fail() { printf '\n✗ %s\n' "$*" >&2; exit 1; }
 bunny="$1"
 out="${2:-bunny-linux-live.iso}"
 preview="${PREVIEW:-0}"
+installer="${INSTALLER:-}"
 [ "$(id -u)" = 0 ] || fail "Run this as root (doas $0 …): it unpacks a system and uses chroot."
 [ -x "$bunny" ] || fail "$bunny isn't a bunny binary you can run. Build one first (cargo build --release)."
 "$bunny" --version >/dev/null 2>&1 \
@@ -47,6 +51,8 @@ preview="${PREVIEW:-0}"
 for tool in wget tar xz sha512sum mksquashfs grub-mkrescue xorriso mformat; do
     command -v "$tool" >/dev/null 2>&1 || fail "$tool is missing. See the top of this script for what to install."
 done
+[ -z "$installer" ] || [ -x "$installer" ] \
+    || fail "INSTALLER=$installer isn't a program you can run. Build it: cargo build --release -p bunny-installer"
 case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 
 work="${WORK:-$(mktemp -d /var/tmp/bunny-iso.XXXXXX)}"
@@ -88,6 +94,9 @@ install -D -m 0755 "$bunny" "$root/usr/local/bin/bunny"
 install -D -m 0755 "$here/iso/welcome.sh" "$root/usr/local/bin/welcome"
 install -D -m 0644 "$here/iso/bash_profile" "$root/root/.bash_profile"
 install -D -m 0755 "$here/iso/inside.sh" "$root/root/build-inside.sh"
+if [ -n "$installer" ]; then
+    install -D -m 0755 "$installer" "$root/usr/local/bin/bunny-installer"
+fi
 install -D -m 0755 "$here/iso/smaller.sh" "$root/root/build-smaller.sh"
 install -D -m 0755 "$here/iso/check.sh" "$root/root/build-check.sh"
 if [ "$preview" = 1 ]; then
@@ -116,6 +125,19 @@ chroot "$root" /bin/bash /root/build-smaller.sh \
 say "Checking the finished image"
 chroot "$root" /bin/bash /root/build-check.sh \
     || fail "The finished image is missing something the USB needs (listed above)."
+if [ -n "$installer" ]; then
+    # After making it smaller: its libraries and data are all still there
+    # (libinput, xkbcommon and its keyboard layouts, fontconfig and a font).
+    # It starts, prints its help and stops, without a screen.
+    chroot "$root" /usr/local/bin/bunny-installer --help >/dev/null \
+        || fail "The graphical installer doesn't start inside the image (a library is missing?)."
+    for need in /usr/share/X11/xkb/symbols/us /etc/fonts/fonts.conf; do
+        [ -e "$root$need" ] \
+            || fail "The graphical installer needs $need, which isn't in the image."
+    done
+    ls "$root"/usr/share/fonts/dejavu/DejaVuSans*.ttf >/dev/null 2>&1 \
+        || fail "The graphical installer's font (DejaVu) isn't in the image."
+fi
 rm -f "$root/root/build-inside.sh" "$root/root/build-smaller.sh" "$root/root/build-check.sh"
 cleanup
 mounted=""

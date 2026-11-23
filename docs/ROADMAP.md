@@ -58,6 +58,58 @@ nobody uses it day to day yet. At alpha: tag and release 0.1 (see
 `docs/RELEASING.md`), say "alpha" in the guide's introduction, and remind the
 maintainer about hiring the artist (`docs/ARTIST-BRIEF.md`).
 
+**First after alpha (decided November 23, 2026): `make.conf` in
+`bunny.toml`.** Global USE flags, CFLAGS/CXXFLAGS, MAKEOPTS and the like are
+where most Gentoo tuning happens, and today they're the biggest thing outside
+the single file: edited by hand, not shown in `bunny plan`, not undone.
+Design it as "your layer" from docs/DESIGN.md (Baseline, then your USE and
+CFLAGS): bunny writes `make.conf` from the config, shows changes in the
+plan, backs it up, and undo restores it. Warn when a change rebuilds a lot
+(new CFLAGS or global USE means recompiling), and say that changing CFLAGS
+means no more prebuilt packages for what it affects.
+
+**Learning to customize, without examples that go stale (decided November
+23, 2026).** Teach people to read Gentoo's own information instead of
+copying flags that change:
+
+- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+      read a package's flags on packages.gentoo.org and the Gentoo wiki,
+      what `+`/`-` and defaults mean, and how to write what you found in
+      `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
+      worked example, but teach the method, not a fixed list of flags.
+- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+      each thing is written (a package with USE flags, a testing keyword, a
+      service), each pointing to its Guide page. Only stable, structural
+      examples; a test uncomments them and runs `bunny check`.
+- [ ] **After alpha: `bunny check` reads Gentoo's own flag list** (Portage's
+      metadata on this computer) and warns about a flag a package doesn't
+      have ("firefox has no USE flag `pgoo`; did you mean `pgo`?"), plus a
+      way to list a package's flags with Gentoo's descriptions. Then a
+      renamed or removed flag is caught on your own system, with nothing
+      for Bunny Linux to keep up to date by hand.
+
+**Flatpak in `bunny.toml` (brainstorm, November 23, 2026; no rush, after
+`make.conf`).** NixOS's `services.flatpak.enable` only installs Flatpak; apps
+are declared with community modules (nix-flatpak), which are deliberately
+"convergent": they manage the apps you list and don't claim to describe
+everything. Bunny's likely shape, to be designed properly first:
+
+- A `[flatpak]` section: `enable`, `remotes` (Flathub by default) and
+  `packages = [...]`; `bunny plan` shows Flatpak installs and removals next
+  to Portage ones, and `bunny switch` applies them.
+- Convergent by default: bunny only installs or removes the apps *it* lists
+  and never touches ones you installed by hand (an opt-in
+  `remove_unmanaged` later, like nix-flatpak's).
+- System-wide installs first (bunny runs as root); per-user later.
+- Open questions: does undo rewind Flatpak apps (is `/var/lib/flatpak` in
+  the snapshots, or on its own subvolume)? Should `bunny.lock` record
+  Flatpak commits, or are they honestly "latest from Flathub"? Update
+  schedule on OpenRC (cron or a bunny service; NixOS uses systemd timers).
+  Flatpak's dependencies (dbus, xdg-desktop-portal, elogind) and how
+  `[desktop]` covers them.
+- Fits docs/DESIGN.md's order for apps (Gentoo packages first, Flatpak for
+  large GUI apps such as Steam).
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,
@@ -389,7 +441,8 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       ownership"): `/etc/bunny` belongs to root. `bunny install` (and
       `bunny publish`) add `/etc/bunny` to git's system-wide
       `safe.directory`.
-- [ ] **Install asks about encryption and swap** (agreed with the
+- [~] **Install asks about encryption and swap** (/home on a second disk:
+      on hold, decided Saturday; `--home-disk` still works) (agreed with the
       maintainer): a few questions after the disk, each with a recommended
       answer and one line of why: encrypt? [Y/n], swap (Enter for none, a
       size, or "hibernate"; encrypted with the disk), and /home on a second
@@ -414,14 +467,14 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       report. Only bunny's own problems should.
 - [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
       them?"). One question for a plain remove.
-- [ ] **`bunny status` shows times in UTC**; the boot menu now uses local
+- [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).
 - [ ] **"before − tree" in Earlier versions reads oddly.** Find clearer
       wording for "the version before this change".
 - [ ] **The install's recording says "0 s"**, and the first
       `bunny report --dry-run` seemed to hang (Ctrl+C) before working the
       second time.
-- [ ] **Two test VMs can't run at once**: both use port 2223. Give each
+- [~] **Two test VMs can't run at once**: both use port 2223. Give each
       named VM its own port (with its own known_hosts).
 
 ### Fixes from the Saturday test
@@ -545,9 +598,14 @@ to-do list. Appearance work comes last and a little at a time.
       image and switches to your config and lock in one command, compiling
       only what isn't prebuilt (in the build container). Needs phase 6.
 - [ ] Baseline system image built on the server
-- [ ] Slint installer (straight to the installer, no desktop): centered, one
+- [~] Slint installer (straight to the installer, no desktop): centered, one
       decision per screen, Utilities menu. Working and plainly styled first;
-      the mockups' finished look comes in phase 9
+      the mockups' finished look comes in phase 9. Part 1 (PR): the screens
+      over `bunny install`, `--demo` and `--screenshots`, on the live USB.
+      Still to do: step counter and top bar, Utilities, the map, the
+      `bunny.toml` panel, the desktop choice, Wi-Fi, a searchable time
+      zone/city and keyboard-layout dropdown (plain text fields for now,
+      noted in testing November 23, 2026)
 - [ ] Installer terminal mode: a console with a welcome, how to get back to
       the graphical installer, the install guide's URL, and the commands to
       start from the Baseline or your own config

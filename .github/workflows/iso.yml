@@ -13,6 +13,7 @@ on:
       - ".github/workflows/iso.yml"
       - "tools/build-iso.sh"
       - "tools/iso/**"
+      - "crates/bunny-installer/**"
   workflow_dispatch:
 
 permissions:
@@ -32,9 +33,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools squashfs-tools xorriso mtools \
-            grub-common grub-efi-amd64-bin qemu-system-x86 ovmf
+            grub-common grub-efi-amd64-bin qemu-system-x86 ovmf \
+            libinput-dev libudev-dev libxkbcommon-dev libfontconfig1-dev
       - name: Build bunny (static, runs on the USB)
         run: cargo build --release --locked --target x86_64-unknown-linux-musl
+      - name: Build the graphical installer (uses the USB's libinput, xkbcommon and fontconfig)
+        run: cargo build --release --locked -p bunny-installer
       - name: Name the ISO
         id: name
         run: |
@@ -50,9 +54,10 @@ jobs:
           WORK: ${{ runner.temp }}/iso-work
           # Preview images record bunny install (see tools/build-iso.sh).
           PREVIEW: ${{ steps.name.outputs.preview }}
+          INSTALLER: target/release/bunny-installer
         run: |
           mkdir -p dist
-          sudo --preserve-env=WORK,PREVIEW tools/build-iso.sh \
+          sudo --preserve-env=WORK,PREVIEW,INSTALLER tools/build-iso.sh \
             target/x86_64-unknown-linux-musl/release/bunny \
             "dist/${{ steps.name.outputs.iso }}"
           sudo chown -R "$(id -u):$(id -g)" dist

@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The live USB image is about 850 MB instead of about 1.45 GB, so a 1 GB
+  USB stick is enough. It no longer carries a compiler, Portage, Python or
+  firmware for phone chips, cameras and sound; network and graphics drivers
+  and firmware all stay, and installing works the same.
 - Test VMs: each named VM (`VM=…`) now has its own SSH port (2223, 2224, …,
   kept in its folder and shown when it starts), so two can run at once. The
   main VM stays on 2222. `tools/bunny-vm.sh port` prints it.

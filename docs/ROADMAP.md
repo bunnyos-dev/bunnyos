@@ -506,10 +506,23 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       packages (`bunny-release`).
 - [ ] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
-- [~] **A smaller live USB** (asked for by the maintainer): it was about
+- [x] **A smaller live USB** (asked for by the maintainer): it was about
       1.45 GB, near its budget. Measure what takes the space and remove what
       the USB never needs, keeping network and graphics drivers and
-      firmware. Now about 850 MB. **(VM)**
+      firmware. Now 826 MB; installed from it in the VM on November 23.
+- [ ] **The live USB's boot line uses a renamed dracut option**: "Kernel
+      command line option 'rd.live.overlay.overlayfs' is deprecated, use
+      'rd.overlay' instead." Update tools/iso/grub.cfg (every entry) and
+      check dracut's docs for the new spelling.
+- [ ] **Early-boot lines still show on the quiet entries**: `insmod
+      /lib/modules/…/asymmetric_keys/pkc…` and a few more, before OpenRC
+      starts (so #106's quiet start doesn't cover them). Find what prints
+      them (dracut's module loading, the kernel's log level) and quiet them
+      on the normal entries only; "show start-up messages" keeps them.
+- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+      18 hours ago"**: it counts from the package list's date, which reads
+      oddly on day one. Say something like "package list from 18 hours ago"
+      or count from the install.
 
 ## Talk to Portage directly (after the dry run and the laptop)
 

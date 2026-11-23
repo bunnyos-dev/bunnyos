@@ -801,7 +801,15 @@ GPT
   `--dry-run` doesn't ask for the password (it stands in a placeholder that
   nothing uses) and shows each step's name and what it does in plain words
   (StepsRunner); `--dry-run --verbose` prints every command and file
-  (PrintRunner).
+  (PrintRunner). A real install (QuietRunner around SystemRunner) prints
+  each step's `==> ` heading (unchanged: the graphical installer reads
+  them), then `✓ Done` (with the time from 2 s), and appends what each tool
+  printed to `/var/log/bunny/<time>-install.log` on the USB, copied into the
+  new system at the end. A failed tool shows `✗`, its last 12 lines
+  (colour codes removed) and the log's path, before bunny's explanation.
+  The stage3's progress bar, `inside.sh` and the first `bunny switch`/`lock`
+  keep the screen (no `✓` after the chroot ones; their output says how it
+  went). `--verbose` shows all of it live and still keeps the log.
 - **Your config's history (current behaviour):** after the first switch,
   `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
   main`, run with the USB's git), with a repository-only identity from the

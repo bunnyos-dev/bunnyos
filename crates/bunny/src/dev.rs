@@ -155,11 +155,16 @@ pub fn copy_recording(log: &Path, to: &Path, args: &[String]) -> Result<PathBuf>
         .and_then(|sub| stem.strip_suffix(&format!("-{sub}")))
         .unwrap_or(&stem)
         .to_string();
-    let seconds = std::fs::metadata(log)
-        .and_then(|m| m.created())
-        .ok()
-        .and_then(|t| t.elapsed().ok())
-        .map(|d| d.as_secs())
+    // From the time in the recording's name: the file's creation time
+    // isn't available on the live USB's filesystem, which made it "0 s".
+    let seconds = seconds_since(&started, unix_now())
+        .or_else(|| {
+            std::fs::metadata(log)
+                .and_then(|m| m.created())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .map(|d| d.as_secs())
+        })
         .unwrap_or(0);
     let meta = Meta {
         args,
@@ -172,6 +177,20 @@ pub fn copy_recording(log: &Path, to: &Path, args: &[String]) -> Result<PathBuf>
     };
     write_meta(&copied.with_extension("toml"), &meta)?;
     Ok(copied)
+}
+
+/// Seconds since 1970, now.
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
+}
+
+/// How long ago a `YYYYMMDD-HHMMSS` (UTC) stamp was, at `now`. `None` for
+/// a stamp that can't be read or is in the future (the clock moved back).
+fn seconds_since(stamp: &str, now: i64) -> Option<u64> {
+    let then = crate::status::parse_stamp(stamp)?;
+    u64::try_from(now - then).ok()
 }
 
 /// Where recordings are kept: the user's own state folder, so no root needed.
@@ -749,12 +768,23 @@ pub fn prepare(dev: &Dev, bases: &[PathBuf], automatic: bool) -> Result<(String,
         bail!("there are no recordings to send");
     }
     let root = Path::new("/");
-    let status = Command::new(std::env::current_exe()?)
+    if !automatic {
+        // It can take a while (glsa-check reads every advisory), and
+        // without a word it looked like `bunny report` had hung.
+        println!("Adding `bunny status` to the report (this can take a moment the first time)…");
+    }
+    let mut status_cmd = Command::new(std::env::current_exe()?);
+    status_cmd
         .arg("status")
-        .env(SESSION_ENV, "status-for-report")
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+        .env(SESSION_ENV, "status-for-report");
+    let status = match output_within(status_cmd, STATUS_TIME_LIMIT) {
+        Finished::Output(text) => Some(text),
+        Finished::TooSlow => Some(format!(
+            "(bunny status didn't finish within {} seconds, so it's left out.)",
+            STATUS_TIME_LIMIT.as_secs()
+        )),
+        Finished::Failed => None,
+    };
     Ok(compose(
         &sessions,
         status.as_deref(),
@@ -800,7 +830,58 @@ fn issue_command(repo: &str, title: &str, person: Option<&Person>) -> Vec<String
     }
 }
 
-/// Files an issue with the GitHub CLI and the user's own login.
+/// How long `bunny report` waits for `bunny status`.
+const STATUS_TIME_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How a command run with a time limit ended.
+#[derive(Debug, PartialEq)]
+enum Finished {
+    /// What it printed.
+    Output(String),
+    /// Still running at the limit, so it was stopped.
+    TooSlow,
+    /// It couldn't be started.
+    Failed,
+}
+
+/// Runs `cmd`, keeping what it prints, and stops it after `limit`.
+fn output_within(mut cmd: Command, limit: std::time::Duration) -> Finished {
+    use std::io::Read;
+    let Ok(mut child) = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return Finished::Failed;
+    };
+    let mut stdout = child.stdout.take();
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(out) = stdout.as_mut() {
+            let _ = out.read_to_string(&mut text);
+        }
+        text
+    });
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Finished::TooSlow;
+            }
+        }
+    }
+    Finished::Output(reader.join().unwrap_or_default())
+}
+
+/// Files an issue with the GitHub CLI and the user's own login (through the
+/// REST API, which works with every kind of GitHub token).
 fn file_issue(repo: &str, title: &str, body: &str) -> Result<String> {
     let person = gh_person();
     let cmd = issue_command(repo, title, person.as_ref());
@@ -930,6 +1011,47 @@ mod tests {
         assert_eq!(meta.started, "20261119-201500");
         assert_eq!(meta.exit_code, Some(0));
         assert_eq!(meta.reported, None);
+        // How long it ran comes from the time in its name, not the file's
+        // creation time (unavailable on the live USB, so it said "0 s").
+        let since = seconds_since("20261119-201500", unix_now()).unwrap();
+        assert!(
+            meta.seconds >= since && meta.seconds <= since + 60,
+            "{}",
+            meta.seconds
+        );
+    }
+
+    #[test]
+    fn says_how_long_ago_a_stamp_was() {
+        let then = crate::status::parse_stamp("20261122-100000").unwrap();
+        assert_eq!(seconds_since("20261122-100000", then + 754), Some(754));
+        assert_eq!(seconds_since("20261122-100000", then - 5), None);
+        assert_eq!(seconds_since("garbage", then), None);
+    }
+
+    #[test]
+    fn a_slow_command_is_stopped_at_the_limit() {
+        let mut quick = Command::new("sh");
+        quick.args(["-c", "echo ready"]);
+        assert_eq!(
+            output_within(quick, std::time::Duration::from_secs(10)),
+            Finished::Output("ready\n".into())
+        );
+        let mut slow = Command::new("sleep");
+        slow.arg("30");
+        let started = std::time::Instant::now();
+        assert_eq!(
+            output_within(slow, std::time::Duration::from_millis(200)),
+            Finished::TooSlow
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        assert_eq!(
+            output_within(
+                Command::new("/nonexistent/command"),
+                std::time::Duration::from_secs(1)
+            ),
+            Finished::Failed
+        );
     }
 
     #[test]

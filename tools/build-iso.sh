@@ -92,6 +92,7 @@ rm -f "$work/$file" "$work/$file.DIGESTS" "$work/$file.sha512"
 say "Adding bunny and the USB's own files"
 install -D -m 0755 "$bunny" "$root/usr/local/bin/bunny"
 install -D -m 0755 "$here/iso/welcome.sh" "$root/usr/local/bin/welcome"
+install -D -m 0755 "$here/iso/openrc-quiet.sh" "$root/usr/local/sbin/bunny-openrc"
 install -D -m 0644 "$here/iso/bash_profile" "$root/root/.bash_profile"
 install -D -m 0755 "$here/iso/inside.sh" "$root/root/build-inside.sh"
 if [ -n "$installer" ]; then

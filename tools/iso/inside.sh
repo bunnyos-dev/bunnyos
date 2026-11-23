@@ -67,6 +67,14 @@ rc-update add dhcpcd default
 rc-update add iwd default
 # Quiet start-up: only warnings and errors.
 sed -i 's/^#\?rc_verbose=.*/rc_verbose=NO/' /etc/rc.conf
+# And none of OpenRC's "Starting …" lines when the kernel line says quiet
+# (the boot menu's normal entries): every runlevel goes through
+# bunny-openrc (tools/iso/openrc-quiet.sh), which reads the kernel line.
+sed -i 's|:/sbin/openrc |:/usr/local/sbin/bunny-openrc |' /etc/inittab
+if grep -q ':/sbin/openrc ' /etc/inittab || ! grep -q ':/usr/local/sbin/bunny-openrc sysinit' /etc/inittab; then
+    echo "Couldn't make OpenRC's start-up quiet." >&2; exit 1
+fi
+[ -x /usr/local/sbin/bunny-openrc ] || { echo "bunny-openrc is missing." >&2; exit 1; }
 
 say "A console font that can draw ✓ ✗ ⚠"
 # The console's usual font has no ✓ or ✗ (bunny's ✓ showed as "v"). kbd's

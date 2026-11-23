@@ -88,6 +88,28 @@ copying flags that change:
       renamed or removed flag is caught on your own system, with nothing
       for Bunny Linux to keep up to date by hand.
 
+**Flatpak in `bunny.toml` (brainstorm, November 23, 2026; no rush, after
+`make.conf`).** NixOS's `services.flatpak.enable` only installs Flatpak; apps
+are declared with community modules (nix-flatpak), which are deliberately
+"convergent": they manage the apps you list and don't claim to describe
+everything. Bunny's likely shape, to be designed properly first:
+
+- A `[flatpak]` section: `enable`, `remotes` (Flathub by default) and
+  `packages = [...]`; `bunny plan` shows Flatpak installs and removals next
+  to Portage ones, and `bunny switch` applies them.
+- Convergent by default: bunny only installs or removes the apps *it* lists
+  and never touches ones you installed by hand (an opt-in
+  `remove_unmanaged` later, like nix-flatpak's).
+- System-wide installs first (bunny runs as root); per-user later.
+- Open questions: does undo rewind Flatpak apps (is `/var/lib/flatpak` in
+  the snapshots, or on its own subvolume)? Should `bunny.lock` record
+  Flatpak commits, or are they honestly "latest from Flathub"? Update
+  schedule on OpenRC (cron or a bunny service; NixOS uses systemd timers).
+  Flatpak's dependencies (dbus, xdg-desktop-portal, elogind) and how
+  `[desktop]` covers them.
+- Fits docs/DESIGN.md's order for apps (Gentoo packages first, Flatpak for
+  large GUI apps such as Steam).
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,

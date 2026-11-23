@@ -35,6 +35,81 @@ The **whole vision** (all 9 phases) is roughly **two fifths done**.
 5. The maintainer's laptop
 6. The rest of the Portage helper
 
+**Stability first (decided November 21, 2026).** The graphical installer
+(#96) stays at part 1, plain, while everything gets as stable as possible.
+Its next parts (Wi-Fi, the top bar and step counter, the map, the
+`bunny.toml` panel) wait for this gate, and sessions don't start them before
+the maintainer says go. Tell the maintainer when the gate looks met:
+
+- [ ] Every "Fixes from the …" list above is empty (or only has items the
+      maintainer moved to later).
+- [ ] Two fresh installs from the USB in a row with nothing new found: one
+      with the terminal, one with the graphical installer.
+- [ ] The encrypted laptop-shaped VM passes (#47, #74, undo from the boot
+      menu with `/boot` on the EFI partition).
+- [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
+      with developer mode on, and the reports show nothing new that's
+      serious.
+- [ ] No open PR older than a few days that's waiting on a fix.
+
+**When this gate is met, Bunny Linux is 0.1 alpha.** Until then it's
+pre-alpha: it installs and boots, but fresh installs still find bugs and
+nobody uses it day to day yet. At alpha: tag and release 0.1 (see
+`docs/RELEASING.md`), say "alpha" in the guide's introduction, and remind the
+maintainer about hiring the artist (`docs/ARTIST-BRIEF.md`).
+
+**First after alpha (decided November 23, 2026): `make.conf` in
+`bunny.toml`.** Global USE flags, CFLAGS/CXXFLAGS, MAKEOPTS and the like are
+where most Gentoo tuning happens, and today they're the biggest thing outside
+the single file: edited by hand, not shown in `bunny plan`, not undone.
+Design it as "your layer" from docs/DESIGN.md (Baseline, then your USE and
+CFLAGS): bunny writes `make.conf` from the config, shows changes in the
+plan, backs it up, and undo restores it. Warn when a change rebuilds a lot
+(new CFLAGS or global USE means recompiling), and say that changing CFLAGS
+means no more prebuilt packages for what it affects.
+
+**Learning to customize, without examples that go stale (decided November
+23, 2026).** Teach people to read Gentoo's own information instead of
+copying flags that change:
+
+- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+      read a package's flags on packages.gentoo.org and the Gentoo wiki,
+      what `+`/`-` and defaults mean, and how to write what you found in
+      `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
+      worked example, but teach the method, not a fixed list of flags.
+- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+      each thing is written (a package with USE flags, a testing keyword, a
+      service), each pointing to its Guide page. Only stable, structural
+      examples; a test uncomments them and runs `bunny check`.
+- [ ] **After alpha: `bunny check` reads Gentoo's own flag list** (Portage's
+      metadata on this computer) and warns about a flag a package doesn't
+      have ("firefox has no USE flag `pgoo`; did you mean `pgo`?"), plus a
+      way to list a package's flags with Gentoo's descriptions. Then a
+      renamed or removed flag is caught on your own system, with nothing
+      for Bunny Linux to keep up to date by hand.
+
+**Flatpak in `bunny.toml` (brainstorm, November 23, 2026; no rush, after
+`make.conf`).** NixOS's `services.flatpak.enable` only installs Flatpak; apps
+are declared with community modules (nix-flatpak), which are deliberately
+"convergent": they manage the apps you list and don't claim to describe
+everything. Bunny's likely shape, to be designed properly first:
+
+- A `[flatpak]` section: `enable`, `remotes` (Flathub by default) and
+  `packages = [...]`; `bunny plan` shows Flatpak installs and removals next
+  to Portage ones, and `bunny switch` applies them.
+- Convergent by default: bunny only installs or removes the apps *it* lists
+  and never touches ones you installed by hand (an opt-in
+  `remove_unmanaged` later, like nix-flatpak's).
+- System-wide installs first (bunny runs as root); per-user later.
+- Open questions: does undo rewind Flatpak apps (is `/var/lib/flatpak` in
+  the snapshots, or on its own subvolume)? Should `bunny.lock` record
+  Flatpak commits, or are they honestly "latest from Flathub"? Update
+  schedule on OpenRC (cron or a bunny service; NixOS uses systemd timers).
+  Flatpak's dependencies (dbus, xdg-desktop-portal, elogind) and how
+  `[desktop]` covers them.
+- Fits docs/DESIGN.md's order for apps (Gentoo packages first, Flatpak for
+  large GUI apps such as Steam).
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,
@@ -423,6 +498,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       signed in"). Use the sign-in of whoever ran sudo or doas, like
       `bunny publish` does.
 
+### Fixes from the terminal install test (November 23)
+
+- [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
+      prebuilt package was available. Find out whether the binhost is behind
+      Gentoo's tree, and make a fresh install compile only bunny's own
+      packages (`bunny-release`).
+- [ ] **The "Note: If this change stops the system from starting…" line wraps
+      mid-word** at the console's edge ("star ting"). Wrap at word breaks.
+
 ## Talk to Portage directly (after the dry run and the laptop)
 
 Agreed with the maintainer: version 1 reads emerge's screen text, which breaks
@@ -582,6 +666,25 @@ is tested first in a VM with the same layout.
       (the startup image can't reach the EFI partition; bunny could do it on
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.
+
+## After 0.1: a daily-driven Nvidia laptop
+
+Decided November 23, 2026. The maintainer is buying an Asus G16 (2026,
+Nvidia) and wants to daily-drive Bunny Linux on it — pushing it hard on real
+hardware, bugs and all, separate from the stability gate above. No rush; take
+the time needed.
+
+- [ ] **Nvidia drivers in the starter config and install flow**: `nvidia-
+      drivers` packaging, kernel config, and a `[desktop]`-style convenience
+      so bunny.toml doesn't need it all written out by hand.
+- [ ] **Secure Boot off first.** v1 has no Secure Boot support (see "Outside
+      our control" and phase 8), and most new laptops ship with it on, so
+      the install guide needs a plain step: turn it off in firmware before
+      booting the USB.
+- [ ] **Hyprland/Mango on Nvidia**: `nvidia_drm.modeset=1`, the right GBM
+      backend env vars, and — if the G16 has hybrid Intel/Nvidia graphics,
+      which is likely — a way to switch GPUs. New ground for the
+      dynamic-island and desktop-setup work.
 
 ## Known issues / small fixes
 

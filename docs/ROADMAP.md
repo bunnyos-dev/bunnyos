@@ -445,6 +445,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       signed in"). Use the sign-in of whoever ran sudo or doas, like
       `bunny publish` does.
 
+### Fixes from the terminal install test (November 23)
+
+- [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
+      prebuilt package was available. Find out whether the binhost is behind
+      Gentoo's tree, and make a fresh install compile only bunny's own
+      packages (`bunny-release`).
+- [ ] **The "Note: If this change stops the system from starting…" line wraps
+      mid-word** at the console's edge ("star ting"). Wrap at word breaks.
+
 ## Talk to Portage directly (after the dry run and the laptop)
 
 Agreed with the maintainer: version 1 reads emerge's screen text, which breaks

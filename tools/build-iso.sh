@@ -138,7 +138,10 @@ cp "$iso/bunny-live.txt" "$root/etc/bunny-live"
 sizes="$work/sizes.md"
 sh "$here/iso/sizes.sh" "$root" > "$sizes" || fail "Couldn't measure the image."
 
-mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp zstd -Xcompression-level 19 \
+# xz with 1 MB blocks and the x86 filter packs the system about a tenth
+# smaller than zstd (Arch's ISO uses the same). It starts a little slower
+# from a USB stick; the kernel reads it (smaller.sh checks).
+mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp xz -Xbcj x86 -b 1M -Xdict-size 100% \
     -noappend -quiet -e boot/grub
 grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL" >/dev/null 2>&1 \
     || grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL"

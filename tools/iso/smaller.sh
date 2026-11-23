@@ -16,6 +16,23 @@ say() { printf '\n==> %s\n' "$*"; }
 # MB used by the given paths (for the log).
 mb() { du -scm "$@" 2>/dev/null | tail -1 | cut -f1; }
 
+say "Checking the kernel can read an xz-packed image"
+# build-iso.sh packs the system with xz; a kernel without it couldn't start
+# the USB. Read now, before the kernel's sources go.
+kver="$(find /lib/modules -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -1)"
+config=""
+for candidate in "/usr/src/linux-$kver/.config" "/lib/modules/$kver/build/.config" \
+    "/lib/modules/$kver/config" /usr/src/linux-*/.config; do
+    if [ -f "$candidate" ]; then config="$candidate"; break; fi
+done
+if [ -n "$config" ]; then
+    grep -q '^CONFIG_SQUASHFS_XZ=y' "$config" \
+        || { echo "The kernel ($kver) can't read xz-packed squashfs images." >&2; exit 1; }
+    echo "✓ It can ($config)."
+else
+    echo "Note: couldn't find the kernel's settings; the boot check will tell."
+fi
+
 say "Making it smaller: the package tree, downloads and documentation"
 # bunny install fetches its own package tree inside the new system.
 rm -rf /var/db/repos/gentoo /var/cache/distfiles/* /var/cache/binpkgs/* \

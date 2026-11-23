@@ -924,6 +924,9 @@ testing and decisions.
   swaps user names, home folders, the hostname, emails and `*.ts.net` names
   for placeholders, and files one issue in the private
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
+  As root with `SUDO_USER`/`DOAS_USER` set (`sudo bunny …`), `gh` runs as
+  that user through `config_repo::Person::run_as`, the same code
+  `bunny publish` uses, since root has no sign-in.
   `"auto"` sends any command that fails or shows ⚠/✗, except ones that
   stopped because of the user's own input: those exit with code 4
   (`YOUR_INPUT`: a package name that doesn't exist, config mistakes, sudo or

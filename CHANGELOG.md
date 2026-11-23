@@ -26,6 +26,9 @@ a minor version can change how things work).
   encryption and swap one at a time (zram, a swap file too, hibernate, or
   none). The summary shows the options that repeat your choices on another
   computer. New systems get zram swap by default (`--no-zram` turns it off).
+- Fixed: reports sent under `sudo bunny …` or `doas bunny …` said "gh
+  isn't signed in", because they used root's GitHub sign-in. They now use
+  the sign-in of whoever ran sudo or doas, like `bunny publish`.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

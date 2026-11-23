@@ -494,7 +494,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       install rebuilds nothing.
 - [ ] **Existing systems don't get the console font**; only `bunny install`
       sets it. A switch should set it up too.
-- [ ] **Reports under `sudo bunny` use root's GitHub sign-in** ("gh isn't
+- [~] **Reports under `sudo bunny` use root's GitHub sign-in** ("gh isn't
       signed in"). Use the sign-in of whoever ran sudo or doas, like
       `bunny publish` does.
 

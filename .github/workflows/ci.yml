@@ -15,9 +15,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Libraries the graphical installer builds against
+        run: sudo apt-get update -q && sudo apt-get install -y -q libinput-dev libudev-dev libxkbcommon-dev libfontconfig1-dev
       - name: Formatting
         run: cargo fmt --all --check
       - name: Lints
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
-        run: cargo test
+        run: cargo test --workspace

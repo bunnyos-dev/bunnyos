@@ -44,6 +44,11 @@ minimal system. It runs from a live USB.
 | `--mounted <folder>` | Install onto partitions you made and mounted yourself, without erasing anything. See [Installing onto your own partitions](#installing-onto-your-own-partitions). |
 | `--edit` | Stop before the config is applied, so you can change it first. Opens `$EDITOR` (or `nano`, or `vi`), checks the config when you close it, and asks you to edit again if something's wrong. |
 | `--dry-run` | Go through the questions (not the password, since nothing is encrypted and no account is made), then show each step and what it does, without erasing or changing anything. Doesn't need root. With `--verbose` (`--dry-run --verbose`), every command and file instead, each as a `(would run)` or `(would write)` line. |
+| `--recommended` | Take the recommended setup (encrypted, zram swap) without asking. |
+| `--user <name>`, `--hostname <name>`, `--timezone <zone>`, `--keymap <layout>` | The account's answers, given instead of asked. Checked the same way; a wrong one stops with the reason. |
+| `--password-stdin` | Read the password as one line on standard input instead of asking. Used by the graphical installer. |
+| `--yes` | Ask nothing (needs `--disk`): no typing the disk's name, the recommended answer for anything not given, UTC and `us` unless given, and `--user`, `--hostname` and the password (`--password-stdin`, except on a dry run) must be given. |
+| `--list-disks` | Print the disks as JSON (name, path, a description, what's on them, and why one can't be used) and stop. Used by the graphical installer. |
 
 Sizes are written like `512M`, `2G` or `1.5G`.
 

@@ -58,6 +58,16 @@ nobody uses it day to day yet. At alpha: tag and release 0.1 (see
 `docs/RELEASING.md`), say "alpha" in the guide's introduction, and remind the
 maintainer about hiring the artist (`docs/ARTIST-BRIEF.md`).
 
+**First after alpha (decided November 23, 2026): `make.conf` in
+`bunny.toml`.** Global USE flags, CFLAGS/CXXFLAGS, MAKEOPTS and the like are
+where most Gentoo tuning happens, and today they're the biggest thing outside
+the single file: edited by hand, not shown in `bunny plan`, not undone.
+Design it as "your layer" from docs/DESIGN.md (Baseline, then your USE and
+CFLAGS): bunny writes `make.conf` from the config, shows changes in the
+plan, backs it up, and undo restores it. Warn when a change rebuilds a lot
+(new CFLAGS or global USE means recompiling), and say that changing CFLAGS
+means no more prebuilt packages for what it affects.
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,

@@ -44,6 +44,9 @@ a minor version can change how things work).
   only new installs did): the next `bunny switch` sets it up, shown in the
   plan first, and undo takes it away again. A font you chose yourself is
   left alone.
+- The boot menu's "Earlier versions" and `bunny generations` say what each
+  version was before in words: "before removing tree" or "before adding
+  tmux and cronie" instead of "before − tree" or "before a switch: + tmux".
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

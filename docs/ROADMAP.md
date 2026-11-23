@@ -469,7 +469,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       them?"). One question for a plain remove.
 - [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).
-- [ ] **"before − tree" in Earlier versions reads oddly.** Find clearer
+- [~] **"before − tree" in Earlier versions reads oddly.** Find clearer
       wording for "the version before this change".
 - [ ] **The install's recording says "0 s"**, and the first
       `bunny report --dry-run` seemed to hang (Ctrl+C) before working the

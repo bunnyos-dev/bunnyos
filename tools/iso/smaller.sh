@@ -162,3 +162,21 @@ rm -rf "$fw/intel/ipu" "$fw/intel/vpu" "$fw/intel/ish" "$fw/intel/avs" \
 find "$fw" -xtype l -delete
 find "$fw" -mindepth 1 -type d -empty -delete
 echo "Removed about $(( before - $(mb "$fw") )) MB of firmware."
+
+say "Making it smaller: drivers for sound, cameras and TV cards"
+# The USB plays no sound and uses no camera. Any of these a kept driver
+# needs stays (graphics drivers use a few of drivers/media for HDMI, for
+# one): modules.dep lists every module each module needs.
+mods="/lib/modules/$kver"
+before="$(mb "$mods")"
+drop="$(mktemp)"; needed="$(mktemp)"
+(cd "$mods" && find kernel/sound kernel/drivers/media -name '*.ko*' 2>/dev/null | sort) > "$drop"
+# Everything the modules that stay need.
+grep -v -F -f <(sed 's/$/:/' "$drop") "$mods/modules.dep" \
+    | cut -d: -f2 | tr ' ' '\n' | grep -v '^$' | sort -u > "$needed"
+kept="$(comm -12 "$drop" "$needed" | wc -l)"
+comm -23 "$drop" "$needed" | while IFS= read -r module; do rm -f -- "$mods/$module"; done
+rm -f "$drop" "$needed"
+find "$mods/kernel" -mindepth 1 -type d -empty -delete
+depmod "$kver"
+echo "Kept $kept of them that other drivers need; removed about $(( before - $(mb "$mods") )) MB."

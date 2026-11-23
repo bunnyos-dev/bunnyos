@@ -485,7 +485,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       ("Starting dbus … [ ok ]"). Only "show start-up messages" should.
 - [ ] **⚠ shows as `!` on the console.** The new console font has ✓ and ✗
       but not ⚠: add the glyph, or use a mark the font has.
-- [ ] **`bunny install` prints raw tool output**: wipefs (in red),
+- [~] **`bunny install` prints raw tool output**: wipefs (in red),
       mkfs.fat, btrfs's whole table. One quiet line per step, like the
       emerge part, with the full output in the log.
 - [~] **The first switch on a fresh install rebuilds packages** (curl,

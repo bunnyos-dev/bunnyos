@@ -50,6 +50,8 @@ minimal system. It runs from a live USB.
 | `--yes` | Ask nothing (needs `--disk`): no typing the disk's name, the recommended answer for anything not given, UTC and `us` unless given, and `--user`, `--hostname` and the password (`--password-stdin`, except on a dry run) must be given. |
 | `--list-disks` | Print the disks as JSON (name, path, a description, what's on them, and why one can't be used) and stop. Used by the graphical installer. |
 
+| `--verbose` | On a real install, show everything the tools print as they run (it's kept in the log either way). With `--dry-run`, see above. |
+
 Sizes are written like `512M`, `2G` or `1.5G`.
 
 ## Step by step
@@ -121,6 +123,17 @@ Sizes are written like `512M`, `2G` or `1.5G`.
     finishes; `bunny publish` starts it later.
 14. **Done.** Everything is unmounted and the disk locked again. Restart,
     take out the USB stick, type your password to unlock the disk, and log in.
+
+**What you see.** Each step prints its `==> ` heading, then `✓ Done` (with
+the time, when it took 2 seconds or more). What the tools themselves print
+(wipefs, mkfs, btrfs, cryptsetup, tar, grub-mkconfig, git) isn't shown: it
+goes to `/var/log/bunny/<time>-install.log` on the USB, which is copied to
+the same place in the new system at the end. Three things keep the screen,
+because their output is the progress: the base system's download bar, the
+part inside the new system (its own `==> ` headings and emerge's short
+lines), and the first `bunny switch`. If a tool fails, bunny shows `✗`, the
+last 12 lines it printed, and where the rest is, then says what it means.
+`--verbose` shows everything as it runs, and still keeps the log.
 
 **Why a few base packages are replaced.** Gentoo builds its base system
 (stage3) with some USE flags turned off that its normal settings turn on:

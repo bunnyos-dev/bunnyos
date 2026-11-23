@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny install` is quieter: each step is its heading and one "✓ Done"
+  line, instead of what wipefs, mkfs, btrfs and cryptsetup print. Their
+  output goes to `/var/log/bunny/<time>-install.log` (copied into the new
+  system); a failing tool shows its last lines. `--verbose` shows it all.
+
 - Fixed: the first switch on a new install rebuilt curl, gettext, iputils,
   libb2 and portage-utils. Gentoo's base system is built with a few
   features off; the install now swaps those packages for Gentoo's prebuilt

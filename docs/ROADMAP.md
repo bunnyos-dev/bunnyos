@@ -523,6 +523,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.
+- [ ] **The graphical installer leaves developer mode off**, while the
+      terminal install keeps it on ("Keeping the recording of this install").
+      Make them behave the same (check how the terminal path decides, and
+      what `bunny install --yes` from the graphical installer misses).
+- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+      consolefont added to runlevel boot", "WARNING: you are stopping a boot
+      service", "Caching service dependencies … [ ok ]"). Run rc-update and
+      the service quietly and say it in bunny's own words, keeping the
+      output in the log.
 
 ## Talk to Portage directly (after the dry run and the laptop)
 

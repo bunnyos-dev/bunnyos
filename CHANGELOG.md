@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
+  only new installs did): the next `bunny switch` sets it up, shown in the
+  plan first, and undo takes it away again. A font you chose yourself is
+  left alone.
 - Fixed: `bunny plan` (and `check`, `switch`, `diff`) with a copy of
   `bunny.toml` somewhere else left out this computer's host file, so GRUB,
   the kernel and the rest showed as "would be removed". A copy with no

@@ -876,7 +876,11 @@ Needs the Baseline image (phases 6 and 7).
   log (errors would disappear too) and over a different inittab per entry
   (one squashfs serves every entry). The CI boot check boots without
   `quiet`, so it still sees "Starting local".
-  **Console font** (also set by `bunny install`): the Linux console's usual
+  **Console font** (also set by `bunny install`, and by a switch on
+  systems that don't have it yet: `console_font.rs`, shown in the plan,
+  `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;
+  a font the user set themselves is left alone, and a failure is a note,
+  never a stop): the Linux console's usual
   font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
   console fonts don't have them either (only its full, 1356-glyph BDF
   does). kbd's `eurlatgr` (part of every Gentoo system) has ✓ ✗ · but no

@@ -98,6 +98,8 @@ install -D -m 0755 "$here/iso/inside.sh" "$root/root/build-inside.sh"
 if [ -n "$installer" ]; then
     install -D -m 0755 "$installer" "$root/usr/local/bin/bunny-installer"
 fi
+install -D -m 0755 "$here/iso/smaller.sh" "$root/root/build-smaller.sh"
+install -D -m 0755 "$here/iso/check.sh" "$root/root/build-check.sh"
 if [ "$preview" = 1 ]; then
     # Read by bunny (dev::PREVIEW): record every command on this USB.
     cat > "$root/etc/bunny-preview.toml" <<'EOF'
@@ -118,13 +120,26 @@ mount --bind /run "$root/run"; mount --make-slave "$root/run"; mounted="run $mou
 say "Installing the USB's packages inside it (prebuilt; takes a while)"
 chroot "$root" /bin/bash /root/build-inside.sh \
     || fail "Building inside the image failed (the message is above)."
+say "Removing what the USB doesn't need"
+chroot "$root" /bin/bash /root/build-smaller.sh \
+    || fail "Making the image smaller failed (the message is above)."
+say "Checking the finished image"
+chroot "$root" /bin/bash /root/build-check.sh \
+    || fail "The finished image is missing something the USB needs (listed above)."
 if [ -n "$installer" ]; then
-    # Its libraries are all there (libinput, xkbcommon, fontconfig…): it
-    # starts, prints its help and stops, without a screen.
+    # After making it smaller: its libraries and data are all still there
+    # (libinput, xkbcommon and its keyboard layouts, fontconfig and a font).
+    # It starts, prints its help and stops, without a screen.
     chroot "$root" /usr/local/bin/bunny-installer --help >/dev/null \
         || fail "The graphical installer doesn't start inside the image (a library is missing?)."
+    for need in /usr/share/X11/xkb/symbols/us /etc/fonts/fonts.conf; do
+        [ -e "$root$need" ] \
+            || fail "The graphical installer needs $need, which isn't in the image."
+    done
+    ls "$root"/usr/share/fonts/dejavu/DejaVuSans*.ttf >/dev/null 2>&1 \
+        || fail "The graphical installer's font (DejaVu) isn't in the image."
 fi
-rm -f "$root/root/build-inside.sh"
+rm -f "$root/root/build-inside.sh" "$root/root/build-smaller.sh" "$root/root/build-check.sh"
 cleanup
 mounted=""
 : > "$root/etc/resolv.conf"
@@ -141,15 +156,43 @@ printf 'Bunny Linux %s, bunny %s, built %s from %s\n' \
     "$kind" "$version" "$(date -u +%Y-%m-%d)" "$file" > "$iso/bunny-live.txt"
 cp "$iso/bunny-live.txt" "$root/etc/bunny-live"
 
-mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp zstd -Xcompression-level 19 \
+# What takes the space, for keeping the image small (CI shows it on the
+# run's page).
+sizes="$work/sizes.md"
+sh "$here/iso/sizes.sh" "$root" > "$sizes" || fail "Couldn't measure the image."
+
+# xz with 1 MB blocks and the x86 filter packs the system about a tenth
+# smaller than zstd (Arch's ISO uses the same). It starts a little slower
+# from a USB stick; the kernel reads it (smaller.sh checks).
+mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp xz -Xbcj x86 -b 1M -Xdict-size 100% \
     -noappend -quiet -e boot/grub
 grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL" >/dev/null 2>&1 \
     || grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL"
 (cd "$(dirname "$out")" && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
 
+mb() { echo $(( ($(stat -c %s "$1") + 524288) / 1048576 )); }
+{
+    echo
+    echo "### The ISO's parts (compressed)"
+    echo
+    echo "| Part | MB |"
+    echo "|---|---:|"
+    echo "| The live system (\`LiveOS/squashfs.img\`) | $(mb "$iso/LiveOS/squashfs.img") |"
+    echo "| Kernel (\`boot/vmlinuz\`) | $(mb "$iso/boot/vmlinuz") |"
+    echo "| Startup image (\`boot/initramfs.img\`) | $(mb "$iso/boot/initramfs.img") |"
+    echo "| **The whole ISO** | **$(mb "$out")** |"
+    echo
+    echo "Boot records (El Torito):"
+    echo
+    echo '```'
+    xorriso -indev "$out" -report_el_torito plain 2>/dev/null || true
+    echo '```'
+} >> "$sizes"
+
 size="$(du -h "$out" | cut -f1)"
 say "Done: $out ($size)"
 echo "  Its SHA256 is in $out.sha256."
+echo "  What takes the space: $sizes"
 echo "  Try it:        tools/bunny-vm.sh run $out"
 echo "  Write a USB:   doas dd if=$out of=/dev/sdX bs=4M status=progress oflag=sync"
 echo "  (The work folder $work can be deleted.)"

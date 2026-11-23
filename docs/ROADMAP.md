@@ -725,11 +725,27 @@ new is doing it through bunny.
 - [ ] **The installer on the integrated GPU** (agreed): the live USB and the
       graphical installer use the integrated graphics; Nvidia is set up on
       the installed system.
-- [ ] **Nvidia through bunny.toml**: write down what the maintainer's working
-      Gentoo setup used (`nvidia-drivers` and its USE flags, the kernel
-      module and `nvidia_drm.modeset=1`, the video card setting), do it with
-      bunny on the G16, and note anything bunny couldn't express. Later, a
-      `[desktop]`-style convenience so it's one line.
+- [ ] **Graphics cards in bunny.toml, before the G16 week.** The
+      maintainer's working Gentoo setup followed the Gentoo wiki
+      (NVIDIA/nvidia-drivers): `*/* VIDEO_CARDS: -* nvidia` in
+      `package.use/00video_cards`, plus CUDA. bunny.toml can't say that yet:
+      `[pkg]` is per package, and `bunny import` skips `*/*` lines (it lists
+      them as skipped). Add a small global setting, e.g.
+      `[hardware] video_cards = ["intel", "nvidia"]`, that bunny writes as
+      `package.use/00video_cards`, shown in the plan, backed up, undone.
+      On a hybrid laptop list both GPUs (the integrated one keeps the screen
+      and power saving working); `-* nvidia` alone suits a desktop. This is a
+      slice of the `make.conf`-in-bunny.toml work, pulled forward because the
+      G16 week needs it.
+- [ ] **Nvidia through bunny.toml**: `x11-drivers/nvidia-drivers` with
+      `kernel-open` (the wiki recommends the open module for Turing and newer,
+      and newer drivers use it regardless; an RTX 50-series needs it) and
+      `dist-kernel` (rebuilds the module when the kernel updates), the
+      `nvidia_drm.modeset=1` kernel option, CUDA
+      (`dev-util/nvidia-cuda-toolkit`) as a normal package. Do it on the G16
+      and note anything bunny couldn't express. Later, a `[desktop]`-style
+      convenience so it's one line. When Gentoo's guides need revisiting,
+      the maintainer is fine with reading the Handbook and wiki.
 - [ ] **Hyprland/Mango on Nvidia**: the GBM backend env vars and, since the
       G16 has hybrid graphics, which GPU drives what. New ground for the
       dynamic-island and desktop-setup work.

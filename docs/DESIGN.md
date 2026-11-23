@@ -107,7 +107,13 @@ config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
 kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
 plus a `[machine]` record from `bunny install` that's read but never acted on
 (the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
-main file. Rollback restores the main config, its lock and this computer's
+main file. A config with no `hosts/` folder next to it (a copy elsewhere,
+for `bunny plan ~/test/bunny.toml`) borrows this computer's file from
+`/etc/bunny/hosts/`, and the "looks good" line says so. Chosen over leaving
+it out because leaving it out makes GRUB and the kernel look unwanted, and
+a switch from the copy would remove them; borrowing can only keep more.
+A copy with its own `hosts/` folder but no file for this computer uses
+none, and bunny says this computer's file isn't included. Rollback restores the main config, its lock and this computer's
 host file. The Baseline layer is still planned.
 
 Modules expand one line into packages + services + config files, for example
@@ -232,8 +238,11 @@ isolated = false       # compile inside a clean container
   `/etc/grub.d/11_bunny`, right after `10_linux`'s entries; installed once
   with one `grub-mkconfig`, then read at boot so later changes need none):
   "Undo the last change" (summary and local time) plus an "Earlier versions"
-  submenu (newest 10 bootable generations, each with "Go back to this
-  version" and its summary as do-nothing lines), in separate markers so the
+  submenu (newest 10 bootable generations, each labelled "<time> · before
+  <what came after it, in words>", like "before removing tree" or "before
+  adding tmux and cronie" (`notes::before_words`, also used by `bunny
+  generations`), with "Go back to this version" and its summary as
+  do-nothing lines), in separate markers so the
   hook only drops the undo entry. That undo block that boots the kernel and
   initramfs **from the generation's snapshot** (`/@snapshots/<gen>/boot/…`)
   with the running system's command line plus `bunny.rollback=<gen>`, so
@@ -776,6 +785,12 @@ GPT
   `inside.sh` run in a chroot (packages from the binhost, GRUB named
   "Bunny Linux" plus the fallback path, the kernel's startup image, the
   user). One password unlocks the disk and logs in; root stays locked.
+  After the package list, `inside.sh` runs `emerge --update --deep
+  --newuse @world` (bunny switch's options): Gentoo's stage3 is built with
+  releng's `package.use` (`circular`: curl `-http2 -http3 -quic`;
+  `openmp`: libb2, gettext, portage-utils `-openmp`), so those differ from
+  the profile, and without this the first switch rebuilt them. Prebuilt
+  packages with the profile's flags replace them during the install.
   The password can't be empty; under 8 characters gets a warning (easy to
   guess, a few words are better) and can be kept by typing it again, or
   replaced by pressing Enter. It's your disk and your choice.
@@ -786,7 +801,15 @@ GPT
   `--dry-run` doesn't ask for the password (it stands in a placeholder that
   nothing uses) and shows each step's name and what it does in plain words
   (StepsRunner); `--dry-run --verbose` prints every command and file
-  (PrintRunner).
+  (PrintRunner). A real install (QuietRunner around SystemRunner) prints
+  each step's `==> ` heading (unchanged: the graphical installer reads
+  them), then `✓ Done` (with the time from 2 s), and appends what each tool
+  printed to `/var/log/bunny/<time>-install.log` on the USB, copied into the
+  new system at the end. A failed tool shows `✗`, its last 12 lines
+  (colour codes removed) and the log's path, before bunny's explanation.
+  The stage3's progress bar, `inside.sh` and the first `bunny switch`/`lock`
+  keep the screen (no `✓` after the chroot ones; their output says how it
+  went). `--verbose` shows all of it live and still keeps the log.
 - **Your config's history (current behaviour):** after the first switch,
   `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
   main`, run with the USB's git), with a repository-only identity from the
@@ -843,6 +866,16 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
+  **Quiet start-up:** the normal menu entries have `quiet` on the kernel
+  line; `/etc/inittab` runs every runlevel through
+  `/usr/local/sbin/bunny-openrc` (`tools/iso/openrc-quiet.sh`), which sets
+  `EINFO_QUIET=YES` (what `openrc --quiet` sets) when the kernel line says
+  `quiet`, so OpenRC's "Starting …" lines and warnings are left out and
+  errors still show. "Show start-up messages" has no `quiet`. Chosen over
+  `rc_verbose` (it only adds detail), over sending OpenRC's output to a
+  log (errors would disappear too) and over a different inittab per entry
+  (one squashfs serves every entry). The CI boot check boots without
+  `quiet`, so it still sees "Starting local".
   **Console font** (also set by `bunny install`, and by a switch on
   systems that don't have it yet: `console_font.rs`, shown in the plan,
   `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;

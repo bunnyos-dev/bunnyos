@@ -469,7 +469,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       them?"). One question for a plain remove.
 - [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).
-- [ ] **"before − tree" in Earlier versions reads oddly.** Find clearer
+- [~] **"before − tree" in Earlier versions reads oddly.** Find clearer
       wording for "the version before this change".
 - [ ] **The install's recording says "0 s"**, and the first
       `bunny report --dry-run` seemed to hang (Ctrl+C) before working the
@@ -481,14 +481,14 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Found while testing #78–#93 together on `test/saturday`, issue #91.)
 
-- [ ] **The live USB's normal entry shows OpenRC's start-up lines**
+- [~] **The live USB's normal entry shows OpenRC's start-up lines**
       ("Starting dbus … [ ok ]"). Only "show start-up messages" should.
 - [ ] **⚠ shows as `!` on the console.** The new console font has ✓ and ✗
       but not ⚠: add the glyph, or use a mark the font has.
-- [ ] **`bunny install` prints raw tool output**: wipefs (in red),
+- [~] **`bunny install` prints raw tool output**: wipefs (in red),
       mkfs.fat, btrfs's whole table. One quiet line per step, like the
       emerge part, with the full output in the log.
-- [ ] **The first switch on a fresh install rebuilds packages** (curl,
+- [~] **The first switch on a fresh install rebuilds packages** (curl,
       gettext, iputils, libb2, portage-utils) for USE changes. Find why the
       starter config and Gentoo's prebuilt packages disagree, so a fresh
       install rebuilds nothing.
@@ -506,10 +506,23 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       packages (`bunny-release`).
 - [ ] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
-- [~] **A smaller live USB** (asked for by the maintainer): it was about
+- [x] **A smaller live USB** (asked for by the maintainer): it was about
       1.45 GB, near its budget. Measure what takes the space and remove what
       the USB never needs, keeping network and graphics drivers and
-      firmware. Now about 850 MB. **(VM)**
+      firmware. Now 826 MB; installed from it in the VM on November 23.
+- [ ] **The live USB's boot line uses a renamed dracut option**: "Kernel
+      command line option 'rd.live.overlay.overlayfs' is deprecated, use
+      'rd.overlay' instead." Update tools/iso/grub.cfg (every entry) and
+      check dracut's docs for the new spelling.
+- [ ] **Early-boot lines still show on the quiet entries**: `insmod
+      /lib/modules/…/asymmetric_keys/pkc…` and a few more, before OpenRC
+      starts (so #106's quiet start doesn't cover them). Find what prints
+      them (dracut's module loading, the kernel's log level) and quiet them
+      on the normal entries only; "show start-up messages" keeps them.
+- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+      18 hours ago"**: it counts from the package list's date, which reads
+      oddly on day one. Say something like "package list from 18 hours ago"
+      or count from the install.
 
 ## Talk to Portage directly (after the dry run and the laptop)
 

@@ -361,7 +361,11 @@ pub fn render_earlier(versions: &[MenuVersion], saved: usize) -> String {
         let label = if v.summary.is_empty() {
             v.when.clone()
         } else {
-            format!("{} · before {}", v.when, shorten(&v.summary, 48))
+            format!(
+                "{} · before {}",
+                v.when,
+                shorten(&crate::notes::before_words(&v.summary), 56)
+            )
         };
         let _ = writeln!(out, "    submenu '{}' {{", title(&label));
         menuentry(
@@ -523,8 +527,12 @@ mod tests {
         let menu = render_earlier(&versions, 11);
         assert!(menu.starts_with(EARLIER_BEGIN), "{menu}");
         assert!(menu.contains("submenu 'Earlier versions (11 saved)'"));
-        assert!(menu
-            .contains("submenu 'Nov 18, 7:03 PM · before + repository guru, + mangowm, + dejavu'"));
+        assert!(
+            menu.contains(
+                "submenu 'Nov 18, 7:03 PM · before adding the repository guru, adding mangowm and dejavu'"
+            ),
+            "{menu}"
+        );
         assert!(menu.contains("menuentry 'Go back to this version (Nov 18, 7:03 PM)'"));
         assert!(menu.contains("        submenu '    + mangowm' {\n            true\n        }"));
         assert!(menu.contains("submenu 'Nov 18, 4:46 PM' {"));

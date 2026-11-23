@@ -50,3 +50,13 @@ rm -rf /usr/share/i18n /usr/include /var/cache/edb/* /usr/share/gcc-data/*/*/inf
     /usr/share/binutils-data/*/*/man
 find /usr/lib /usr/lib64 -xdev \( -name '*.a' -o -name '*.la' \) -type f -delete
 echo "Removed about $before MB (and the static libraries)."
+
+say "Making it smaller: things stored twice"
+# The prebuilt packages Portage downloaded (it keeps them after installing
+# them), and the kernel's leftovers next to its modules: the USB starts the
+# kernel build-iso.sh put on the ISO (boot/vmlinuz).
+before="$(mb /var/cache/binhost /lib/modules/*/vmlinuz /lib/modules/*/System.map /lib/modules/*/config)"
+rm -rf /var/cache/binhost/*
+rm -f /lib/modules/*/vmlinuz /lib/modules/*/System.map /lib/modules/*/config
+find /lib/modules -mindepth 2 -maxdepth 2 \( -name build -o -name source \) -xtype l -delete
+echo "Removed about $before MB."

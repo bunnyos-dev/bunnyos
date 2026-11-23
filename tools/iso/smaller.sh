@@ -38,3 +38,15 @@ say "Making it smaller: the package tree, downloads and documentation"
 rm -rf /var/db/repos/gentoo /var/cache/distfiles/* /var/cache/binpkgs/* \
     /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/gtk-doc \
     /var/tmp/portage/* /var/log/emerge*.log /usr/src/linux-*
+
+say "Making it smaller: translations, headers and caches"
+# bunny and the USB speak English; glibc's locale.alias stays. Headers,
+# static libraries and Portage's caches are only for building and
+# installing packages, which happens inside the new system.
+before="$(mb /usr/share/locale /usr/share/i18n /usr/include /var/cache/edb)"
+find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name locale.alias -exec rm -rf {} +
+rm -rf /usr/share/i18n /usr/include /var/cache/edb/* /usr/share/gcc-data/*/*/info \
+    /usr/share/gcc-data/*/*/man /usr/share/binutils-data/*/*/info \
+    /usr/share/binutils-data/*/*/man
+find /usr/lib /usr/lib64 -xdev \( -name '*.a' -o -name '*.la' \) -type f -delete
+echo "Removed about $before MB (and the static libraries)."

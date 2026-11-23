@@ -88,6 +88,8 @@ install -D -m 0755 "$bunny" "$root/usr/local/bin/bunny"
 install -D -m 0755 "$here/iso/welcome.sh" "$root/usr/local/bin/welcome"
 install -D -m 0644 "$here/iso/bash_profile" "$root/root/.bash_profile"
 install -D -m 0755 "$here/iso/inside.sh" "$root/root/build-inside.sh"
+install -D -m 0755 "$here/iso/smaller.sh" "$root/root/build-smaller.sh"
+install -D -m 0755 "$here/iso/check.sh" "$root/root/build-check.sh"
 if [ "$preview" = 1 ]; then
     # Read by bunny (dev::PREVIEW): record every command on this USB.
     cat > "$root/etc/bunny-preview.toml" <<'EOF'
@@ -108,7 +110,13 @@ mount --bind /run "$root/run"; mount --make-slave "$root/run"; mounted="run $mou
 say "Installing the USB's packages inside it (prebuilt; takes a while)"
 chroot "$root" /bin/bash /root/build-inside.sh \
     || fail "Building inside the image failed (the message is above)."
-rm -f "$root/root/build-inside.sh"
+say "Removing what the USB doesn't need"
+chroot "$root" /bin/bash /root/build-smaller.sh \
+    || fail "Making the image smaller failed (the message is above)."
+say "Checking the finished image"
+chroot "$root" /bin/bash /root/build-check.sh \
+    || fail "The finished image is missing something the USB needs (listed above)."
+rm -f "$root/root/build-inside.sh" "$root/root/build-smaller.sh" "$root/root/build-check.sh"
 cleanup
 mounted=""
 : > "$root/etc/resolv.conf"

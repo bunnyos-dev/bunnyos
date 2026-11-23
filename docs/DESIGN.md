@@ -490,6 +490,10 @@ admins = ["you"]
 - Rust code talks to the init system through one interface (enable, disable,
   start, stop, status) so systemd can be added later as a second implementation.
 - The init system is chosen at install time, never switched later.
+- **After 0.1 (decided November 22, 2026):** OpenRC stays the only one the
+  maintainer works on. systemd is the likely second, only if it turns out
+  easy to add (Gentoo supports it officially). Others (dinit, runit, s6) are
+  left to contributors, who add them as a new `InitSystem` implementation.
 
 ## Packages and apps
 
@@ -689,6 +693,18 @@ GPT
 - UI toolkit: **Slint** (Rust, draws directly to the screen via `linuxkms`, no
   compositor, software-render fallback). Plain Qt Quick is the fallback choice.
 - The installer only writes a `bunny.toml`; `bunny install` does the work.
+- **Current behaviour (part 1):** `crates/bunny-installer`, Slint with the
+  software renderer (works without a GPU), `linuxkms` on the USB and
+  `winit` in a window for `--demo`. Screens: welcome (or "use the terminal
+  instead") → disk (from `bunny install --list-disks`) → setup (Recommended,
+  or choose encryption and swap) → account → password (short: a warning,
+  not a refusal) → review (bunny's own preview from a dry run with the
+  answers, which also checks them; type the disk's name) → installing
+  (bunny's `==>` steps as they start, the full output behind "Show the
+  details") → done (Restart) or stopped (Back). It decides nothing: it
+  builds `bunny install --yes --disk … --user … --password-stdin` and shows
+  what bunny prints. Not yet: the step counter and top bar, Utilities, the
+  map, the `bunny.toml` panel, the desktop choice, Wi-Fi.
 - **Layout (decided November 2026):** not the sidebar-and-steps layout
   most Linux installers share. Full-screen black with a centered column, a
   small top bar (installer name, a Utilities menu, language, Wi-Fi, battery,
@@ -735,7 +751,20 @@ GPT
   (see "Lockfile").
 - **Current behaviour (part 1, guided):** `bunny install` lists whole disks
   from `lsblk --json` and leaves out any in use (anything mounted, swap, or
-  something opened on it like LUKS or LVM), read-only or under 20 GB. The
+  something opened on it like LUKS or LVM), read-only or under 20 GB. After
+  the disk, "Use the recommended setup? [Y/n]" (`install::questions`):
+  Enter takes it (encrypted, zram swap); `n` asks encrypt ([Y/n]) and swap
+  (Enter zram; a size for zram plus a swap file; `hibernate`; `none`). An
+  option answers its question (`--no-encrypt`; `--swap`, `--hibernate` or
+  `--no-zram`). zram is bunny's own small OpenRC service (`zram`, boot
+  runlevel), not sys-block/zram-init (its `maxs` setting breaks on kernels
+  from 6.15): as big as memory up to 8 GB like Fedora, zstd when the kernel
+  has it, priority 100 so it's used before a swap file. `/home` on a second
+  disk isn't asked yet (on hold; `--home-disk` works). No partition sizes,
+  mount points or filesystem choice: btrfs is needed for undo, and full
+  control is `--mounted`. The preview then names the disks left untouched
+  and, when the answers differ from the recommended setup, the options that
+  repeat them (without `--disk`, which differs per computer). The
   preview lists every partition that will be erased and the layout you get;
   you confirm by typing the disk's name. Layout: GPT, EFI (2 GB, FAT32) at
   `/boot`, the rest LUKS2 (opened as `bunny-root`) with btrfs subvolumes

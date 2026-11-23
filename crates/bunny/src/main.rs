@@ -71,6 +71,8 @@ const DEFAULT_CONFIG: &str = "/etc/bunny/bunny.toml";
 static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[derive(Subcommand)]
+// Parsed once at start-up; boxing `install`'s options would only add noise.
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Show at a glance whether everything is in order (changes nothing)
     Status {
@@ -257,9 +259,12 @@ enum Command {
         /// Size of the EFI partition (default 2G)
         #[arg(long, value_name = "SIZE")]
         efi_size: Option<String>,
-        /// Make a swapfile of this size, e.g. 8G (default: none)
+        /// Also make a swap file on disk of this size, e.g. 8G (default: none)
         #[arg(long, value_name = "SIZE")]
         swap: Option<String>,
+        /// No compressed swap in memory (zram, on by default)
+        #[arg(long)]
+        no_zram: bool,
         /// Set up hibernation (a swapfile as big as your memory, unless --swap says otherwise)
         #[arg(long)]
         hibernate: bool,
@@ -278,12 +283,36 @@ enum Command {
         /// Show each step and what it does, without erasing or changing anything (with --verbose: every command)
         #[arg(long)]
         dry_run: bool,
+        /// Take the recommended setup without asking (encrypted, zram swap)
+        #[arg(long)]
+        recommended: bool,
+        /// Your user name (asks if not given)
+        #[arg(long, value_name = "NAME")]
+        user: Option<String>,
+        /// A name for this computer (asks if not given)
+        #[arg(long, value_name = "NAME")]
+        hostname: Option<String>,
+        /// Time zone, like America/Toronto (asks if not given)
+        #[arg(long, value_name = "ZONE")]
+        timezone: Option<String>,
+        /// Keyboard layout, like us or de (asks if not given)
+        #[arg(long, value_name = "LAYOUT")]
+        keymap: Option<String>,
+        /// Read the password from standard input (one line) instead of asking
+        #[arg(long)]
+        password_stdin: bool,
+        /// Don't ask to type the disk's name to confirm (needs --disk)
+        #[arg(long, requires = "disk")]
+        yes: bool,
+        /// Print the disks as JSON and stop (for the graphical installer)
+        #[arg(long)]
+        list_disks: bool,
         /// Read the list of disks from this file (lsblk --json output) instead of lsblk
         #[arg(long, hide = true)]
         lsblk: Option<PathBuf>,
         /// Install onto partitions you made and mounted here yourself (nothing is erased)
         #[arg(long, value_name = "FOLDER",
-              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "hibernate", "home_disk"])]
+              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "no_zram", "hibernate", "home_disk"])]
         mounted: Option<PathBuf>,
         /// Read what's mounted from this file (findmnt --json output) instead of findmnt
         #[arg(long, hide = true)]
@@ -406,12 +435,21 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             no_encrypt,
             efi_size,
             swap,
+            no_zram,
             hibernate,
             home_disk,
             ssh,
             edit,
             config,
             dry_run,
+            recommended,
+            user,
+            hostname,
+            timezone,
+            keymap,
+            password_stdin,
+            yes,
+            list_disks,
             lsblk,
             mounted,
             findmnt,
@@ -420,12 +458,21 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             no_encrypt,
             efi_size,
             swap,
+            no_zram,
             hibernate,
             home_disk,
             ssh,
             edit,
             config,
             dry_run,
+            recommended,
+            user,
+            hostname,
+            timezone,
+            keymap,
+            password_stdin,
+            yes,
+            list_disks,
             lsblk,
             mounted,
             findmnt,

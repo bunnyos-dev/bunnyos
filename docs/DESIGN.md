@@ -317,7 +317,12 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   Package messages (elog) are shown at the end, a few lines each. Removal
   asks the Portage helper what depclean would remove (or reads `emerge
   --depclean --pretend`'s "All selected packages" line, falling back to
-  emerge's own `--ask` if the count doesn't match), and always asks. Cleanup also runs after USE changes and
+  emerge's own `--ask` if the count doesn't match), and asks. Exception,
+  so a plain `bunny remove` asks once: when the user answered yes to the
+  plan (not `--yes`) and the list is exactly the plan's "would be removed"
+  packages (names compared, slots ignored), it removes without asking
+  again; more than the plan showed (dependencies, leftovers after USE
+  changes) still asks. Cleanup also runs after USE changes and
   updates, since both can orphan dependencies. `--verbose` restores the old
   live, emerge-asks behaviour.
 - **Ctrl+C:** stops bunny at once, except at a question during a switch
@@ -384,7 +389,8 @@ when nothing is set and both are installed).
    plus `00-bunny-kept` (lines bunny can't manage yet, word for word).
 5. Writes the world file from `packages`.
 6. Runs `emerge --update --deep --newuse @world` (with `--ask` unless `--yes`).
-7. Runs `emerge --depclean --ask` if packages were removed. **Always asks.**
+7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
+   said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
@@ -976,7 +982,9 @@ testing and decisions.
 - **Developer mode (`[dev] report`):** testers' machines record every bunny
   command with util-linux `script` (terminal output exactly as seen, without
   changing behaviour), keeping recordings in `~/.local/state/bunny/sessions/`.
-  `bunny report` cleans them (colour codes, redrawn progress lines),
+  `bunny report` adds `bunny status` (run with a 60-second limit, saying
+  so first: glsa-check on a cold cache made `--dry-run` look hung) and
+  cleans them (colour codes, redrawn progress lines),
   swaps user names, home folders, the hostname, emails and `*.ts.net` names
   for placeholders, and files one issue in the private
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
@@ -995,7 +1003,9 @@ testing and decisions.
   (CI builds that aren't releases, `PREVIEW=1 tools/build-iso.sh`) ship
   `/etc/bunny-preview.toml` with `[dev] report = true`, which bunny uses when
   the config doesn't turn recording on. Just before it unmounts, a recorded
-  `bunny install` copies its recording so far, with notes (exit code 0), to
+  `bunny install` copies its recording so far, with notes (exit code 0, and how long
+  it ran from the time in the recording's name, since the live USB's
+  filesystem has no creation times), to
   `/home/<user>/.local/state/bunny/sessions/` in the new system (owned by the
   user), so `bunny report` there sends it. A failed install leaves it on the
   USB. Release images record nothing.

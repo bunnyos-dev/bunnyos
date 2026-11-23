@@ -13,6 +13,14 @@ a minor version can change how things work).
 - Fixed: reports sent under `sudo bunny …` or `doas bunny …` said "gh
   isn't signed in", because they used root's GitHub sign-in. They now use
   the sign-in of whoever ran sudo or doas, like `bunny publish`.
+- Fixed: the install's recording said it took "0 s". It now says how long
+  the install ran.
+- `bunny report` says "Adding `bunny status` to the report…" while it
+  works that out, instead of seeming to hang, and leaves it out if it takes
+  over a minute.
+- `bunny remove` asks once instead of twice when it removes exactly what
+  the plan showed. It still asks again when emerge wants to remove more
+  (like dependencies nothing else uses), and always with `--yes`.
 - Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
   only new installs did): the next `bunny switch` sets it up, shown in the
   plan first, and undo takes it away again. A font you chose yourself is

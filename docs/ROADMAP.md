@@ -465,13 +465,13 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [x] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
       sudo's password and a package name that doesn't exist each sent a
       report. Only bunny's own problems should.
-- [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
+- [~] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
       them?"). One question for a plain remove.
 - [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).
 - [~] **"before − tree" in Earlier versions reads oddly.** Find clearer
       wording for "the version before this change".
-- [ ] **The install's recording says "0 s"**, and the first
+- [~] **The install's recording says "0 s"**, and the first
       `bunny report --dry-run` seemed to hang (Ctrl+C) before working the
       second time.
 - [~] **Two test VMs can't run at once**: both use port 2223. Give each
@@ -523,6 +523,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.
+- [ ] **The graphical installer leaves developer mode off**, while the
+      terminal install keeps it on ("Keeping the recording of this install").
+      Make them behave the same (check how the terminal path decides, and
+      what `bunny install --yes` from the graphical installer misses).
+- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+      consolefont added to runlevel boot", "WARNING: you are stopping a boot
+      service", "Caching service dependencies … [ ok ]"). Run rc-update and
+      the service quietly and say it in bunny's own words, keeping the
+      output in the log.
 
 ## Talk to Portage directly (after the dry run and the laptop)
 

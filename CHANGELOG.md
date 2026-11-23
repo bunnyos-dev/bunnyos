@@ -13,6 +13,15 @@ a minor version can change how things work).
 - Fixed: reports sent under `sudo bunny …` or `doas bunny …` said "gh
   isn't signed in", because they used root's GitHub sign-in. They now use
   the sign-in of whoever ran sudo or doas, like `bunny publish`.
+- Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
+  only new installs did): the next `bunny switch` sets it up, shown in the
+  plan first, and undo takes it away again. A font you chose yourself is
+  left alone.
+- Fixed: `bunny plan` (and `check`, `switch`, `diff`) with a copy of
+  `bunny.toml` somewhere else left out this computer's host file, so GRUB,
+  the kernel and the rest showed as "would be removed". A copy with no
+  `hosts/` folder next to it now uses this computer's file from
+  `/etc/bunny/hosts/`, and says so.
 - The boot menu's "Earlier versions" and `bunny generations` say what each
   version was before in words: "before removing tree" or "before adding
   tmux and cronie" instead of "before − tree" or "before a switch: + tmux".

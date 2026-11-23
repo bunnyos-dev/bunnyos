@@ -50,6 +50,8 @@ pub struct Plan {
     pub security: crate::security::Changes,
     /// The boot menu's undo entry (`[boot]`).
     pub boot: crate::boot::Changes,
+    /// What's left to set up for the console font that draws ✓ ✗ ⚠.
+    pub console_font: Vec<crate::console_font::Step>,
     /// Packages, services and packages' USE flags that are only in effect
     /// because of `[desktop]`, so they can be marked "from [desktop]".
     pub from_desktop: BTreeSet<String>,
@@ -92,6 +94,7 @@ impl Plan {
             && self.enable_services.is_empty()
             && self.security.is_empty()
             && self.boot.is_empty()
+            && self.console_font.is_empty()
     }
 
     /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
@@ -140,6 +143,9 @@ impl Plan {
         }
         if !self.boot.tidy.is_empty() {
             parts.push("tidier boot menu".into());
+        }
+        if !self.console_font.is_empty() {
+            parts.push("console font".into());
         }
 
         const MAX: usize = 6;
@@ -356,6 +362,15 @@ impl Plan {
                 "    The files are backed up first, and undoing this change puts them back.\n\n",
             );
         }
+        if !self.console_font.is_empty() {
+            out.push_str("Console font, so ✓ ✗ ⚠ show on the text console:\n");
+            for step in &self.console_font {
+                let _ = writeln!(out, "  + {}", step.describe());
+            }
+            out.push_str(
+                "    /etc/conf.d/consolefont is backed up first, and undoing this change puts it back.\n\n",
+            );
+        }
         if self.boot.remove_entry {
             out.push_str("Boot menu:\n  - remove bunny's entries (Undo the last change, Earlier versions)\n\n");
         }
@@ -559,6 +574,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
         removal_requested: false,
         from_desktop,
         boot: crate::boot::changes(&config.boot, root),
+        console_font: crate::console_font::needed(root),
         security: config
             .security
             .as_ref()

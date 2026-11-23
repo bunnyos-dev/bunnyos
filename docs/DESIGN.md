@@ -820,9 +820,21 @@ Needs the Baseline image (phases 6 and 7).
   `/etc/conf.d/consolefont` with the `consolefont` service in the boot
   runlevel. The ISO build checks the font has all four marks. A real ⚠
   glyph would need our own font (later, with the logo work).
-  Portage and Python are still in it (removing them is later work), so it's
-  bigger than the target; the package tree, docs and kernel sources are
-  removed.
+  **Size (November 2026):** about 850 MB (it was about 1.45 GB), with a
+  1 GB budget for this image. `tools/iso/smaller.sh` removes what the USB
+  never needs, since everything `bunny install` builds or installs happens
+  inside the new system (a full stage3 with its own compiler, Portage and
+  Python): the package tree and downloaded packages, docs, translations,
+  headers and static libraries, the compiler (its runtime libraries stay),
+  build tools, Portage, Python and Perl, Qualcomm's Snapdragon firmware
+  (except what x86 hardware can ask for, like mobile broadband cards),
+  Intel's camera, AI, sensor and sound firmware, and sound and camera
+  drivers. Network (Wi-Fi, Ethernet, Bluetooth) and graphics drivers and
+  firmware all stay. The system is packed with xz (1 MB blocks, x86
+  filter). `tools/iso/check.sh` then checks every program still has its
+  libraries and the commands the USB uses start, and the build fails
+  otherwise; `tools/iso/sizes.sh` shows what takes the space on each CI
+  run's page.
 - Without a Microsoft-signed shim, Secure Boot must be off to boot the USB.
 
 ### Hosting

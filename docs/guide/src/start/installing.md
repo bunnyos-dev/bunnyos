@@ -12,7 +12,7 @@ terminal, your account, encryption, and undo. A desktop is the
 
 - A 64-bit (x86-64) computer that starts in **UEFI** mode. Almost every
   computer from the last ten years does.
-- A USB stick of 2 GB or more. It's erased.
+- A USB stick of 1 GB or more (the image is about 850 MB). It's erased.
 - A disk of at least 20 GB for Bunny Linux. **The whole disk is erased**
   (to keep another system on it, see
   [installing onto your own partitions](../reference/install.md#installing-onto-your-own-partitions)).

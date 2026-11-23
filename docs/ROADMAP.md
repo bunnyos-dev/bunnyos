@@ -453,6 +453,10 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       packages (`bunny-release`).
 - [ ] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
+- [~] **A smaller live USB** (asked for by the maintainer): it was about
+      1.45 GB, near its budget. Measure what takes the space and remove what
+      the USB never needs, keeping network and graphics drivers and
+      firmware. Now about 850 MB. **(VM)**
 
 ## Talk to Portage directly (after the dry run and the laptop)
 

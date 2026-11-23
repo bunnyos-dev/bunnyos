@@ -10,6 +10,10 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The live USB image is about 850 MB instead of about 1.45 GB, so a 1 GB
+  USB stick is enough. It no longer carries a compiler, Portage, Python or
+  firmware for phone chips, cameras and sound; network and graphics drivers
+  and firmware all stay, and installing works the same.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

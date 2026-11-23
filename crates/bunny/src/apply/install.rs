@@ -21,8 +21,21 @@ pub(super) fn install_quietly(
     opts: &Options,
     outcome: &mut Outcome,
 ) -> Result<()> {
-    let update = ["emerge", "--update", "--deep", "--newuse", "--color=n"];
+    // --ask=n: EMERGE_DEFAULT_OPTS may say --ask, but bunny asks itself and
+    // emerge has no terminal here, so it would refuse.
+    let update = [
+        "emerge",
+        "--update",
+        "--deep",
+        "--newuse",
+        "--color=n",
+        "--ask=n",
+    ];
     let (list, dry_run_log) = ask_portage(root, runner, opts, outcome, &update)?;
+    let left_out = left_out(plan, &list);
+    if !left_out.is_empty() {
+        return explain_left_out(root, &left_out, runner, opts, outcome);
+    }
     if list.is_empty() {
         println!("emerge has nothing to install.");
         return Ok(());
@@ -54,41 +67,96 @@ fn ask_portage(
     println!("\nAsking Portage what it needs to do…");
     let mut pretend = cmd(update);
     pretend.insert(1, "--pretend".into());
+    // --verbose shows each package's USE flags, with the changed ones
+    // marked, so a rebuild can say why it happens.
+    pretend.push("--verbose".into());
     pretend.push("@world".into());
     // Portage's own answer, as data. emerge's screen text only when that
     // isn't available (and to explain a refusal).
-    Ok(match crate::helper::plan(runner) {
-        Some(list) => (
-            list,
-            "(the install list came from bunny's Portage helper)\n".to_string(),
-        ),
-        None => {
-            let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
-            // --color=n should mean no color codes, but strip any that slip through:
-            // an invisible code breaks reading the message.
-            let raw = output;
-            let output = explain::strip_ansi(&raw);
-            if !ok {
-                discard(root, runner, outcome)?;
-                let log = save_log(
-                    root,
-                    &opts.stamp,
-                    "emerge",
-                    &format!("$ {}\n{raw}", pretend.join(" ")),
-                );
-                let text = refusal_message(&output, log);
-                return Err(Refused(text).into());
-            }
-
-            let list = crate::emerge::parse_merge_list(&output);
-            (list, format!("$ {}\n{output}", pretend.join(" ")))
+    let problems = match crate::helper::plan(runner) {
+        crate::helper::PlanAnswer::List(list) => {
+            return Ok((
+                list,
+                "(the install list came from bunny's Portage helper)\n".to_string(),
+            ))
         }
-    })
+        crate::helper::PlanAnswer::Refused(problems) => problems,
+        crate::helper::PlanAnswer::Unavailable => Vec::new(),
+    };
+    // emerge's text: the install list when the helper couldn't answer, and
+    // the full message for the log (and for problems the helper doesn't
+    // report as data yet) when Portage refused.
+    let (ok, output) = runner.run_quiet(&pretend, &mut |_| {})?;
+    // --color=n should mean no color codes, but strip any that slip through:
+    // an invisible code breaks reading the message.
+    let raw = output;
+    let output = explain::strip_ansi(&raw);
+    if !ok {
+        discard(root, runner, outcome)?;
+        let log = save_log(
+            root,
+            &opts.stamp,
+            "emerge",
+            &format!("$ {}\n{raw}", pretend.join(" ")),
+        );
+        let text = refusal_message(&output, &problems, log);
+        return Err(Refused(text).into());
+    }
+    let list = crate::emerge::parse_merge_list(&output);
+    Ok((list, format!("$ {}\n{output}", pretend.join(" "))))
 }
 
-/// Explains why emerge refused before installing anything.
-fn refusal_message(output: &str, log: Option<PathBuf>) -> String {
-    let explained = explain::explain(output);
+/// Packages you added that emerge's plan doesn't install. Updating
+/// `@world`, emerge skips a package it can't install (only a testing
+/// version, masked) with a warning instead of failing, so the plan alone
+/// would say there's nothing to do.
+fn left_out(plan: &Plan, list: &[Merge]) -> Vec<String> {
+    plan.add_packages
+        .iter()
+        .filter(|p| !list.iter().any(|m| &m.name == *p))
+        .cloned()
+        .collect()
+}
+
+/// Asks emerge about the left-out packages by name, which fails with the
+/// reason instead of skipping them, and explains it. Nothing is changed.
+fn explain_left_out(
+    root: &Path,
+    left_out: &[String],
+    runner: &mut dyn Runner,
+    opts: &Options,
+    outcome: &mut Outcome,
+) -> Result<()> {
+    let mut pretend = cmd(&["emerge", "--pretend", "--verbose", "--color=n", "--ask=n"]);
+    pretend.extend(left_out.iter().cloned());
+    let (_ok, raw) = runner.run_quiet(&pretend, &mut |_| {})?;
+    let output = explain::strip_ansi(&raw);
+    discard(root, runner, outcome)?;
+    let log = save_log(
+        root,
+        &opts.stamp,
+        "emerge",
+        &format!("$ {}\n{raw}", pretend.join(" ")),
+    );
+    let mut text = refusal_message(&output, &[], log);
+    if explain::explain_with_problems(&output, &[]).is_empty() {
+        text = format!(
+            "emerge's plan leaves out {}, although your config asks for {}.\n{text}",
+            left_out.join(", "),
+            if left_out.len() == 1 { "it" } else { "them" },
+        );
+    }
+    Err(Refused(text).into())
+}
+
+/// Explains why emerge refused before installing anything: from the Portage
+/// helper's data where it has some, otherwise from emerge's text.
+fn refusal_message(
+    output: &str,
+    problems: &[crate::helper::Problem],
+    log: Option<PathBuf>,
+) -> String {
+    let explained = explain::explain_with_problems(output, problems);
     let mut text = String::from(
         "emerge found a problem before installing anything, so nothing was changed.\n",
     );
@@ -206,7 +274,16 @@ fn run_install(
         );
         bail!(
             "{}",
-            interrupted_message(reached.as_ref(), &plan.add_packages, outcome)
+            interrupted_message(
+                reached.as_ref(),
+                &plan.add_packages,
+                outcome,
+                if opts.update_all {
+                    "bunny update"
+                } else {
+                    "bunny switch"
+                },
+            )
         );
     }
     let log_text = format!("{dry_run_log}\n$ {}\n{install_output}", install.join(" "));
@@ -242,42 +319,40 @@ fn run_install(
 }
 
 /// Shows which packages aren't needed anymore and asks before removing them
-/// (always, even with --yes). Returns false if they weren't removed.
+/// (even with --yes). Returns false if they weren't removed.
+///
+/// One exception, so a plain `bunny remove` asks once: when the user
+/// already said yes to the plan (not `--yes`) and the list is exactly the
+/// packages the plan showed as removed (`planned`), nothing more, bunny
+/// doesn't ask again.
+///
+/// The list comes from bunny's Portage helper when it can answer; then
+/// exactly the packages shown are removed (`emerge --depclean =cat/pkg-1.0
+/// …`, which still keeps any that something needs). Otherwise from
+/// `emerge --depclean --pretend`'s text, as before.
 pub(super) fn remove_quietly(
     runner: &mut dyn Runner,
     opts: &Options,
     outcome: &Outcome,
+    planned: &[String],
 ) -> Result<bool> {
-    let (ok, output) = runner.run_quiet(
-        &cmd(&["emerge", "--depclean", "--pretend", "--color=n"]),
-        &mut |_| {},
-    )?;
-    if !ok {
-        return Ok(false);
-    }
-    let list = crate::emerge::parse_depclean(&output).unwrap_or_default();
-    let count = crate::emerge::depclean_count(&output).unwrap_or(0);
-    if list.len() != count {
-        // emerge's output changed shape: let emerge show its own list and ask.
-        return runner.run(&cmd(&["emerge", "--depclean", "--ask"]));
-    }
+    let (list, from_helper) = match crate::helper::depclean(runner) {
+        Some(list) => (list, true),
+        None => match depclean_from_emerge(runner)? {
+            Removals::List(list) => (list, false),
+            Removals::Failed => return Ok(false),
+            // emerge's output changed shape: let emerge show its own list and ask.
+            Removals::Unreadable => return runner.run(&cmd(&["emerge", "--depclean", "--ask"])),
+        },
+    };
     if list.is_empty() {
         return Ok(true);
     }
-    println!("\nThese packages aren't needed anymore (nothing you asked for uses them):");
-    let split: Vec<(&str, &str)> = list
-        .iter()
-        .map(|cpv| match crate::import::strip_version(cpv) {
-            Some(name) => (name, &cpv[name.len() + 1..]),
-            None => (cpv.as_str(), ""),
-        })
-        .collect();
-    let width = split.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
-    for (name, version) in split {
-        println!("  - {name:<width$}  {version}");
-    }
+    print!("{}", describe_removals(&list));
     let undoable = outcome.snapshot.is_some();
-    if !(opts.confirm)("Remove them?", undoable)? {
+    if !opts.yes && same_as_planned(&list, planned) {
+        println!("  These are the packages the plan showed, so removing them now.");
+    } else if !(opts.confirm)("Remove them?", undoable)? {
         return Ok(false);
     }
     let mut progress = crate::progress::Ticker::new();
@@ -286,7 +361,14 @@ pub(super) fn remove_quietly(
             progress.step(&format!("[{n}/{total}] Removing {name}"), None, None);
         }
     };
-    let (ok, _) = runner.run_quiet(&cmd(&["emerge", "--depclean", "--color=n"]), &mut on_line)?;
+    let mut remove = cmd(&["emerge", "--depclean", "--color=n", "--ask=n"]);
+    if from_helper {
+        // Only what was shown and agreed to. emerge checks again that
+        // nothing needs them, so a difference between the helper and emerge
+        // can only mean removing less, never more.
+        remove.extend(list.iter().map(|r| format!("={}", r.cpv())));
+    }
+    let (ok, _) = runner.run_quiet(&remove, &mut on_line)?;
     progress.finish();
     if ok {
         println!(
@@ -298,12 +380,93 @@ pub(super) fn remove_quietly(
     Ok(ok)
 }
 
+/// Whether emerge wants to remove exactly the packages the plan showed as
+/// leaving the config (world entries, maybe with a `:slot`), and nothing
+/// more.
+pub(super) fn same_as_planned(list: &[crate::helper::Removal], planned: &[String]) -> bool {
+    let mut removing: Vec<&str> = list.iter().map(|r| r.name.as_str()).collect();
+    let mut shown: Vec<&str> = planned
+        .iter()
+        .map(|atom| atom.split(':').next().unwrap_or(atom))
+        .collect();
+    removing.sort_unstable();
+    removing.dedup();
+    shown.sort_unstable();
+    shown.dedup();
+    !removing.is_empty() && removing == shown
+}
+
+/// What `emerge --depclean --pretend` said it would remove.
+enum Removals {
+    List(Vec<crate::helper::Removal>),
+    /// emerge failed (it explains on its own when run for real).
+    Failed,
+    /// The list and the count didn't match: emerge's wording changed.
+    Unreadable,
+}
+
+/// The fallback when the helper can't answer: emerge's own text.
+fn depclean_from_emerge(runner: &mut dyn Runner) -> Result<Removals> {
+    let (ok, output) = runner.run_quiet(
+        &cmd(&["emerge", "--depclean", "--pretend", "--color=n", "--ask=n"]),
+        &mut |_| {},
+    )?;
+    if !ok {
+        return Ok(Removals::Failed);
+    }
+    let list = crate::emerge::parse_depclean(&output).unwrap_or_default();
+    let count = crate::emerge::depclean_count(&output).unwrap_or(0);
+    if list.len() != count {
+        return Ok(Removals::Unreadable);
+    }
+    Ok(Removals::List(
+        list.iter()
+            .map(|cpv| {
+                let (name, version) = match crate::import::strip_version(cpv) {
+                    Some(name) => (name, &cpv[name.len() + 1..]),
+                    None => (cpv.as_str(), ""),
+                };
+                crate::helper::Removal {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    needed_by: Vec::new(),
+                }
+            })
+            .collect(),
+    ))
+}
+
+/// The list shown before asking, one package a line, with why it goes when
+/// Portage said (another package in the list was what needed it).
+pub(super) fn describe_removals(list: &[crate::helper::Removal]) -> String {
+    let mut out =
+        String::from("\nThese packages aren't needed anymore (nothing you asked for uses them):\n");
+    let name_width = list.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    let version_width = list.iter().map(|r| r.version.len()).max().unwrap_or(0);
+    for r in list {
+        let line = if r.needed_by.is_empty() {
+            format!("  - {:<name_width$}  {}", r.name, r.version)
+        } else {
+            format!(
+                "  - {:<name_width$}  {:<version_width$}  (only {} used it)",
+                r.name,
+                r.version,
+                r.needed_by.join(", ")
+            )
+        };
+        out.push_str(line.trim_end());
+        out.push('\n');
+    }
+    out
+}
+
 /// What to tell someone who pressed Ctrl+C while emerge was installing.
 /// `reached` is (the package emerge was on, of how many, its name).
 pub(super) fn interrupted_message(
     reached: Option<&(usize, usize, String)>,
     asked: &[String],
     outcome: &Outcome,
+    command: &str,
 ) -> String {
     let mut text = String::from("Stopped with Ctrl+C while installing.\n");
     match reached {
@@ -331,7 +494,9 @@ pub(super) fn interrupted_message(
             snapshot.display()
         ));
     }
-    text.push_str("  • Finish it later: `bunny switch` picks up where this stopped.");
+    text.push_str(&format!(
+        "  • Finish it later: `{command}` picks up where this stopped."
+    ));
     if let Some(log) = &outcome.log {
         text.push_str(&format!(
             "\nemerge's output so far is in {}.",
@@ -382,6 +547,12 @@ pub(super) fn is_tip(e: &explain::Explanation) -> bool {
 /// doesn't show up as a generation that changed nothing.
 pub(super) fn discard(root: &Path, runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
     restore_files(root, &outcome.backup_dir)?;
+    drop_snapshot(runner, outcome)
+}
+
+/// Deletes the snapshot taken for this switch (and its note), for a switch
+/// that stopped before changing anything.
+pub(super) fn drop_snapshot(runner: &mut dyn Runner, outcome: &mut Outcome) -> Result<()> {
     if let Some(snapshot) = outcome.snapshot.take() {
         let (ok, _) = runner.run_quiet(
             &cmd(&["btrfs", "subvolume", "delete", &snapshot.to_string_lossy()]),

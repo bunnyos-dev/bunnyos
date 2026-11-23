@@ -35,9 +35,17 @@ pub struct Config {
     /// Developer mode: recording commands and sending reports.
     #[serde(default)]
     pub dev: crate::dev::Dev,
+    /// What a graphical desktop needs from the base system.
+    #[serde(default)]
+    pub desktop: crate::desktop::Desktop,
     /// The host file read on top of this config, if there was one.
     #[serde(skip)]
     pub host: Option<HostLayer>,
+    /// This computer's host file in /etc/bunny/hosts, when it exists but
+    /// wasn't read because the config has its own `hosts/` folder without
+    /// a file for this computer.
+    #[serde(skip)]
+    pub host_left_out: Option<std::path::PathBuf>,
 }
 
 /// `hosts/<host name>.toml` next to the config: what belongs to one
@@ -82,6 +90,9 @@ pub struct HostLayer {
     pub name: String,
     pub path: std::path::PathBuf,
     pub machine: Option<Machine>,
+    /// Read from /etc/bunny/hosts because the config (a copy somewhere
+    /// else) has no `hosts/` folder of its own.
+    pub borrowed: bool,
 }
 
 /// This computer's name: OpenRC's setting first (so it's right inside a
@@ -118,6 +129,52 @@ pub fn host_path(config: &Path, host: &str) -> std::path::PathBuf {
         .unwrap_or(Path::new("."))
         .join("hosts")
         .join(format!("{host}.toml"))
+}
+
+/// Where this computer's host files live on the system.
+pub const SYSTEM_HOSTS: &str = "/etc/bunny/hosts";
+
+/// Which host file goes with the config at `config` for `host`.
+///
+/// `hosts/<host>.toml` next to the config, as always. A config with no
+/// `hosts/` folder next to it (a copy in your home folder, say) borrows
+/// this computer's file from `system_hosts` (normally /etc/bunny/hosts):
+/// without it, the packages only this computer has (GRUB, the kernel…)
+/// would look like they should be removed. Returns the file and whether
+/// it was borrowed, or `Err` with this computer's file when the config
+/// has a `hosts/` folder without a file for this computer (so it's left
+/// out on purpose, and bunny says so).
+pub fn host_file_for(
+    config: &Path,
+    host: &str,
+    system_hosts: Option<&Path>,
+) -> std::result::Result<Option<(std::path::PathBuf, bool)>, std::path::PathBuf> {
+    let next_to = host_path(config, host);
+    if next_to.is_file() {
+        return Ok(Some((next_to, false)));
+    }
+    let Some(system_hosts) = system_hosts else {
+        return Ok(None);
+    };
+    let system = system_hosts.join(format!("{host}.toml"));
+    if !system.is_file() || same_file(&system, &next_to) {
+        return Ok(None);
+    }
+    if next_to.parent().is_some_and(Path::is_dir) {
+        return Err(system);
+    }
+    Ok(Some((system, true)))
+}
+
+/// Whether two paths name the same file (or the same missing one).
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (
+        a.canonicalize(),
+        b.parent().and_then(|p| p.canonicalize().ok()),
+    ) {
+        (Ok(a), Some(b_dir)) => b.file_name().is_some_and(|n| a == b_dir.join(n)),
+        _ => a == b,
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -176,8 +233,9 @@ impl fmt::Display for Problem {
 
 impl Config {
     /// USE flags per package as they should be applied: the config's own,
-    /// plus Bunny Linux defaults for packages bunny installs itself. A package's
-    /// own `[pkg]` entry always wins over a default.
+    /// plus Bunny Linux defaults for packages bunny installs itself and the
+    /// ones `[desktop]` needs. A package's own `[pkg]` entry always wins over
+    /// a default.
     pub fn use_flags(&self) -> BTreeMap<String, Vec<String>> {
         let mut flags: BTreeMap<String, Vec<String>> = self
             .pkg
@@ -185,6 +243,14 @@ impl Config {
             .filter(|(_, s)| !s.use_flags.is_empty())
             .map(|(atom, s)| (atom.clone(), s.use_flags.clone()))
             .collect();
+        for (atom, defaults) in self.desktop.use_flags() {
+            if !self.pkg.contains_key(*atom) {
+                flags.insert(
+                    atom.to_string(),
+                    defaults.iter().map(|f| f.to_string()).collect(),
+                );
+            }
+        }
         if let Some(sec) = &self.security {
             for (atom, defaults) in sec.privilege.default_use() {
                 if !self.pkg.contains_key(*atom) {
@@ -198,6 +264,30 @@ impl Config {
         flags
     }
 
+    /// Services to start at boot: `services`, plus the ones `[desktop]` needs.
+    pub fn wanted_services(&self) -> Vec<String> {
+        let mut all = self.services.clone();
+        for service in self.desktop.services() {
+            if !all.iter().any(|s| s == service) {
+                all.push(service.to_string());
+            }
+        }
+        all
+    }
+
+    /// Whether a package, service or package's USE flags are in effect only
+    /// because of `[desktop]` (not also written in the config itself), so
+    /// `plan` and `diff` can say where they come from.
+    pub fn added_by_desktop(&self, name: &str) -> bool {
+        let package =
+            self.desktop.packages().contains(&name) && !self.packages.iter().any(|p| p == name);
+        let service =
+            self.desktop.services().contains(&name) && !self.services.iter().any(|s| s == name);
+        let flags = self.desktop.use_flags().iter().any(|(a, _)| *a == name)
+            && !self.pkg.contains_key(name);
+        package || service || flags
+    }
+
     /// Accepted keywords per package, from `[pkg] keywords`.
     pub fn keywords(&self) -> BTreeMap<String, Vec<String>> {
         self.pkg
@@ -207,30 +297,45 @@ impl Config {
             .collect()
     }
 
-    /// Reads the config and, if there is one, this computer's host file.
+    /// Reads the config and, if there is one, this computer's host file
+    /// (borrowed from /etc/bunny/hosts for a copy with no `hosts/` folder;
+    /// see [`host_file_for`]).
     pub fn load(path: &Path) -> Result<Self> {
         let host = this_host(Path::new("/"));
-        Self::load_for_host(path, host.as_deref())
+        Self::load_with(path, host.as_deref(), Some(Path::new(SYSTEM_HOSTS)))
     }
 
-    /// Reads the config and the host file for `host` (if it exists).
+    /// Reads the config and the host file for `host` next to it (if it
+    /// exists).
     pub fn load_for_host(path: &Path, host: Option<&str>) -> Result<Self> {
+        Self::load_with(path, host, None)
+    }
+
+    /// Reads the config and the host file for `host`, borrowing it from
+    /// `system_hosts` as [`host_file_for`] says.
+    pub fn load_with(path: &Path, host: Option<&str>, system_hosts: Option<&Path>) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("Couldn't read {}", path.display()))?;
         let mut config = Self::parse(&text)
             .with_context(|| format!("{} has a mistake in it", path.display()))?;
         if let Some(name) = host {
-            let host_file = host_path(path, name);
-            if host_file.is_file() {
-                let text = std::fs::read_to_string(&host_file)
-                    .with_context(|| format!("Couldn't read {}", host_file.display()))?;
-                let layer: Host = toml::from_str(&text).with_context(|| {
-                    format!(
-                        "{} (the settings for this computer) has a mistake in it",
-                        host_file.display()
-                    )
-                })?;
-                config.add_host(name, host_file, layer);
+            match host_file_for(path, name, system_hosts) {
+                Ok(Some((host_file, borrowed))) => {
+                    let text = std::fs::read_to_string(&host_file)
+                        .with_context(|| format!("Couldn't read {}", host_file.display()))?;
+                    let layer: Host = toml::from_str(&text).with_context(|| {
+                        format!(
+                            "{} (the settings for this computer) has a mistake in it",
+                            host_file.display()
+                        )
+                    })?;
+                    config.add_host(name, host_file, layer);
+                    if let Some(h) = config.host.as_mut() {
+                        h.borrowed = borrowed;
+                    }
+                }
+                Ok(None) => {}
+                Err(left_out) => config.host_left_out = Some(left_out),
             }
         }
         Ok(config)
@@ -255,6 +360,7 @@ impl Config {
             name: name.to_string(),
             path,
             machine: host.machine,
+            borrowed: false,
         });
     }
 
@@ -518,6 +624,57 @@ mod tests {
     }
 
     #[test]
+    fn a_copy_elsewhere_borrows_this_computers_host_file() {
+        // /etc/bunny with this computer's host file, and a copy of
+        // bunny.toml in a home folder with no hosts/ next to it.
+        let sys = tempfile::tempdir().unwrap();
+        let hosts = sys.path().join("etc/bunny/hosts");
+        std::fs::create_dir_all(&hosts).unwrap();
+        std::fs::write(
+            hosts.join("desktop.toml"),
+            "packages = [\"sys-boot/grub\", \"sys-kernel/gentoo-kernel-bin\"]\n",
+        )
+        .unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let copy = home.path().join("bunny.toml");
+        std::fs::write(&copy, "packages = [\"app-misc/tmux\"]\n").unwrap();
+
+        let c = Config::load_with(&copy, Some("desktop"), Some(&hosts)).unwrap();
+        // Without the host file, GRUB and the kernel would be "removed".
+        assert!(
+            c.packages.contains(&"sys-boot/grub".to_string()),
+            "{:?}",
+            c.packages
+        );
+        let host = c.host.as_ref().unwrap();
+        assert!(host.borrowed);
+        assert_eq!(host.path, hosts.join("desktop.toml"));
+
+        // A copy with its own hosts/ folder, but no file for this computer:
+        // left out on purpose, and remembered so bunny can say so.
+        std::fs::create_dir_all(home.path().join("hosts")).unwrap();
+        let c = Config::load_with(&copy, Some("desktop"), Some(&hosts)).unwrap();
+        assert!(c.host.is_none());
+        assert_eq!(c.host_left_out, Some(hosts.join("desktop.toml")));
+
+        // Its own file wins, and isn't borrowed.
+        std::fs::write(home.path().join("hosts/desktop.toml"), "packages = []\n").unwrap();
+        let c = Config::load_with(&copy, Some("desktop"), Some(&hosts)).unwrap();
+        let host = c.host.as_ref().unwrap();
+        assert!(!host.borrowed);
+        assert_eq!(c.host_left_out, None);
+
+        // The real config's own folder is never "borrowed" from itself.
+        let real = sys.path().join("etc/bunny/bunny.toml");
+        std::fs::write(&real, "").unwrap();
+        let c = Config::load_with(&real, Some("desktop"), Some(&hosts)).unwrap();
+        assert!(!c.host.as_ref().unwrap().borrowed);
+        // Nothing for this computer anywhere: nothing to say.
+        let c = Config::load_with(&copy, Some("laptop"), Some(&hosts)).unwrap();
+        assert!(c.host.is_none() && c.host_left_out.is_none());
+    }
+
+    #[test]
     fn explains_a_mistake_in_the_host_file() {
         let dir = tempfile::tempdir().unwrap();
         let config = dir.path().join("bunny.toml");
@@ -643,6 +800,41 @@ mod tests {
         assert!(is_use_flag("python_targets_python3_12"));
         assert!(!is_use_flag("-"));
         assert!(!is_use_flag("bad flag"));
+    }
+
+    #[test]
+    fn desktop_adds_flags_services_and_packages_unless_set() {
+        let c = Config::parse(
+            "services = [\"sshd\", \"dbus\"]\n[desktop]\nwayland = true\n\
+             [pkg.\"sys-auth/seatd\"]\nuse = [\"-elogind\", \"server\"]\n",
+        )
+        .unwrap();
+        assert!(c.problems().is_empty(), "{:?}", c.problems());
+        let flags = c.use_flags();
+        assert_eq!(flags["sys-auth/pambase"], ["elogind"]);
+        // Your own [pkg] entry wins.
+        assert_eq!(flags["sys-auth/seatd"], ["-elogind", "server"]);
+        assert_eq!(c.wanted_services(), ["sshd", "dbus", "elogind"]);
+        assert!(c.added_by_desktop("sys-auth/pambase"));
+        assert!(!c.added_by_desktop("sys-auth/seatd"));
+        assert!(c.added_by_desktop("elogind"));
+        assert!(!c.added_by_desktop("dbus"), "also in `services`");
+        assert!(c.added_by_desktop("sys-auth/elogind"));
+        assert!(!c.added_by_desktop("sshd"));
+
+        // Without the section (or with it off): nothing extra.
+        for text in ["", "[desktop]\nwayland = false\n"] {
+            let c = Config::parse(text).unwrap();
+            assert!(c.use_flags().is_empty());
+            assert!(c.wanted_services().is_empty());
+            assert!(!c.added_by_desktop("elogind"));
+        }
+        assert!(Config::parse("[desktop]\nwm = \"mango\"\n").is_err());
+        // The section trap still explains a top-level key below [desktop].
+        let err = Config::parse("[desktop]\nwayland = true\nservices = []")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("move `services` above"), "{err}");
     }
 
     #[test]

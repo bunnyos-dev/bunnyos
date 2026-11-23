@@ -82,20 +82,148 @@ impl Explanation {
 pub const DEPCLEAN_REMINDER: &str = "emerge reminds you to remove unused packages";
 
 pub fn explain(output: &str) -> Vec<Explanation> {
+    finish(recognise(output).into_iter().map(|(_, e)| e).collect())
+}
+
+/// Which recogniser an explanation came from. The first three are the kinds
+/// bunny's Portage helper also reports as data.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Kind {
+    Use,
+    Keywords,
+    Masked,
+    Other,
+}
+
+/// Everything recognised in emerge's text, with the kind of each.
+fn recognise(output: &str) -> Vec<(Kind, Explanation)> {
     // Color codes are invisible on screen but break reading the text.
     let output = strip_ansi(output);
     let lines: Vec<&str> = output.lines().map(str::trim_end).collect();
     let mut found = Vec::new();
-    found.extend(use_changes(&lines));
-    found.extend(keyword_changes(&lines));
-    found.extend(masked(&lines));
-    found.extend(no_such_package(&lines));
-    found.extend(skipped_world_entries(&lines));
-    found.extend(slot_conflicts(&lines));
-    found.extend(blockers(&lines));
-    found.extend(fetch_failures(&lines));
-    found.extend(config_updates(&lines));
-    found.extend(notices(&lines));
+    let mut add = |kind, list: Vec<Explanation>| found.extend(list.into_iter().map(|e| (kind, e)));
+    add(Kind::Use, use_changes(&lines));
+    add(Kind::Keywords, keyword_changes(&lines));
+    add(Kind::Masked, masked(&lines));
+    add(Kind::Other, no_such_package(&lines));
+    add(Kind::Other, skipped_world_entries(&lines));
+    add(Kind::Other, slot_conflicts(&lines));
+    add(Kind::Other, blockers(&lines));
+    add(Kind::Other, fetch_failures(&lines));
+    add(Kind::Other, config_updates(&lines));
+    add(Kind::Other, notices(&lines));
+    found
+}
+
+/// Explains a refused plan: the problems bunny's Portage helper reported as
+/// data, plus anything else recognised in emerge's text. For each kind the
+/// helper reported, its data replaces the text (which stays the fallback for
+/// kinds it didn't report). One exception: when emerge's text says its own
+/// USE suggestion breaks a package's rules, the text's explanation of that
+/// is kept, since the helper doesn't report those rules yet.
+pub fn explain_with_problems(
+    output: &str,
+    problems: &[crate::helper::Problem],
+) -> Vec<Explanation> {
+    let text = recognise(output);
+    let mut data = from_problems(problems);
+    if text
+        .iter()
+        .any(|(kind, e)| *kind == Kind::Use && is_rules_conflict(e))
+    {
+        data.retain(|(kind, _)| *kind != Kind::Use);
+    }
+    let covered: Vec<Kind> = data.iter().map(|(kind, _)| *kind).collect();
+    let mut found: Vec<Explanation> = data.into_iter().map(|(_, e)| e).collect();
+    found.extend(
+        text.into_iter()
+            .filter(|(kind, _)| !covered.contains(kind))
+            .map(|(_, e)| e),
+    );
+    finish(found)
+}
+
+/// Explanations built from the helper's data.
+fn from_problems(problems: &[crate::helper::Problem]) -> Vec<(Kind, Explanation)> {
+    use crate::helper::Problem;
+    let chain =
+        |by: &[String]| -> Vec<String> { by.iter().map(|n| short(n).to_string()).collect() };
+    problems
+        .iter()
+        .map(|p| match p {
+            Problem::Keywords {
+                name,
+                version,
+                keyword,
+                required_by,
+            } => {
+                let e = if version.contains("9999") || keyword == "**" {
+                    live_version(
+                        name,
+                        &format!("={name}-{version} {keyword}"),
+                        &chain(required_by),
+                        false,
+                    )
+                } else {
+                    testing_version(name, keyword, &chain(required_by))
+                };
+                (Kind::Keywords, e)
+            }
+            Problem::Masked {
+                name,
+                reasons,
+                comment,
+                required_by,
+            } => {
+                let keyword = reasons
+                    .iter()
+                    .find_map(|r| r.strip_suffix(" keyword").filter(|k| k.starts_with('~')));
+                let e = if reasons.iter().any(|r| r == "package.mask") {
+                    masked_on_purpose(name, comment.as_deref())
+                } else if let Some(keyword) = keyword {
+                    testing_version(name, keyword, &chain(required_by))
+                } else if reasons.iter().any(|r| r == "missing keyword") {
+                    not_for_this_computer(name)
+                } else {
+                    Explanation::new(
+                        Severity::Problem,
+                        format!(
+                            "{} can't be installed: Gentoo marks it as masked ({}).",
+                            short(name),
+                            reasons.join(", ")
+                        ),
+                    )
+                    .fix("run the same bunny command with --verbose to see emerge's full message.")
+                };
+                (Kind::Masked, e)
+            }
+            Problem::Use {
+                name,
+                changes,
+                required_by,
+                ..
+            } => {
+                let flags = changes
+                    .iter()
+                    .map(|(flag, on)| {
+                        if *on {
+                            flag.clone()
+                        } else {
+                            format!("-{flag}")
+                        }
+                    })
+                    .collect();
+                (
+                    Kind::Use,
+                    use_change(name, flags, required_by.first().cloned()),
+                )
+            }
+        })
+        .collect()
+}
+
+/// Most important first, each once.
+fn finish(mut found: Vec<Explanation>) -> Vec<Explanation> {
     found.sort_by_key(|e| match e.severity {
         Severity::Problem => 0,
         Severity::Warning => 1,
@@ -481,65 +609,109 @@ fn keyword_changes(lines: &[&str]) -> Vec<Explanation> {
             };
             let package = base_name(atom);
             let live = atom.contains("9999") || keyword == "**";
-            let because = if chain.is_empty() {
-                String::new()
-            } else {
-                format!("It's needed because of: {}.", chain.join(" → "))
-            };
             if live {
-                let mut e = Explanation::new(
-                    Severity::Warning,
-                    format!(
-                        "emerge wants to use the live development version of {} ({line}).",
-                        short(&package)
-                    ),
-                )
-                .detail(
-                    "That's unreleased code built straight from the developers' git repository,",
-                )
-                .detail("not a tested release. Don't accept this.");
-                if !because.is_empty() {
-                    e = e.detail(because);
-                }
-                let mut fix = String::from(
-                    "run the command again with --autounmask=n to see the real problem,\n\
-                     and paste that into `bunny explain`.",
-                );
-                if written {
-                    let a = crate::security::admin();
-                    fix.push_str(&format!(
-                        "\nemerge saved this suggestion in waiting files. Delete them, don't accept them:\n\
-                         {a} find /etc/portage -name '._cfg*' -exec grep -l '9999' {{}} + | xargs -r {a} rm -v",
-                    ));
-                }
-                found.push(e.fix(fix));
+                found.push(live_version(&package, line, &chain, written));
             } else {
-                let mut e = Explanation::new(
-                    Severity::Problem,
-                    format!(
-                        "{} is only available as a testing version ({keyword}) right now.",
-                        short(&package)
-                    ),
-                )
-                .detail("Testing versions work for most people but haven't been declared stable by Gentoo yet.");
-                if !because.is_empty() {
-                    e = e.detail(because);
-                }
-                let keyword = if keyword.is_empty() {
-                    "~amd64"
-                } else {
-                    keyword
-                };
-                found.push(e.fix(format!(
-                    "to allow testing versions of it, add this to bunny.toml, then run\n\
-                     the command again:\n\
-                     [pkg.\"{package}\"]\n\
-                     keywords = [\"{keyword}\"]"
-                )));
+                found.push(testing_version(&package, keyword, &chain));
             }
         }
     }
     found
+}
+
+/// "It's needed because of: a → b."
+fn because(chain: &[String]) -> Option<String> {
+    (!chain.is_empty()).then(|| format!("It's needed because of: {}.", chain.join(" → ")))
+}
+
+/// emerge wants a live (`9999`) or any-keyword (`**`) version: risky.
+/// `line` is emerge's suggestion; `written`: emerge saved it in `._cfg` files.
+fn live_version(package: &str, line: &str, chain: &[String], written: bool) -> Explanation {
+    let mut e = Explanation::new(
+        Severity::Warning,
+        format!(
+            "emerge wants to use the live development version of {} ({line}).",
+            short(package)
+        ),
+    )
+    .detail("That's unreleased code built straight from the developers' git repository,")
+    .detail("not a tested release. Don't accept this.");
+    if let Some(because) = because(chain) {
+        e = e.detail(because);
+    }
+    let mut fix = String::from(
+        "run the command again with --autounmask=n to see the real problem,\n\
+         and paste that into `bunny explain`.",
+    );
+    if written {
+        let a = crate::security::admin();
+        fix.push_str(&format!(
+            "\nemerge saved this suggestion in waiting files. Delete them, don't accept them:\n\
+             {a} find /etc/portage -name '._cfg*' -exec grep -l '9999' {{}} + | xargs -r {a} rm -v",
+        ));
+    }
+    e.fix(fix)
+}
+
+/// Only a testing version would do. An empty `keyword` means `~amd64`.
+fn testing_version(package: &str, keyword: &str, chain: &[String]) -> Explanation {
+    let title = if keyword.is_empty() {
+        format!(
+            "{} is only available as a testing version right now.",
+            short(package)
+        )
+    } else {
+        format!(
+            "{} is only available as a testing version ({keyword}) right now.",
+            short(package)
+        )
+    };
+    let mut e = Explanation::new(Severity::Problem, title).detail(
+        "Testing versions work for most people but haven't been declared stable by Gentoo yet.",
+    );
+    if let Some(because) = because(chain) {
+        e = e.detail(because);
+    }
+    let keyword = if keyword.is_empty() {
+        "~amd64"
+    } else {
+        keyword
+    };
+    e.fix(format!(
+        "to allow testing versions of it, add this to bunny.toml, then run\n\
+         the command again:\n\
+         [pkg.\"{package}\"]\n\
+         keywords = [\"{keyword}\"]"
+    ))
+}
+
+/// No version has a keyword for this kind of computer.
+fn not_for_this_computer(package: &str) -> Explanation {
+    Explanation::new(
+        Severity::Problem,
+        format!(
+            "{} isn't available for your kind of computer (CPU architecture).",
+            short(package)
+        ),
+    )
+}
+
+/// In Gentoo's package.mask, with its comment when there is one.
+fn masked_on_purpose(package: &str, comment: Option<&str>) -> Explanation {
+    let mut e = Explanation::new(
+        Severity::Problem,
+        format!(
+            "Gentoo has blocked {} on purpose (it's \"masked\").",
+            short(package)
+        ),
+    );
+    if let Some(comment) = comment.filter(|c| !c.is_empty()) {
+        e = e.detail(format!("Gentoo's reason: {comment}"));
+    }
+    e.fix(format!(
+        "it's usually best not to use it. Remove {package} from your bunny.toml,\n\
+         or look for a replacement."
+    ))
 }
 
 fn masked(lines: &[&str]) -> Vec<Explanation> {
@@ -550,10 +722,24 @@ fn masked(lines: &[&str]) -> Vec<Explanation> {
         };
         let package = base_name(rest.split('"').next().unwrap_or(rest));
         let following = &lines[i + 1..];
-        let reason = following
+        // One line per version, and they can differ: a live `-9999` version
+        // usually has no keyword at all while the releases are testing
+        // versions. Explain the easiest way in: a testing version first,
+        // then a deliberate mask, and "not for your computer" only when
+        // that's true of every version.
+        let reasons: Vec<String> = following
             .iter()
-            .find_map(|l| l.split("(masked by: ").nth(1))
+            .take_while(|l| !l.trim().is_empty())
+            .filter_map(|l| l.split("(masked by: ").nth(1))
             .map(|r| r.trim_end_matches(')').to_string())
+            .collect();
+        let testing = |r: &&String| r.contains("keyword") && r.contains('~');
+        let reason = reasons
+            .iter()
+            .find(testing)
+            .or_else(|| reasons.iter().find(|r| !r.contains("missing keyword")))
+            .or(reasons.first())
+            .cloned()
             .unwrap_or_default();
         // Gentoo's comment explaining the mask: the "# " lines after the
         // package.mask file name, minus the first (author and date).
@@ -572,43 +758,12 @@ fn masked(lines: &[&str]) -> Vec<Explanation> {
                 .map(|w| w.trim_matches(|c: char| c == ')' || c == ','))
                 .unwrap_or("~amd64")
                 .to_string();
-            Explanation::new(
-                Severity::Problem,
-                format!(
-                    "{} is only available as a testing version right now.",
-                    short(&package)
-                ),
-            )
-            .detail("Testing versions work for most people but haven't been declared stable by Gentoo yet.")
-            .fix(format!(
-                "to allow testing versions of it, add this to bunny.toml, then run\n\
-                 the command again:\n\
-                 [pkg.\"{package}\"]\n\
-                 keywords = [\"{keyword}\"]"
-            ))
+            // Same words as the helper's data gives, so the two agree.
+            testing_version(&package, &keyword, &[])
         } else if reason.contains("missing keyword") {
-            Explanation::new(
-                Severity::Problem,
-                format!(
-                    "{} isn't available for your kind of computer (CPU architecture).",
-                    short(&package)
-                ),
-            )
+            not_for_this_computer(&package)
         } else {
-            let mut e = Explanation::new(
-                Severity::Problem,
-                format!(
-                    "Gentoo has blocked {} on purpose (it's \"masked\").",
-                    short(&package)
-                ),
-            );
-            if !comment.is_empty() {
-                e = e.detail(format!("Gentoo's reason: {}", comment.join(" ")));
-            }
-            e.fix(format!(
-                "it's usually best not to use it. Remove {package} from your bunny.toml,\n\
-                 or look for a replacement."
-            ))
+            masked_on_purpose(&package, Some(&comment.join(" ")))
         };
         found.push(e);
     }
@@ -827,6 +982,29 @@ fn notices(lines: &[&str]) -> Vec<Explanation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn masked_explains_the_testing_version_when_only_the_live_one_has_no_keyword() {
+        let text = "!!! All ebuilds that could satisfy \"gui-wm/dwl\" have been masked.\n\
+                    !!! One of the following masked packages is required to complete your request:\n\
+                    - gui-wm/dwl-9999::gentoo (masked by: missing keyword)\n\
+                    - gui-wm/dwl-0.9::gentoo (masked by: ~amd64 keyword)\n\
+                    - gui-wm/dwl-0.8::gentoo (masked by: ~amd64 keyword)\n\
+                    \n\
+                    For more information, see the MASKED PACKAGES section in the emerge\n";
+        let found = explain(text);
+        assert_eq!(found.len(), 1);
+        let shown = found[0].render();
+        assert!(
+            shown.contains("only available as a testing version"),
+            "{shown}"
+        );
+        assert!(shown.contains("keywords = [\"~amd64\"]"), "{shown}");
+        // Only the live version, with no keyword: not for this computer.
+        let live = "!!! All ebuilds that could satisfy \"x/y\" have been masked.\n\
+                    - x/y-9999::gentoo (masked by: missing keyword)\n\n";
+        assert!(explain(live)[0].render().contains("CPU architecture"));
+    }
 
     fn fixture(name: &str) -> String {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1154,5 +1332,164 @@ mod tests {
         assert_eq!(problems.len(), 1, "{found:?}");
         let text = problems[0].render();
         assert_eq!(text.matches("vulkan-loader").count(), 1, "{text}");
+    }
+
+    // From the Portage helper's data (`bunny-portage.py plan`, helper 3).
+
+    use crate::helper::Problem;
+
+    fn keywords(name: &str, version: &str, keyword: &str, by: &[&str]) -> Problem {
+        Problem::Keywords {
+            name: name.into(),
+            version: version.into(),
+            keyword: keyword.into(),
+            required_by: by.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn data_testing_version_matches_the_text_explanation() {
+        let data = explain_with_problems(
+            "",
+            &[keywords(
+                "dev-qt/qtbase",
+                "6.10.1",
+                "~amd64",
+                &["gui-apps/quickshell"],
+            )],
+        );
+        let text = explain(&fixture("keyword-testing.txt"));
+        assert_eq!(data, text);
+        assert!(data[0]
+            .fix
+            .as_deref()
+            .unwrap()
+            .contains("[pkg.\"dev-qt/qtbase\"]\nkeywords = [\"~amd64\"]"));
+    }
+
+    #[test]
+    fn data_live_version_is_a_warning() {
+        let found = explain_with_problems(
+            "",
+            &[keywords(
+                "dev-libs/openssl",
+                "9999",
+                "**",
+                &["net-misc/curl"],
+            )],
+        );
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].severity, Severity::Warning);
+        assert!(found[0]
+            .title
+            .contains("live development version of openssl"));
+        assert!(found[0].title.contains("=dev-libs/openssl-9999 **"));
+        assert!(found[0].details.iter().any(|d| d.contains("curl")));
+    }
+
+    #[test]
+    fn data_replaces_the_text_for_its_kind_only() {
+        // The text has a keyword change and a slot conflict; the data has
+        // the keyword change. It's explained once, from the data, and the
+        // slot conflict still comes from the text.
+        let text = format!(
+            "{}\n\n{}",
+            fixture("keyword-testing.txt"),
+            fixture("slot-conflict.txt")
+        );
+        let found =
+            explain_with_problems(&text, &[keywords("dev-qt/qtbase", "6.10.1", "~amd64", &[])]);
+        let testing: Vec<_> = found
+            .iter()
+            .filter(|e| e.title.contains("testing version"))
+            .collect();
+        assert_eq!(testing.len(), 1, "{found:#?}");
+        // From the data: no "needed because of" (the data said nothing).
+        assert!(testing[0].details.iter().all(|d| !d.contains("because")));
+        let from_text = explain(&fixture("slot-conflict.txt"));
+        assert!(!from_text.is_empty());
+        for e in from_text {
+            assert!(found.contains(&e), "{e:#?}");
+        }
+    }
+
+    #[test]
+    fn without_data_the_text_is_used() {
+        for name in ["keyword-testing.txt", "masked.txt", "use-change-swtpm.txt"] {
+            let text = fixture(name);
+            assert_eq!(explain_with_problems(&text, &[]), explain(&text), "{name}");
+        }
+    }
+
+    #[test]
+    fn data_masked_package() {
+        let masked = |reasons: &[&str], comment: Option<&str>| Problem::Masked {
+            name: "www-client/oldbrowser".into(),
+            reasons: reasons.iter().map(|s| s.to_string()).collect(),
+            comment: comment.map(String::from),
+            required_by: vec![],
+        };
+        // On purpose, with Gentoo's reason: the same as from the text.
+        let data = explain_with_problems(
+            "",
+            &[masked(
+                &["package.mask"],
+                Some("Unmaintained, many open security bugs. Removal on 2026-11-30."),
+            )],
+        );
+        assert_eq!(data, explain(&fixture("masked.txt")));
+
+        let testing = explain_with_problems("", &[masked(&["~amd64 keyword"], None)]);
+        assert!(testing[0].title.contains("testing version (~amd64)"));
+        let cpu = explain_with_problems("", &[masked(&["missing keyword"], None)]);
+        assert!(cpu[0].title.contains("kind of computer"));
+        let other = explain_with_problems("", &[masked(&["EAPI 99"], None)]);
+        assert!(other[0].title.contains("masked (EAPI 99)"), "{other:#?}");
+    }
+
+    #[test]
+    fn data_use_change_matches_the_text_explanation() {
+        let data = explain_with_problems(
+            "",
+            &[Problem::Use {
+                name: "net-libs/gnutls".into(),
+                version: "3.8.13".into(),
+                changes: [("pkcs11".to_string(), true), ("tools".to_string(), true)]
+                    .into_iter()
+                    .collect(),
+                required_by: vec!["app-crypt/swtpm".into()],
+            }],
+        );
+        assert_eq!(data, explain(&fixture("use-change-swtpm.txt")));
+
+        let off = explain_with_problems(
+            "",
+            &[Problem::Use {
+                name: "media-video/mpv".into(),
+                version: "0.40.0".into(),
+                changes: [("lua".to_string(), false)].into_iter().collect(),
+                required_by: vec![],
+            }],
+        );
+        assert!(off[0].title.contains("turned off: lua"), "{off:#?}");
+        assert!(off[0].fix.as_deref().unwrap().contains("use = [\"-lua\"]"));
+    }
+
+    #[test]
+    fn a_flag_rules_conflict_in_the_text_wins_over_use_data() {
+        // emerge's own USE suggestion breaks mpv's rules: only the text says
+        // that, so its explanation is kept and the data's plain change isn't
+        // shown on its own.
+        let text = fixture("required-use-mpv.txt");
+        let found = explain_with_problems(
+            &text,
+            &[Problem::Use {
+                name: "media-video/mpv".into(),
+                version: "0.40.0".into(),
+                changes: [("lua".to_string(), true)].into_iter().collect(),
+                required_by: vec![],
+            }],
+        );
+        assert_eq!(found, explain(&text));
     }
 }

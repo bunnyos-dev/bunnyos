@@ -51,6 +51,21 @@ list of dependencies is folded after the first 15 (`--verbose` shows them
 all). `compile` marks packages that are built on your computer instead of
 downloaded ready-made.
 
+Sometimes the list also has packages you already have, marked `~` and
+installed again at the same version. bunny says why when emerge does:
+
+```
+  ~ net-misc/curl      8.16.0 (rebuild: USE +adns)
+  ~ sys-devel/gettext  0.23.1 (rebuild: libunistring changed)
+```
+
+- `USE +adns`: a USE flag changed (`+` turned on, `-` turned off), so it's
+  built with the new setting.
+- `libunistring changed`: a library it uses got a new version that isn't
+  compatible with the old one, so it has to be rebuilt against it. When
+  bunny can't tell which library, it says `a library it uses changed`.
+- Just `(rebuild)`: emerge didn't say why.
+
 **Big programs:** some, like Firefox, take hours to compile. If a prebuilt
 version exists (`www-client/firefox-bin`), bunny says so before anything
 starts. Answer **n**, then `bunny add www-client/firefox-bin`.

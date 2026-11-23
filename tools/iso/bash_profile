@@ -1,6 +1,19 @@
 # Bunny Linux live USB: root's login on the screen.
 PS1='bunny-live # '
-# Give the network a few seconds before saying whether it's up.
+# On the screen: the graphical installer first (unless the boot menu's
+# terminal entry was chosen), then the terminal's welcome when it closes,
+# or if it can't start. The welcome waits for the network itself (up to
+# about 15 seconds).
 case "$(tty)" in
-    /dev/tty1) sleep 3; welcome ;;
+    /dev/tty1)
+        if [ -x /usr/local/bin/bunny-installer ] && ! grep -qw bunny.terminal /proc/cmdline; then
+            # No desktop: it draws straight to the screen.
+            if SLINT_BACKEND=linuxkms-noseat bunny-installer; then
+                clear
+            else
+                echo "The graphical installer couldn't start, so here's the terminal."
+            fi
+        fi
+        welcome
+        ;;
 esac

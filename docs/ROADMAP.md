@@ -35,6 +35,81 @@ The **whole vision** (all 9 phases) is roughly **two fifths done**.
 5. The maintainer's laptop
 6. The rest of the Portage helper
 
+**Stability first (decided November 21, 2026).** The graphical installer
+(#96) stays at part 1, plain, while everything gets as stable as possible.
+Its next parts (Wi-Fi, the top bar and step counter, the map, the
+`bunny.toml` panel) wait for this gate, and sessions don't start them before
+the maintainer says go. Tell the maintainer when the gate looks met:
+
+- [ ] Every "Fixes from the …" list above is empty (or only has items the
+      maintainer moved to later).
+- [ ] Two fresh installs from the USB in a row with nothing new found: one
+      with the terminal, one with the graphical installer.
+- [ ] The encrypted laptop-shaped VM passes (#47, #74, undo from the boot
+      menu with `/boot` on the EFI partition).
+- [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
+      with developer mode on, and the reports show nothing new that's
+      serious.
+- [ ] No open PR older than a few days that's waiting on a fix.
+
+**When this gate is met, Bunny Linux is 0.1 alpha.** Until then it's
+pre-alpha: it installs and boots, but fresh installs still find bugs and
+nobody uses it day to day yet. At alpha: tag and release 0.1 (see
+`docs/RELEASING.md`), say "alpha" in the guide's introduction, and remind the
+maintainer about hiring the artist (`docs/ARTIST-BRIEF.md`).
+
+**First after alpha (decided November 23, 2026): `make.conf` in
+`bunny.toml`.** Global USE flags, CFLAGS/CXXFLAGS, MAKEOPTS and the like are
+where most Gentoo tuning happens, and today they're the biggest thing outside
+the single file: edited by hand, not shown in `bunny plan`, not undone.
+Design it as "your layer" from docs/DESIGN.md (Baseline, then your USE and
+CFLAGS): bunny writes `make.conf` from the config, shows changes in the
+plan, backs it up, and undo restores it. Warn when a change rebuilds a lot
+(new CFLAGS or global USE means recompiling), and say that changing CFLAGS
+means no more prebuilt packages for what it affects.
+
+**Learning to customize, without examples that go stale (decided November
+23, 2026).** Teach people to read Gentoo's own information instead of
+copying flags that change:
+
+- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+      read a package's flags on packages.gentoo.org and the Gentoo wiki,
+      what `+`/`-` and defaults mean, and how to write what you found in
+      `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
+      worked example, but teach the method, not a fixed list of flags.
+- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+      each thing is written (a package with USE flags, a testing keyword, a
+      service), each pointing to its Guide page. Only stable, structural
+      examples; a test uncomments them and runs `bunny check`.
+- [ ] **After alpha: `bunny check` reads Gentoo's own flag list** (Portage's
+      metadata on this computer) and warns about a flag a package doesn't
+      have ("firefox has no USE flag `pgoo`; did you mean `pgo`?"), plus a
+      way to list a package's flags with Gentoo's descriptions. Then a
+      renamed or removed flag is caught on your own system, with nothing
+      for Bunny Linux to keep up to date by hand.
+
+**Flatpak in `bunny.toml` (brainstorm, November 23, 2026; no rush, after
+`make.conf`).** NixOS's `services.flatpak.enable` only installs Flatpak; apps
+are declared with community modules (nix-flatpak), which are deliberately
+"convergent": they manage the apps you list and don't claim to describe
+everything. Bunny's likely shape, to be designed properly first:
+
+- A `[flatpak]` section: `enable`, `remotes` (Flathub by default) and
+  `packages = [...]`; `bunny plan` shows Flatpak installs and removals next
+  to Portage ones, and `bunny switch` applies them.
+- Convergent by default: bunny only installs or removes the apps *it* lists
+  and never touches ones you installed by hand (an opt-in
+  `remove_unmanaged` later, like nix-flatpak's).
+- System-wide installs first (bunny runs as root); per-user later.
+- Open questions: does undo rewind Flatpak apps (is `/var/lib/flatpak` in
+  the snapshots, or on its own subvolume)? Should `bunny.lock` record
+  Flatpak commits, or are they honestly "latest from Flathub"? Update
+  schedule on OpenRC (cron or a bunny service; NixOS uses systemd timers).
+  Flatpak's dependencies (dbus, xdg-desktop-portal, elogind) and how
+  `[desktop]` covers them.
+- Fits docs/DESIGN.md's order for apps (Gentoo packages first, Flatpak for
+  large GUI apps such as Steam).
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,
@@ -204,7 +279,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 
 (Filled in from the maintainer's notes and developer-mode reports.)
 
-- [ ] **Bug: the time zone from `bunny install` isn't set.** After the
+- [x] **Bug: the time zone from `bunny install` isn't set.** After the
       install, `/etc/timezone` is missing and `/etc/localtime` still points
       to `zoneinfo/Factory` (from the stage3), so `date` shows `-00`.
       `inside.sh` writes `/etc/timezone` and runs `emerge --config
@@ -212,30 +287,30 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       Gentoo. Fix: make the link the way Gentoo's handbook now says for
       OpenRC (`ln -sf ../usr/share/zoneinfo/<zone> /etc/localtime`), and
       check it with a test.
-- [ ] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
+- [x] **Bug: `bunny status` shows ⚠ right after installing.** "Also starting
       at boot, not in your config: local, netmount". Those two are in the
       stage3's default runlevel, and the starter config doesn't list them.
       Fix: list them in the starter config, or have bunny treat OpenRC's own
       default services as part of the base system.
-- [ ] **Bug: `bunny report` swaps every "bunny" when your user name is
+- [x] **Bug: `bunny report` swaps every "bunny" when your user name is
       `bunny`.** The report read `/etc/you/you.toml`, `you update`, `you
       rollback list`. Replace the user name only where it's a user name
       (`/home/<name>`, `<name>@`, a login line), never inside bunny's own
       name, paths and commands. Add a test with the user name `bunny`.
-- [ ] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
+- [x] **"(rebuild)" with no reason.** `bunny add dev-util/github-cli` also
       reinstalled curl, gettext, iputils, libb2 and portage-utils, shown as
       "(rebuild)". Say why (a USE flag changed, a library they use changed).
-- [ ] **26 unread Gentoo announcements on a fresh install.** They're all
+- [x] **26 unread Gentoo announcements on a fresh install.** They're all
       older than the system. `bunny install` should mark them read
       (`eselect news read --quiet all`), so only new ones are mentioned.
-- [ ] **Guide, What to do first: the git steps don't work as written.**
+- [x] **Guide, What to do first: the git steps don't work as written.**
       `git init` makes a `master` branch (the page later pushes `main`), and
       the commit fails with "Author identity unknown" because root has no
       git name or email. Then `sudo git push` would fail too: the GitHub
       sign-in belongs to your user, not root. Fix the page (`git init -b
       main`, set a name and email for the repository, sign root in with
       `sudo gh auth login` + `sudo gh auth setup-git`), or better:
-- [ ] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
+- [x] **Idea: `bunny install` makes `/etc/bunny` a git repository** itself
       (branch `main`, a first commit "As installed", identity from the
       install's answers), and a later `bunny git`/`bunny publish` connects it
       to GitHub with your own sign-in. Then the Guide's git section is one
@@ -255,7 +330,8 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       registered ones, and offers to add the repository, with a plain
       warning that Gentoo doesn't check community overlays. Testing-only
       packages need `[pkg] keywords` too (not in `bunny.toml` yet).
-- [ ] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
+- [x] **Mango (any Wayland desktop) says "XDG_RUNTIME_DIR must be set".**
+      (`[desktop] wayland = true`, PR open)
       The install uses Gentoo's base profile, where logins don't go through
       elogind (`sys-auth/pambase` without `USE=elogind`), so no
       `/run/user/<id>` is made. Fix in the Guide now (add
@@ -265,13 +341,13 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       libseat is built without elogind (`[pkg."sys-auth/seatd"] use =
       ["elogind"]`). The fix should turn elogind on everywhere a desktop
       needs it at once (likely a desktop profile, or a set of USE flags).
-- [ ] **A switch that failed early leaves a generation behind.** The
+- [x] **A switch that failed early leaves a generation behind.** The
       switch that stopped at Gentoo's list (before changing anything) kept
       its snapshot, so `bunny generations` shows #6 and #7 with the same
       description, and #6 is a copy of the system before nothing happened.
       Delete the snapshot when a switch fails before changing anything (a
       cancelled one already does), or mark it "(stopped early)".
-- [ ] **Idea: Bunny Linux's own name and logo (fastfetch and friends).**
+- [x] **Idea: Bunny Linux's own name and logo (fastfetch and friends).** (bunny-overlay #3 and this repo's PR; placeholder logo)
       Tools like fastfetch read `/etc/os-release` to know which system they're
       on, and Gentoo's says Gentoo, so they show Gentoo's logo. Plan: a small
       `bunny-release` package in `::bunny` with Bunny Linux's os-release
@@ -279,40 +355,40 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       plus a system-wide fastfetch setting that uses it; later, offer the
       logo to fastfetch itself. It replaces a file from Gentoo's baselayout,
       so it's the first entry in OVERRIDES.md. Needs the logo (design work).
-- [ ] **Downloading a repository prints emaint's raw output** (git clone
+- [x] **Downloading a repository prints emaint's raw output** (git clone
       lines, "Performing Global Updates", every `profiles/updates` file,
       "Action: sync … returned code = 0"). Show one line per repository
       ("Downloading guru… ✓ 17.5 MB") and keep the rest in the log, like
       emerge's output.
-- [ ] **The repository trust warning counts as a problem in developer
+- [x] **The repository trust warning counts as a problem in developer
       mode.** Its ⚠ made `report = "auto"` send a report for a switch that
       worked. Use a symbol that isn't a problem marker (or skip plan
       warnings when deciding to auto-report).
-- [ ] **Guide, Helping test: sign in to GitHub before turning on
+- [x] **Guide, Helping test: sign in to GitHub before turning on
       `report = "auto"`.** Otherwise the first ⚠ (like the one above) prints
       "Couldn't send a report (the GitHub CLI isn't installed)". Swap steps 1
       and 2. Also say that without a desktop, `gh auth login` warns it can't
       copy the code or open a browser, which is expected: open
       github.com/login/device on another device and type the code.
-- [ ] **Live USB welcome says "Not online yet" when it is online.** The
+- [x] **Live USB welcome says "Not online yet" when it is online.** The
       welcome checks once, 3 seconds after login, by pinging
       `distfiles.gentoo.org` (needs DNS too). In the VM, `ping 1.1.1.1`
       worked right after. Likely the network or DNS wasn't up yet at that
       moment. Fix: wait up to ~15 s ("Checking the connection…"), check the
       address and DNS separately (so "online, but names don't work" is its
       own message), and say "type welcome to check again".
-- [ ] **The live USB console can't draw ✓ or ✗** (they show as `v` and
+- [x] **The live USB console can't draw ✓ or ✗** (they show as `v` and
       `x`, e.g. "v Dry run finished"). Check which symbols the console font
       has (✓ ✗ ⚠ ·) and load a font that has them on the USB (or fall back
       to plain text when the terminal is the Linux console).
-- [ ] **"Welcome to your new account!"** appears above the welcome on the
+- [x] **"Welcome to your new account!"** appears above the welcome on the
       live USB, which is confusing there (it isn't a new account). Find what
       prints it at the first login and turn it off on the USB.
-- [ ] **`bunny install --dry-run` is a wall of commands.** Every
+- [x] **`bunny install --dry-run` is a wall of commands.** Every
       `(would run)` line is shown, and long ones wrap. Decided with the
       maintainer: by default, the steps in plain words (each step's name and
       what it does); the exact commands only with `--dry-run --verbose`.
-- [ ] **A clean boot menu, soon (not waiting for phase 9).** The maintainer
+- [x] **A clean boot menu, soon (not waiting for phase 9).** The maintainer
       found the menu overwhelming: the Gentoo logo behind it, "Bunny Linux
       GNU/Linux", and every firmware entry (UiApp, DVD-ROM, PXE and HTTP
       boot, a second "Bunny Linux (EFI BootNext)"), with the Undo entry last
@@ -334,22 +410,128 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       - GRUB can't show plain text lines, so the change lines are entries
         that do nothing when picked. Hidden menu (Esc to show) and the
         real theme stay in phase 9.
-- [ ] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
+- [x] **The Undo entry's kernel line has `rootflags=subvol=@` twice**
       (once from GRUB's settings, once added by bunny). Harmless; add it
       only when it isn't already there.
-- [ ] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
+- [x] **The Undo entry's time is in UTC** ("back to 2026-11-18 21:46:15 UTC")
       even though the install asked for a time zone. Show local time, and for
       the first generation say "as installed".
-- [ ] **`tools/bunny-vm.sh ssh` warns "REMOTE HOST IDENTIFICATION HAS
+- [x] **`tools/bunny-vm.sh ssh` warns "REMOTE HOST IDENTIFICATION HAS
       CHANGED" for a new VM.** Every named VM (`VM=laptop`, `VM=fresh`, …)
       uses port 2223, so SSH remembers the last VM's key and refuses the new
       one. Fix: keep each VM's key in its own known_hosts file
       (`$VM_DIR/known_hosts`), or give each VM its own port.
-- [ ] **Developer mode can't record `bunny install`.** It's set in
+- [x] **Developer mode can't record `bunny install`.** It's set in
       `bunny.toml`, and the live USB has none, so the install itself (the
       part being tested most) isn't recorded. Idea: preview ISOs record by
       default, and the recording is copied into the new system so
       `bunny report` sends it after the first start.
+
+### Fixes from the Friday test
+
+(Found while testing the dry-run fixes together, on the `test/friday` branch.)
+
+- [x] **The boot menu's leftover clutter** (the rest of "A clean boot menu"):
+      the Gentoo theme (`GRUB_THEME=…/gentoo_glass` in `/etc/default/grub`),
+      "Bunny Linux GNU/Linux" (GRUB's `10_linux` always adds " GNU/Linux";
+      bunny writes the main entry itself instead), and every
+      "(EFI BootNext)" entry (`/etc/grub.d/31_efi_bootnext`; turn it off,
+      keep "UEFI Firmware Settings").
+- [x] **`git log` in /etc/bunny fails as your user** ("detected dubious
+      ownership"): `/etc/bunny` belongs to root. `bunny install` (and
+      `bunny publish`) add `/etc/bunny` to git's system-wide
+      `safe.directory`.
+- [~] **Install asks about encryption and swap** (/home on a second disk:
+      on hold, decided Saturday; `--home-disk` still works) (agreed with the
+      maintainer): a few questions after the disk, each with a recommended
+      answer and one line of why: encrypt? [Y/n], swap (Enter for none, a
+      size, or "hibernate"; encrypted with the disk), and /home on a second
+      disk when there is one. Enter through everything = today's install.
+      No partition sizes, mount points or filesystem menus (btrfs is needed
+      for undo, said in one line). At the end, print the same choices as
+      options (`bunny install --no-encrypt --swap 8G`) to repeat it. Full
+      control stays `--mounted` (the Guide's "Installing by hand").
+- [x] **Short passwords: warn, don't refuse.** Under 8 characters, say it's
+      easy to guess and suggest a longer one, then carry on.
+- [x] **`bunny install --dry-run` asks for a password** although nothing is
+      encrypted on a dry run. Skip it.
+- [x] **`bunny plan` without sudo says the undo entry can't be set up**
+      (it can't read `/boot`). Say "run with sudo to check the boot menu"
+      instead of guessing.
+- [~] **`bunny plan <copy>` silently drops the host file.** A copy of
+      `bunny.toml` elsewhere has no `hosts/` next to it, so this computer's
+      packages (GRUB, the kernel…) show as "would be removed". Use this
+      computer's host file, or say clearly that it isn't included.
+- [x] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
+      sudo's password and a package name that doesn't exist each sent a
+      report. Only bunny's own problems should.
+- [~] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
+      them?"). One question for a plain remove.
+- [~] **`bunny status` shows times in UTC**; the boot menu now uses local
+      time. Use local time everywhere (and "as installed" for the first).
+- [~] **"before − tree" in Earlier versions reads oddly.** Find clearer
+      wording for "the version before this change".
+- [~] **The install's recording says "0 s"**, and the first
+      `bunny report --dry-run` seemed to hang (Ctrl+C) before working the
+      second time.
+- [~] **Two test VMs can't run at once**: both use port 2223. Give each
+      named VM its own port (with its own known_hosts).
+
+### Fixes from the Saturday test
+
+(Found while testing #78–#93 together on `test/saturday`, issue #91.)
+
+- [~] **The live USB's normal entry shows OpenRC's start-up lines**
+      ("Starting dbus … [ ok ]"). Only "show start-up messages" should.
+- [ ] **⚠ shows as `!` on the console.** The new console font has ✓ and ✗
+      but not ⚠: add the glyph, or use a mark the font has.
+- [~] **`bunny install` prints raw tool output**: wipefs (in red),
+      mkfs.fat, btrfs's whole table. One quiet line per step, like the
+      emerge part, with the full output in the log.
+- [~] **The first switch on a fresh install rebuilds packages** (curl,
+      gettext, iputils, libb2, portage-utils) for USE changes. Find why the
+      starter config and Gentoo's prebuilt packages disagree, so a fresh
+      install rebuilds nothing.
+- [~] **Existing systems don't get the console font**; only `bunny install`
+      sets it. A switch should set it up too.
+- [ ] **Reports under `sudo bunny` use root's GitHub sign-in** ("gh isn't
+      signed in"). Use the sign-in of whoever ran sudo or doas, like
+      `bunny publish` does.
+
+### Fixes from the terminal install test (November 23)
+
+- [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
+      prebuilt package was available. Find out whether the binhost is behind
+      Gentoo's tree, and make a fresh install compile only bunny's own
+      packages (`bunny-release`).
+- [ ] **The "Note: If this change stops the system from starting…" line wraps
+      mid-word** at the console's edge ("star ting"). Wrap at word breaks.
+- [x] **A smaller live USB** (asked for by the maintainer): it was about
+      1.45 GB, near its budget. Measure what takes the space and remove what
+      the USB never needs, keeping network and graphics drivers and
+      firmware. Now 826 MB; installed from it in the VM on November 23.
+- [ ] **The live USB's boot line uses a renamed dracut option**: "Kernel
+      command line option 'rd.live.overlay.overlayfs' is deprecated, use
+      'rd.overlay' instead." Update tools/iso/grub.cfg (every entry) and
+      check dracut's docs for the new spelling.
+- [ ] **Early-boot lines still show on the quiet entries**: `insmod
+      /lib/modules/…/asymmetric_keys/pkc…` and a few more, before OpenRC
+      starts (so #106's quiet start doesn't cover them). Find what prints
+      them (dracut's module loading, the kernel's log level) and quiet them
+      on the normal entries only; "show start-up messages" keeps them.
+- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+      18 hours ago"**: it counts from the package list's date, which reads
+      oddly on day one. Say something like "package list from 18 hours ago"
+      or count from the install.
+- [ ] **The graphical installer leaves developer mode off**, while the
+      terminal install keeps it on ("Keeping the recording of this install").
+      Make them behave the same (check how the terminal path decides, and
+      what `bunny install --yes` from the graphical installer misses).
+- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+      consolefont added to runlevel boot", "WARNING: you are stopping a boot
+      service", "Caching service dependencies … [ ok ]"). Run rc-update and
+      the service quietly and say it in bunny's own words, keeping the
+      output in the log.
 
 ## Talk to Portage directly (after the dry run and the laptop)
 
@@ -361,8 +543,11 @@ Portage for structured answers instead.
       in the terminal; `bunny report` files them as an issue in a private
       repo (personal details swapped out); `"auto"` sends problems by
       themselves. Daily sessions read the reports and turn bugs into PRs.
-- [ ] **Portage helper:** (part 1, the install list, done in #18; next: depclean,
-      then error explanations) a small Python script shipped with bunny that uses
+- [~] **Portage helper:** (part 1, the install list, done in #18; part 3, problems as data, in #80; part 2,
+      depclean, PR #66 open; part 3, error explanations from data:
+      keywords, masks and USE changes, PR open; next: slot conflicts and
+      blockers) a small Python script shipped with bunny that uses
+      depclean, PR open; next: error explanations) a small Python script shipped with bunny that uses
       Portage's own library (the code emerge uses) and prints JSON: what a
       switch would install or remove (with versions, prebuilt or compile),
       and, when it can't, the structured reason (needed USE changes, rules
@@ -435,9 +620,14 @@ to-do list. Appearance work comes last and a little at a time.
       image and switches to your config and lock in one command, compiling
       only what isn't prebuilt (in the build container). Needs phase 6.
 - [ ] Baseline system image built on the server
-- [ ] Slint installer (straight to the installer, no desktop): centered, one
+- [~] Slint installer (straight to the installer, no desktop): centered, one
       decision per screen, Utilities menu. Working and plainly styled first;
-      the mockups' finished look comes in phase 9
+      the mockups' finished look comes in phase 9. Part 1 (PR): the screens
+      over `bunny install`, `--demo` and `--screenshots`, on the live USB.
+      Still to do: step counter and top bar, Utilities, the map, the
+      `bunny.toml` panel, the desktop choice, Wi-Fi, a searchable time
+      zone/city and keyboard-layout dropdown (plain text fields for now,
+      noted in testing November 23, 2026)
 - [ ] Installer terminal mode: a console with a welcome, how to get back to
       the graphical installer, the install guide's URL, and the commands to
       start from the Baseline or your own config
@@ -463,7 +653,10 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] TPM disk unlock
 
 ### Phase 9: the look (design work, done together, a little at a time)
-- [ ] Bunny Linux logo (hired designer) and the palette from DESIGN.md "Look and feel"
+- [ ] Bunny Linux logo (hired designer) and the palette from DESIGN.md "Look and feel".
+      **Reminder:** hire once Bunny Linux is a working OS (installs, starts
+      into a desktop, usable day to day). Tell the maintainer when that
+      milestone is reached. Terms, credit and the post: `docs/ARTIST-BRIEF.md`.
 - [ ] Installer and Bunny Desktop styled to match the mockups, one screen
       per PR
 - [ ] Plymouth boot animation, Esc shows the kernel log
@@ -515,8 +708,33 @@ is tested first in a VM with the same layout.
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.
 
+## After 0.1: a daily-driven Nvidia laptop
+
+Decided November 23, 2026. The maintainer is buying an Asus G16 (2026,
+Nvidia) and wants to daily-drive Bunny Linux on it — pushing it hard on real
+hardware, bugs and all, separate from the stability gate above. No rush; take
+the time needed.
+
+- [ ] **Nvidia drivers in the starter config and install flow**: `nvidia-
+      drivers` packaging, kernel config, and a `[desktop]`-style convenience
+      so bunny.toml doesn't need it all written out by hand.
+- [ ] **Secure Boot off first.** v1 has no Secure Boot support (see "Outside
+      our control" and phase 8), and most new laptops ship with it on, so
+      the install guide needs a plain step: turn it off in firmware before
+      booting the USB.
+- [ ] **Hyprland/Mango on Nvidia**: `nvidia_drm.modeset=1`, the right GBM
+      backend env vars, and — if the G16 has hybrid Intel/Nvidia graphics,
+      which is likely — a way to switch GPUs. New ground for the
+      dynamic-island and desktop-setup work.
+
 ## Known issues / small fixes
 
+- [x] Ctrl+C at doas's password question stopped bunny with no words of its
+      own (sudo got "nothing was changed"). Now doas gets it too.
+- [x] Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
+- [x] When sudo didn't give bunny admin rights (no password typed), bunny
+      stopped with only sudo's "a password is required" and no word of its
+      own. Now it says nothing was changed and to run it again.
 - Undo restores `bunny.toml` and `bunny.lock` but not `hosts/<name>.toml`.
 
 

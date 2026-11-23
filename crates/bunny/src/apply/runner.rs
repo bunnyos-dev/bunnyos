@@ -38,8 +38,39 @@ pub trait Runner {
         self.run(cmd)
     }
 
+    /// Like [`Runner::run_with_input`], without showing the output:
+    /// returns whether it succeeded and what it printed (never the input).
+    fn run_with_input_quiet(
+        &mut self,
+        cmd: &[String],
+        input: &str,
+        secret: bool,
+    ) -> Result<(bool, String)> {
+        Ok((self.run_with_input(cmd, input, secret)?, String::new()))
+    }
+
     /// True if commands are only printed, not run (a test root).
     fn dry(&self) -> bool {
+        false
+    }
+
+    /// `bunny install` started a step (its `==> ` line comes next). A
+    /// runner that hides the tools' output closes the step before with a
+    /// `✓` line.
+    fn step_started(&self, _title: &str) {}
+
+    /// `bunny install` has no more steps (`ok`: the last one worked).
+    fn steps_finished(&self, _ok: bool) {}
+
+    /// Where the tools' output was kept, if anywhere.
+    fn log_file(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    /// True for a dry run that describes each step in plain words instead
+    /// of listing its commands and files (`bunny install --dry-run`
+    /// without `--verbose`).
+    fn describes_steps(&self) -> bool {
         false
     }
 }
@@ -175,6 +206,32 @@ impl Runner for SystemRunner {
         Ok(child.wait()?.success())
     }
 
+    fn run_with_input_quiet(
+        &mut self,
+        cmd: &[String],
+        input: &str,
+        _secret: bool,
+    ) -> Result<(bool, String)> {
+        use std::io::Write;
+        use std::process::Stdio;
+        let mut child = std::process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Couldn't start `{}`. Is it installed?", cmd[0]))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            // As in run_with_input: the exit status says what went wrong.
+            let _ = stdin.write_all(input.as_bytes());
+        }
+        // Both streams are read until the command ends, so neither fills up.
+        let out = child.wait_with_output()?;
+        let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+        text.push_str(&String::from_utf8_lossy(&out.stderr));
+        Ok((out.status.success(), text))
+    }
+
     fn output(&mut self, cmd: &[String]) -> Result<Option<String>> {
         let out = std::process::Command::new(&cmd[0])
             .args(&cmd[1..])
@@ -210,5 +267,44 @@ impl Runner for PrintRunner {
 
     fn dry(&self) -> bool {
         true
+    }
+}
+
+/// A dry run that runs and prints no commands: the steps say what they do
+/// instead (see [`Runner::describes_steps`]).
+pub struct StepsRunner;
+
+impl Runner for StepsRunner {
+    fn run(&mut self, _cmd: &[String]) -> Result<bool> {
+        Ok(true)
+    }
+
+    fn run_with_input(&mut self, _cmd: &[String], _input: &str, _secret: bool) -> Result<bool> {
+        Ok(true)
+    }
+
+    fn dry(&self) -> bool {
+        true
+    }
+
+    fn describes_steps(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_steps_runner_changes_nothing() {
+        let mut r = StepsRunner;
+        assert!(r.dry() && r.describes_steps());
+        let cmd = vec!["wipefs".to_string(), "--all".into(), "/dev/null".into()];
+        assert!(r.run(&cmd).unwrap());
+        assert!(r.run_with_input(&cmd, "secret", true).unwrap());
+        assert_eq!(r.output(&cmd).unwrap(), None);
+        assert!(!PrintRunner.describes_steps());
+        assert!(!SystemRunner.describes_steps());
     }
 }

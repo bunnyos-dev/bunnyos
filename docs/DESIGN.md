@@ -66,9 +66,28 @@ bunny switch  ──►  new generation (btrfs snapshot), GRUB entry for rollbac
   embedded in bunny and run as `python3 -c`, answers `plan` with the install
   list as JSON, using `_emerge`'s `parse_opts` (with EMERGE_DEFAULT_OPTS),
   `backtrack_depgraph` and the vartree, and FEATURES=getbinpkg handled like
-  emerge does. The quiet install uses it first and falls back to emerge's
+  emerge does. For a rebuild it also says why (USE flags that changed, and
+  libraries whose sub-slot changes in the plan); emerge's text gives the
+  same from `--verbose`'s marked USE flags and its `r` flag. The quiet install uses it first and falls back to emerge's
   text (which also explains refusals). The weekly canary checks the helper
-  agrees with emerge.
+  agrees with emerge. **Part 3 (error explanations, one kind at a time):**
+  when there's no plan, `plan` also lists `problems` from the depgraph's
+  own records: `keywords` (`_needed_unstable_keywords`; `~ARCH` if the
+  version has that testing keyword, else `**`), `use`
+  (`_needed_use_config_changes`, flag → on/off), and `masked`
+  (`_needed_p_mask_changes`, and `_unsatisfied_deps_for_display` entries
+  where every matching version has a reason from
+  `portage.getmaskingstatus`, with `getmaskingreason`'s comment), each with
+  the chain of packages that pulled it in. The helper exits 0 for this
+  answer. bunny still runs `emerge --pretend` (for the log, and for kinds
+  the helper doesn't report yet: slot conflicts, blockers, missing
+  packages, fetch failures), then explains each kind the helper reported
+  from its data, and the rest from the text. Exception: when emerge's text
+  says its USE suggestion breaks a package's REQUIRED_USE rules, the
+  text's explanation is kept (the helper doesn't report those rules yet).
+  Data and text use the same wording. These depgraph fields are internal
+  to Portage, so each is read defensively and an empty list means "use the
+  text".
 - **Init:** OpenRC. systemd may be added later (see "Init systems").
 
 ## The `bunny` tool
@@ -88,8 +107,14 @@ config (host name from `/etc/conf.d/hostname`, then `/etc/hostname`, then the
 kernel's) adds `packages`, `services` and `[pkg]` entries (its `[pkg]` wins),
 plus a `[machine]` record from `bunny install` that's read but never acted on
 (the future `[disk]` section builds on it). `bunny add`/`remove` edit only the
-main file. Rollback restores the main config and lock, not host files (known
-limit). The Baseline layer is still planned.
+main file. A config with no `hosts/` folder next to it (a copy elsewhere,
+for `bunny plan ~/test/bunny.toml`) borrows this computer's file from
+`/etc/bunny/hosts/`, and the "looks good" line says so. Chosen over leaving
+it out because leaving it out makes GRUB and the kernel look unwanted, and
+a switch from the copy would remove them; borrowing can only keep more.
+A copy with its own `hosts/` folder but no file for this computer uses
+none, and bunny says this computer's file isn't included. Rollback restores the main config, its lock and this computer's
+host file. The Baseline layer is still planned.
 
 Modules expand one line into packages + services + config files, for example
 `[desktop] wm = "hyprland"` or `[security] encryption = true`.
@@ -154,6 +179,13 @@ isolated = false       # compile inside a clean container
 ### Rollback (current behaviour)
 
 - `bunny generations` lists the snapshots in `/.snapshots/bunny-*`.
+- **Times are local:** everything bunny shows a person (`status`,
+  `generations`, `rollback`, `clean`, the boot menu) says when in this
+  computer's time zone, like `Nov 18, 7:03 PM` (the year added when it
+  isn't this year), from one function, `rollback::local_time`. Snapshot
+  and backup names stay UTC (they sort and don't jump when the clock
+  changes). Report headers stay UTC too, marked as such: they're read on
+  GitHub, often from another time zone, next to other reports.
 - `bunny rollback [name]` (default: the latest switch) mounts the btrfs top
   level, snapshots the current `@` as `bunny-<time>-before-rollback` (so the
   rollback can be undone), moves `@` aside to `@replaced-<time>`, and makes a
@@ -181,11 +213,13 @@ isolated = false       # compile inside a clean container
 - `clean` never removes the generation you're running a copy of.
 - **The config goes back too:** after every successful switch or update (and
   a switch with nothing to do), bunny copies the config, its lock and the
-  config's path to `/var/lib/bunny/applied/`. That's inside `@`, so each later
+  config's path to `/var/lib/bunny/applied/`, plus this computer's host file
+  (`host.toml`, with its path in `host-path`; dropped when there's none). That's inside `@`, so each later
   snapshot carries the config that matches it. Rollback (and the boot-menu
   hook) copies it back over the config in the restored `@`, only for a config
   under `/etc` (one in `/home` is on its own subvolume and isn't rolled
-  back).
+  back). The host file goes back under the same rule; other computers' host
+  files aren't touched, and older generations without a copy leave it as is.
 - Each snapshot gets a note in `/.snapshots/<name>.toml` saying what came
   right after it (a switch with a short summary, or a rollback and its
   target), and `/.snapshots/bunny-state.toml` remembers the last action, so
@@ -200,15 +234,40 @@ isolated = false       # compile inside a clean container
   `bunny.rollback=<generation>`, and nothing otherwise. bunny installs it and
   rebuilds `/boot/initramfs-<ver>.img` once (staged as `.bunny-new`, old image
   backed up), *before* the switch's snapshot so that generation already has
-  it. After each switch it writes a block in `/boot/grub/custom.cfg` (read at
-  boot via `41_custom`, so no `grub-mkconfig`) that boots the kernel and
+  it. After each switch it writes `/boot/grub/bunny.cfg` (read via bunny's
+  `/etc/grub.d/11_bunny`, right after `10_linux`'s entries; installed once
+  with one `grub-mkconfig`, then read at boot so later changes need none):
+  "Undo the last change" (summary and local time) plus an "Earlier versions"
+  submenu (newest 10 bootable generations, each labelled "<time> · before
+  <what came after it, in words>", like "before removing tree" or "before
+  adding tmux and cronie" (`notes::before_words`, also used by `bunny
+  generations`), with "Go back to this version" and its summary as
+  do-nothing lines), in separate markers so the
+  hook only drops the undo entry. That undo block that boots the kernel and
   initramfs **from the generation's snapshot** (`/@snapshots/<gen>/boot/…`)
   with the running system's command line plus `bunny.rollback=<gen>`, so
   kernel modules match after the swap. Only added when the generation's
   initramfs is newer than its copy of the module. Limits: nested subvolumes
   aren't carried over by the boot-time swap; needs GRUB, dracut and
   `root=UUID=`. Off by default until it's had more testing; the installer
-  will turn it on.
+  turns it on.
+- **A tidy boot menu (current behaviour):** the menu is Bunny Linux ·
+  Advanced options · Undo the last change · Earlier versions · (other
+  systems) · UEFI Firmware Settings. A switch with `undo_entry` on, and
+  `bunny install` itself (right after the chroot step, whatever the config
+  says), tidy Gentoo's leftovers, each shown in the plan and backed up first:
+  `GRUB_THEME` in `/etc/default/grub` is commented out; `31_efi_bootnext` is
+  made non-executable; and the main entry loses " GNU/Linux". That last one
+  is `/etc/grub.d/10_bunny`, which runs GRUB's own `10_linux` (made
+  non-executable) and rewrites only the `menuentry`/`submenu` titles with
+  sed. Chosen over writing the entries from scratch because `10_linux`'s
+  kernel discovery, microcode, recovery entries and settings keep working
+  and keep up with GRUB; and over editing `10_linux` or `grub.cfg` because
+  GRUB updates and every kernel update's `grub-mkconfig` would undo it. A
+  GRUB update can make `10_linux` executable again (Portage restores the
+  mode of an unedited file); `10_bunny` then prints nothing, so nothing is
+  listed twice, and the next switch tidies it again. Everything changed is
+  in `/etc`, so undo puts it back.
 
 ### Explaining and fixing errors
 
@@ -256,9 +315,14 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   run has no `--ask`; one progress line is drawn from `>>> Emerging (n of m)`
   lines, and the full output is saved to `/var/log/bunny/<time>-emerge.log`.
   Package messages (elog) are shown at the end, a few lines each. Removal
-  uses `emerge --depclean --pretend`, lists the packages from its "All
-  selected packages" line (falling back to emerge's own `--ask` if the count
-  doesn't match), and always asks. Cleanup also runs after USE changes and
+  asks the Portage helper what depclean would remove (or reads `emerge
+  --depclean --pretend`'s "All selected packages" line, falling back to
+  emerge's own `--ask` if the count doesn't match), and asks. Exception,
+  so a plain `bunny remove` asks once: when the user answered yes to the
+  plan (not `--yes`) and the list is exactly the plan's "would be removed"
+  packages (names compared, slots ignored), it removes without asking
+  again; more than the plan showed (dependencies, leftovers after USE
+  changes) still asks. Cleanup also runs after USE changes and
   updates, since both can orphan dependencies. `--verbose` restores the old
   live, emerge-asks behaviour.
 - **Ctrl+C:** stops bunny at once, except at a question during a switch
@@ -303,7 +367,10 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
 | `bunny reboot windows` | Reboot into another OS once |
 | `bunny disk backup-header` | Back up the LUKS header |
 
-Read-only commands never need root. Commands that change the system ask for
+Read-only commands never need root. (`bunny plan` as yourself can't read a
+`/boot` that only root may read, like an EFI partition; it then says the
+boot menu wasn't checked and to run it with sudo or doas, rather than
+reporting problems it couldn't see.) Commands that change the system ask for
 elevation themselves through the configured tool (see `[security]`; sudo
 when nothing is set and both are installed).
 
@@ -311,6 +378,9 @@ when nothing is set and both are installed).
 
 1. Shows the plan and asks before changing anything (`--yes` skips this).
    Re-runs itself through sudo or doas (see `[security]`) when not root.
+   If sudo or doas refuses (exit code 1, or doas stopped by Ctrl+C; bunny
+   run as root never uses 1 and handles Ctrl+C itself),
+   bunny says nothing was changed and to run the command again.
 2. Takes a read-only btrfs snapshot of `/` in `/.snapshots/bunny-<time>`. If
    that fails, nothing is changed.
 3. Backs up the world file and package.use to `/var/lib/bunny/backups/<time>/`.
@@ -319,7 +389,8 @@ when nothing is set and both are installed).
    plus `00-bunny-kept` (lines bunny can't manage yet, word for word).
 5. Writes the world file from `packages`.
 6. Runs `emerge --update --deep --newuse @world` (with `--ask` unless `--yes`).
-7. Runs `emerge --depclean --ask` if packages were removed. **Always asks.**
+7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
+   said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
@@ -434,6 +505,10 @@ admins = ["you"]
 - Rust code talks to the init system through one interface (enable, disable,
   start, stop, status) so systemd can be added later as a second implementation.
 - The init system is chosen at install time, never switched later.
+- **After 0.1 (decided November 22, 2026):** OpenRC stays the only one the
+  maintainer works on. systemd is the likely second, only if it turns out
+  easy to add (Gentoo supports it officially). Others (dinit, runit, s6) are
+  left to contributors, who add them as a new `InitSystem` implementation.
 
 ## Packages and apps
 
@@ -449,7 +524,12 @@ admins = ["you"]
 list (`api.gentoo.org/overlays/repositories.xml`). A switch writes
 `repos.conf/bunny-<name>.conf` (git, auto-sync) and runs `emaint sync` right
 after the snapshot, then checks packages; repositories set up outside bunny
-are reported, not touched. `[pkg] keywords` go in
+are reported, not touched. `"bunny"` (Bunny Linux's own overlay,
+`bunny-overlay`) is built in: bunny knows its git address, so it needs no
+lookup and gets no trust warning. The starter config from `bunny install`
+lists it and `sys-apps/bunny-release` (Bunny Linux's `/etc/os-release` and
+fastfetch logo); the first switch inside the new system installs it, since
+the install script's own emerge only sees Gentoo's tree. `[pkg] keywords` go in
 `package.accept_keywords/zz-bunny`. `bunny add` has a short list of
 well-known packages outside `::gentoo` (Mango in GURU, Hyprland in
 hyproverlay) and offers their repository and keywords. Custom repository
@@ -526,6 +606,29 @@ init system. Bunny Desktop is the one that gets the polish and testing;
 the others are packaged and supported, the "set it up yourself" ones on
 purpose bare. Config: `[desktop] name = "bunny" | "plasma" | "xfce" |
 "hyprland" | "mango" | "none"`, `accent = "#…"`.
+
+**Current behaviour (`[desktop] wayland = true`, November 2026):** the base
+a Wayland desktop needs on the minimal install, found in the dry run:
+`sys-auth/pambase` and `sys-auth/seatd` with `USE=elogind` (logins register
+with elogind, which makes `XDG_RUNTIME_DIR`; libseat asks elogind for the
+seat), `sys-auth/elogind` and `sys-apps/dbus` in the world set, and the
+`elogind` (boot runlevel) and `dbus` services. bunny adds them as if they
+were in the file (`Config::use_flags`, `wanted_services`, `wanted_world`),
+marks them "(from [desktop])" in `plan` and `diff`, and the user's own
+`[pkg]` entry for one of those packages wins. After a switch that changes
+pambase it says to log in again. The future `name` implies `wayland = true`
+for the Wayland desktops.
+
+Why per-package flags, not `USE="elogind"` in make.conf or Gentoo's desktop
+profile: the profile (`targets/desktop`) turns on about 70 global flags
+(`elogind` among `pulseaudio`, `cups`, `qt6`, `X`, …), and a global flag
+rebuilds every installed package that has it; both are against the minimal
+install, and bunny manages neither make.conf nor the profile (a profile
+switch is a big, separate change). Per-package flags change only what a
+session needs, show up in `plan` like any other `[pkg]` setting, and leave
+room for the user to override one. The cost: packages added later that
+also have an `elogind` flag don't get it automatically; the list can grow
+as real desktops need more (and `name = "plasma"` will bring its own).
 
 ## Look and feel
 
@@ -657,6 +760,18 @@ GPT
 - UI toolkit: **Slint** (Rust, draws directly to the screen via `linuxkms`, no
   compositor, software-render fallback). Plain Qt Quick is the fallback choice.
 - The installer only writes a `bunny.toml`; `bunny install` does the work.
+- **Current behaviour (part 1):** `crates/bunny-installer`, Slint with the
+  software renderer (works without a GPU), `linuxkms` on the USB and
+  `winit` in a window for `--demo`. Screens: welcome (or "use the terminal
+  instead") → disk (from `bunny install --list-disks`) → setup (Recommended,
+  or choose encryption and swap) → account → password (short: a warning,
+  not a refusal) → review (bunny's own preview from a dry run with the
+  answers, which also checks them; type the disk's name) → installing
+  (bunny's `==>` steps as they start, the full output behind "Show the
+  details") → done (Restart) or stopped (Back). It decides nothing: it
+  builds `bunny install --yes --disk … --user … --password-stdin` and shows
+  what bunny prints. Not yet: the step counter and top bar, Utilities, the
+  map, the `bunny.toml` panel, the desktop choice, Wi-Fi.
 - **Layout (decided November 2026):** not the sidebar-and-steps layout
   most Linux installers share. Full-screen black with a centered column, a
   small top bar (installer name, a Utilities menu, language, Wi-Fi, battery,
@@ -703,7 +818,20 @@ GPT
   (see "Lockfile").
 - **Current behaviour (part 1, guided):** `bunny install` lists whole disks
   from `lsblk --json` and leaves out any in use (anything mounted, swap, or
-  something opened on it like LUKS or LVM), read-only or under 20 GB. The
+  something opened on it like LUKS or LVM), read-only or under 20 GB. After
+  the disk, "Use the recommended setup? [Y/n]" (`install::questions`):
+  Enter takes it (encrypted, zram swap); `n` asks encrypt ([Y/n]) and swap
+  (Enter zram; a size for zram plus a swap file; `hibernate`; `none`). An
+  option answers its question (`--no-encrypt`; `--swap`, `--hibernate` or
+  `--no-zram`). zram is bunny's own small OpenRC service (`zram`, boot
+  runlevel), not sys-block/zram-init (its `maxs` setting breaks on kernels
+  from 6.15): as big as memory up to 8 GB like Fedora, zstd when the kernel
+  has it, priority 100 so it's used before a swap file. `/home` on a second
+  disk isn't asked yet (on hold; `--home-disk` works). No partition sizes,
+  mount points or filesystem choice: btrfs is needed for undo, and full
+  control is `--mounted`. The preview then names the disks left untouched
+  and, when the answers differ from the recommended setup, the options that
+  repeat them (without `--disk`, which differs per computer). The
   preview lists every partition that will be erased and the layout you get;
   you confirm by typing the disk's name. Layout: GPT, EFI (2 GB, FAT32) at
   `/boot`, the rest LUKS2 (opened as `bunny-root`) with btrfs subvolumes
@@ -715,11 +843,57 @@ GPT
   `inside.sh` run in a chroot (packages from the binhost, GRUB named
   "Bunny Linux" plus the fallback path, the kernel's startup image, the
   user). One password unlocks the disk and logs in; root stays locked.
+  After the package list, `inside.sh` runs `emerge --update --deep
+  --newuse @world` (bunny switch's options): Gentoo's stage3 is built with
+  releng's `package.use` (`circular`: curl `-http2 -http3 -quic`;
+  `openmp`: libb2, gettext, portage-utils `-openmp`), so those differ from
+  the profile, and without this the first switch rebuilt them. Prebuilt
+  packages with the profile's flags replace them during the install.
+  The password can't be empty; under 8 characters gets a warning (easy to
+  guess, a few words are better) and can be kept by typing it again, or
+  replaced by pressing Enter. It's your disk and your choice.
   `--home-disk` encrypts a second disk with the same password plus a random
   key file in `/etc/bunny/keys`, unlocked by OpenRC's dmcrypt. Passwords go
   only to the tools' standard input, never to files or the screen. On a
   failure everything is unmounted and closed, so a second run starts clean.
-  `--dry-run` prints every command and file (PrintRunner).
+  `--dry-run` doesn't ask for the password (it stands in a placeholder that
+  nothing uses) and shows each step's name and what it does in plain words
+  (StepsRunner); `--dry-run --verbose` prints every command and file
+  (PrintRunner). A real install (QuietRunner around SystemRunner) prints
+  each step's `==> ` heading (unchanged: the graphical installer reads
+  them), then `✓ Done` (with the time from 2 s), and appends what each tool
+  printed to `/var/log/bunny/<time>-install.log` on the USB, copied into the
+  new system at the end. A failed tool shows `✗`, its last 12 lines
+  (colour codes removed) and the log's path, before bunny's explanation.
+  The stage3's progress bar, `inside.sh` and the first `bunny switch`/`lock`
+  keep the screen (no `✓` after the chroot ones; their output says how it
+  went). `--verbose` shows all of it live and still keeps the log.
+- **Your config's history (current behaviour):** after the first switch,
+  `bunny install` makes the new `/etc/bunny` a git repository (`git init -b
+  main`, run with the USB's git), with a repository-only identity from the
+  install's answers (the user name and a placeholder `<user>@<host>.local`),
+  a `.gitignore` that keeps out `keys/` (the `/home` disk's key) and leftover
+  copies, and a first commit "As installed". A `--config` repository keeps
+  its own history. Failures are explained and never stop the install.
+  Either way it adds `/etc/bunny` to git's system-wide `safe.directory`
+  (a `[safe]` section appended to the new system's `/etc/gitconfig`,
+  written directly rather than with the USB's `git config --system`, and
+  only if no `[safe] directory` line already covers it or `*`): the folder
+  belongs to root, and git refuses to read it as another user ("detected
+  dubious ownership"). `bunny publish` does the same, so older installs get
+  it, and its preview says so.
+- **`bunny publish [repo]` (current behaviour):** sends `/etc/bunny` to
+  GitHub with the invoking user's own `gh` sign-in (`SUDO_USER`/`DOAS_USER`;
+  refused when root logged in directly). It starts the history if there's
+  none, makes the repository private if it doesn't exist (`my-system` by
+  default), sets a repository-only credential helper `!runuser -u <user> --
+  env HOME=… gh auth git-credential` (after clearing any helper root has), so
+  root's git asks the user's gh each time and no token is copied, adds
+  `origin`, commits uncommitted changes ("Saved with bunny publish") and
+  pushes. It shows the steps and asks first (a public repository gets a
+  warning and defaults to No); `--dry-run` reads for real and prints the
+  rest. Named `publish` rather than `git connect` because the same command
+  is what you run after every change, not only once.
 - Installs by writing a prebuilt Baseline system image, not package by package.
 - `bunny install --explain` prints a handbook for the chosen path only.
 
@@ -750,9 +924,44 @@ Needs the Baseline image (phases 6 and 7).
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
   overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
-  Portage and Python are still in it (removing them is later work), so it's
-  bigger than the target; the package tree, docs and kernel sources are
-  removed.
+  **Quiet start-up:** the normal menu entries have `quiet` on the kernel
+  line; `/etc/inittab` runs every runlevel through
+  `/usr/local/sbin/bunny-openrc` (`tools/iso/openrc-quiet.sh`), which sets
+  `EINFO_QUIET=YES` (what `openrc --quiet` sets) when the kernel line says
+  `quiet`, so OpenRC's "Starting …" lines and warnings are left out and
+  errors still show. "Show start-up messages" has no `quiet`. Chosen over
+  `rc_verbose` (it only adds detail), over sending OpenRC's output to a
+  log (errors would disappear too) and over a different inittab per entry
+  (one squashfs serves every entry). The CI boot check boots without
+  `quiet`, so it still sees "Starting local".
+  **Console font** (also set by `bunny install`, and by a switch on
+  systems that don't have it yet: `console_font.rs`, shown in the plan,
+  `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;
+  a font the user set themselves is left alone, and a failure is a note,
+  never a stop): the Linux console's usual
+  font has no ✓ or ✗ (they showed as `v`, `x`), and Terminus's 512-glyph
+  console fonts don't have them either (only its full, 1356-glyph BDF
+  does). kbd's `eurlatgr` (part of every Gentoo system) has ✓ ✗ · but no
+  ⚠, so both scripts copy it to `/usr/local/share/consolefonts/bunny.psfu`
+  with ⚠ added to its `!` glyph (`psfgettable`/`psfaddtable`), and set it in
+  `/etc/conf.d/consolefont` with the `consolefont` service in the boot
+  runlevel. The ISO build checks the font has all four marks. A real ⚠
+  glyph would need our own font (later, with the logo work).
+  **Size (November 2026):** about 850 MB (it was about 1.45 GB), with a
+  1 GB budget for this image. `tools/iso/smaller.sh` removes what the USB
+  never needs, since everything `bunny install` builds or installs happens
+  inside the new system (a full stage3 with its own compiler, Portage and
+  Python): the package tree and downloaded packages, docs, translations,
+  headers and static libraries, the compiler (its runtime libraries stay),
+  build tools, Portage, Python and Perl, Qualcomm's Snapdragon firmware
+  (except what x86 hardware can ask for, like mobile broadband cards),
+  Intel's camera, AI, sensor and sound firmware, and sound and camera
+  drivers. Network (Wi-Fi, Ethernet, Bluetooth) and graphics drivers and
+  firmware all stay. The system is packed with xz (1 MB blocks, x86
+  filter). `tools/iso/check.sh` then checks every program still has its
+  libraries and the commands the USB uses start, and the build fails
+  otherwise; `tools/iso/sizes.sh` shows what takes the space on each CI
+  run's page.
 - Without a Microsoft-signed shim, Secure Boot must be off to boot the USB.
 
 ### Hosting
@@ -825,17 +1034,42 @@ testing and decisions.
 - **Developer mode (`[dev] report`):** testers' machines record every bunny
   command with util-linux `script` (terminal output exactly as seen, without
   changing behaviour), keeping recordings in `~/.local/state/bunny/sessions/`.
-  `bunny report` cleans them (colour codes, redrawn progress lines),
+  `bunny report` adds `bunny status` (run with a 60-second limit, saying
+  so first: glsa-check on a cold cache made `--dry-run` look hung) and
+  cleans them (colour codes, redrawn progress lines),
   swaps user names, home folders, the hostname, emails and `*.ts.net` names
   for placeholders, and files one issue in the private
   `bunnyos-dev/bunny-reports` with the user's own `gh` login (REST API).
-  `"auto"` sends any command that fails or shows ⚠/✗. Daily sessions read
+  `"auto"` sends any command that fails or shows ⚠/✗, except ones that
+  stopped because of the user's own input: those exit with code 4
+  (`YOUR_INPUT`: a package name that doesn't exist, config mistakes, sudo or
+  doas getting no password, Ctrl+C at its question included), which bunny
+  as root passes through to the bunny that elevated. They're still recorded
+  and sent by a manual `bunny report`. Other Ctrl+C stops are still sent,
+  since a "hang" the user had to stop can be bunny's problem. Daily sessions read
   new reports first.
+- **Recording the install:** the live USB has no config, so preview images
+  (CI builds that aren't releases, `PREVIEW=1 tools/build-iso.sh`) ship
+  `/etc/bunny-preview.toml` with `[dev] report = true`, which bunny uses when
+  the config doesn't turn recording on. Just before it unmounts, a recorded
+  `bunny install` copies its recording so far, with notes (exit code 0, and how long
+  it ran from the time in the recording's name, since the live USB's
+  filesystem has no creation times), to
+  `/home/<user>/.local/state/bunny/sessions/` in the new system (owned by the
+  user), so `bunny report` there sends it. A failed install leaves it on the
+  USB. Release images record nothing.
 
 ## Testing
 
 - All changes are tested in a QEMU VM with UEFI, Secure Boot (Setup Mode),
-  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`.
+  TPM 2.0 and virtio GPU: `tools/bunny-vm.sh`. The main VM's SSH port is
+  2222; each named VM (`VM=<name>`) gets the lowest port from 2223 up that
+  no other VM's `~/bunny-vm-*/port` file names (and nothing listens on),
+  saved in its own `port` file on first use, so several run at once
+  (`PORT=` overrides once; `port` prints it). Each keeps its SSH host key
+  in its own `known_hosts` file in its folder
+  (`StrictHostKeyChecking=accept-new`); `forget-key` clears it after a
+  reinstall.
 - Snapshot before every test; restore afterwards.
 - Unit tests for everything that doesn't touch the system. Anything that writes
   to a system takes a `--root` so it can be tested against a fake root.

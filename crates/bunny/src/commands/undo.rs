@@ -32,16 +32,11 @@ pub(crate) fn generations(root: &Path) -> anyhow::Result<ExitCode> {
 
     println!("Saved generations (oldest first):\n");
     for (i, g) in gens.iter().enumerate() {
-        let what = match notes::read_note(root, &g.name) {
-            Some(n) if n.kind == notes::Kind::Rollback => match &n.to {
-                Some(to) => format!("before rolling back to {}", number(to)),
-                None => "before a rollback".to_string(),
-            },
-            Some(n) if !n.summary.is_empty() => format!("before a switch: {}", n.summary),
-            Some(_) => "before a switch".to_string(),
-            None if g.is_pre_rollback() => "before a rollback".to_string(),
-            None => "before a switch".to_string(),
-        };
+        let what = what_came_after(
+            notes::read_note(root, &g.name),
+            g.is_pre_rollback(),
+            &number,
+        );
         let marker = if running == Some(g.name.as_str()) {
             "   ← running a copy of this"
         } else {
@@ -80,11 +75,31 @@ pub(crate) fn generations(root: &Path) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// What a generation was the version before, for `bunny generations`:
+/// "before adding mpv", "before rolling back to #3".
+fn what_came_after(
+    note: Option<notes::Note>,
+    pre_rollback: bool,
+    number: &dyn Fn(&str) -> String,
+) -> String {
+    match note {
+        Some(n) if n.kind == notes::Kind::Rollback => match &n.to {
+            Some(to) => format!("before rolling back to {}", number(to)),
+            None => "before a rollback".to_string(),
+        },
+        Some(n) if !n.summary.is_empty() => format!("before {}", notes::before_words(&n.summary)),
+        Some(_) => "before a switch".to_string(),
+        None if pre_rollback => "before a rollback".to_string(),
+        None => "before a switch".to_string(),
+    }
+}
+
 pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
     let real_system = root == Path::new("/");
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, true)?;
     let keep = keep.max(1);
     let (device, running) = if real_system {
         let info = std::fs::read_to_string("/proc/self/mountinfo")
@@ -179,6 +194,10 @@ pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<E
             if let Err(e) = kernels::tidy(root) {
                 println!("Note: couldn't remove old kernel copies from /boot ({e:#}).");
             }
+            // The boot menu's Earlier versions shouldn't list removed ones.
+            if let Err(e) = crate::apply::refresh_earlier(root) {
+                println!("Note: couldn't update the boot menu's Earlier versions ({e:#}).");
+            }
         }
         if failed.is_empty() {
             println!("✓ Removed.");
@@ -205,6 +224,7 @@ pub(crate) fn rollback_cmd(
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, false)?;
     let gens = rollback::list(root)?;
     let name = match name {
         Some(input) => rollback::resolve(&gens, &input).unwrap_or(input),
@@ -288,11 +308,18 @@ pub(crate) fn rollback_cmd(
         .map(|i| (i + 1).to_string())
         .unwrap_or_else(|| outcome.before.clone());
     println!("  Changed your mind? After rebooting, run: bunny rollback {undo}");
-    if let Some(config) = &outcome.config_restored {
-        println!(
-            "  {} is put back as it was then, so it matches the restored system.",
-            config.display()
-        );
+    if let Some(restored) = &outcome.config_restored {
+        match &restored.host {
+            Some(host) => println!(
+                "  {} and {} are put back as they were then,\n  so they match the restored system.",
+                restored.config.display(),
+                host.display()
+            ),
+            None => println!(
+                "  {} is put back as it was then, so it matches the restored system.",
+                restored.config.display()
+            ),
+        }
     }
     if let Some(done) = &outcome.kernel_restored {
         if done.versions_now != done.versions_then {
@@ -309,7 +336,7 @@ pub(crate) fn rollback_cmd(
     }
     if outcome.undo_entry_dropped {
         println!(
-            "  The boot menu's \"undo the last change\" entry is gone until your next change,\n  \
+            "  The boot menu's \"Undo the last change\" entry is gone until your next change,\n  \
              so picking it can't take you further back by accident."
         );
     }
@@ -331,4 +358,41 @@ pub(crate) fn rollback_cmd(
         outcome.replaced
     );
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn says_what_each_generation_was_before() {
+        let switch = |summary: &str| notes::Note {
+            kind: notes::Kind::Switch,
+            summary: summary.into(),
+            to: None,
+        };
+        let number = |_: &str| "#3".to_string();
+        assert_eq!(
+            what_came_after(Some(switch("- tree")), false, &number),
+            "before removing tree"
+        );
+        assert_eq!(
+            what_came_after(Some(switch("+ mpv")), false, &number),
+            "before adding mpv"
+        );
+        assert_eq!(
+            what_came_after(Some(switch("")), false, &number),
+            "before a switch"
+        );
+        let rollback = notes::Note {
+            kind: notes::Kind::Rollback,
+            summary: String::new(),
+            to: Some("bunny-x".into()),
+        };
+        assert_eq!(
+            what_came_after(Some(rollback), false, &number),
+            "before rolling back to #3"
+        );
+        assert_eq!(what_came_after(None, true, &number), "before a rollback");
+    }
 }

@@ -79,9 +79,112 @@ pub fn read_state(root: &Path) -> Option<State> {
     toml::from_str(&text).ok()
 }
 
+/// A switch's summary (`+ tmux, + cronie, - tree, start cronie`) as what
+/// the version before it was "before": `adding tmux and cronie, removing
+/// tree, starting cronie`. For the boot menu's "Earlier versions" and
+/// `bunny generations`, where "before + tmux" read oddly. Parts it doesn't
+/// know are kept as they are, so older notes still read.
+pub fn before_words(summary: &str) -> String {
+    // (verb, what) for each part; consecutive parts with the same verb are
+    // joined: "adding tmux and cronie".
+    let mut parts: Vec<(&str, Vec<String>)> = Vec::new();
+    let mut tail = String::new();
+    for part in summary.split(", ").map(str::trim).filter(|p| !p.is_empty()) {
+        // "… and 3 more" on the last part.
+        let (part, more) = match part.rsplit_once(" and ") {
+            Some((p, m)) if m.ends_with(" more") => (p, Some(m)),
+            _ => (part, None),
+        };
+        let (verb, what) = if let Some(r) = part.strip_prefix("+ repository ") {
+            ("adding the repository", r.to_string())
+        } else if let Some(r) = part
+            .strip_prefix("- repository ")
+            .or_else(|| part.strip_prefix("− repository "))
+        {
+            ("removing the repository", r.to_string())
+        } else if let Some(p) = part.strip_prefix("+ ") {
+            ("adding", p.to_string())
+        } else if let Some(p) = part.strip_prefix("- ").or_else(|| part.strip_prefix("− ")) {
+            ("removing", p.to_string())
+        } else if let Some(s) = part.strip_prefix("start ") {
+            ("starting", s.to_string())
+        } else if let Some(p) = part.strip_prefix("USE flags for ") {
+            ("changing USE flags for", p.to_string())
+        } else if let Some(p) = part.strip_prefix("testing versions for ") {
+            ("allowing testing versions of", p.to_string())
+        } else if let Some(t) = part.strip_prefix("admin rights: ") {
+            ("setting up admin rights with", t.to_string())
+        } else if part == "boot menu undo" {
+            ("setting up", "undo in the boot menu".to_string())
+        } else if part == "tidier boot menu" {
+            ("tidying", "the boot menu".to_string())
+        } else if part == "console font" {
+            ("setting up", "the console font".to_string())
+        } else {
+            ("", part.to_string())
+        };
+        match parts.last_mut() {
+            Some((v, items)) if !verb.is_empty() && *v == verb => items.push(what),
+            _ => parts.push((verb, vec![what])),
+        }
+        if let Some(m) = more {
+            tail = format!(" and {m}");
+        }
+    }
+    let phrases: Vec<String> = parts
+        .into_iter()
+        .map(|(verb, items)| {
+            let list = match items.as_slice() {
+                [one] => one.to_string(),
+                [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+                [] => String::new(),
+            };
+            if verb.is_empty() {
+                list
+            } else {
+                format!("{verb} {list}")
+            }
+        })
+        .collect();
+    format!("{}{tail}", phrases.join(", "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn says_what_a_version_was_before_in_words() {
+        assert_eq!(before_words("- tree"), "removing tree");
+        assert_eq!(before_words("− tree"), "removing tree");
+        assert_eq!(
+            before_words("+ tmux, + cronie, start cronie"),
+            "adding tmux and cronie, starting cronie"
+        );
+        assert_eq!(
+            before_words("+ a, + b, + c, - d"),
+            "adding a, b and c, removing d"
+        );
+        assert_eq!(
+            before_words("+ repository guru, + mangowm"),
+            "adding the repository guru, adding mangowm"
+        );
+        assert_eq!(
+            before_words("USE flags for curl, testing versions for mangowm"),
+            "changing USE flags for curl, allowing testing versions of mangowm"
+        );
+        assert_eq!(
+            before_words("admin rights: doas, boot menu undo, tidier boot menu"),
+            "setting up admin rights with doas, setting up undo in the boot menu, \
+             tidying the boot menu"
+        );
+        assert_eq!(
+            before_words("+ a, + b, + c, + d, + e, + f and 2 more"),
+            "adding a, b, c, d, e and f and 2 more"
+        );
+        // Something it doesn't know stays as it was.
+        assert_eq!(before_words("something new"), "something new");
+    }
 
     #[test]
     fn notes_and_state_round_trip() {

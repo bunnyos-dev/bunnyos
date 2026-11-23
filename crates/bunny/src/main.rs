@@ -5,6 +5,9 @@ mod apply;
 mod boot;
 mod commands;
 mod config;
+mod config_repo;
+mod console_font;
+mod desktop;
 mod dev;
 mod diff;
 mod edit;
@@ -56,6 +59,10 @@ struct Cli {
     /// recorded (developer mode), so it isn't recorded twice.
     #[arg(long, global = true, hide = true)]
     in_session: bool,
+    /// Set by bunny itself when it re-runs a command through sudo or doas,
+    /// so a failure as root can be told apart from sudo or doas refusing.
+    #[arg(long, global = true, hide = true)]
+    elevated: bool,
 }
 
 /// Where bunny looks for its config unless told otherwise.
@@ -65,6 +72,8 @@ const DEFAULT_CONFIG: &str = "/etc/bunny/bunny.toml";
 static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[derive(Subcommand)]
+// Parsed once at start-up; boxing `install`'s options would only add noise.
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Show at a glance whether everything is in order (changes nothing)
     Status {
@@ -223,6 +232,23 @@ enum Command {
         #[arg(default_value = DEFAULT_CONFIG)]
         config: PathBuf,
     },
+    /// Send your config folder (/etc/bunny) to a private GitHub repository, with your own GitHub sign-in (shows what it will do and asks first)
+    Publish {
+        /// The GitHub repository: a name (my-system, the default) or you/my-system
+        repo: Option<String>,
+        /// Don't ask first
+        #[arg(short, long)]
+        yes: bool,
+        /// Show what it would do, without changing or sending anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Path to the config (its folder is what's sent)
+        #[arg(long, default_value = DEFAULT_CONFIG)]
+        config: PathBuf,
+        /// System root (for testing on a fake system; commands are only printed)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
     /// Install Bunny Linux on this computer, from the live USB (erases a disk; shows exactly what first)
     Install {
         /// The disk to install on, e.g. /dev/nvme0n1 (asks if not given)
@@ -234,9 +260,12 @@ enum Command {
         /// Size of the EFI partition (default 2G)
         #[arg(long, value_name = "SIZE")]
         efi_size: Option<String>,
-        /// Make a swapfile of this size, e.g. 8G (default: none)
+        /// Also make a swap file on disk of this size, e.g. 8G (default: none)
         #[arg(long, value_name = "SIZE")]
         swap: Option<String>,
+        /// No compressed swap in memory (zram, on by default)
+        #[arg(long)]
+        no_zram: bool,
         /// Set up hibernation (a swapfile as big as your memory, unless --swap says otherwise)
         #[arg(long)]
         hibernate: bool,
@@ -252,15 +281,39 @@ enum Command {
         /// Install from your own config: a bunny.toml, or a git repository (github:you/my-system)
         #[arg(long, value_name = "FILE OR REPO")]
         config: Option<String>,
-        /// Show everything it would do, without erasing or changing anything
+        /// Show each step and what it does, without erasing or changing anything (with --verbose: every command)
         #[arg(long)]
         dry_run: bool,
+        /// Take the recommended setup without asking (encrypted, zram swap)
+        #[arg(long)]
+        recommended: bool,
+        /// Your user name (asks if not given)
+        #[arg(long, value_name = "NAME")]
+        user: Option<String>,
+        /// A name for this computer (asks if not given)
+        #[arg(long, value_name = "NAME")]
+        hostname: Option<String>,
+        /// Time zone, like America/Toronto (asks if not given)
+        #[arg(long, value_name = "ZONE")]
+        timezone: Option<String>,
+        /// Keyboard layout, like us or de (asks if not given)
+        #[arg(long, value_name = "LAYOUT")]
+        keymap: Option<String>,
+        /// Read the password from standard input (one line) instead of asking
+        #[arg(long)]
+        password_stdin: bool,
+        /// Don't ask to type the disk's name to confirm (needs --disk)
+        #[arg(long, requires = "disk")]
+        yes: bool,
+        /// Print the disks as JSON and stop (for the graphical installer)
+        #[arg(long)]
+        list_disks: bool,
         /// Read the list of disks from this file (lsblk --json output) instead of lsblk
         #[arg(long, hide = true)]
         lsblk: Option<PathBuf>,
         /// Install onto partitions you made and mounted here yourself (nothing is erased)
         #[arg(long, value_name = "FOLDER",
-              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "hibernate", "home_disk"])]
+              conflicts_with_all = ["disk", "no_encrypt", "efi_size", "swap", "no_zram", "hibernate", "home_disk"])]
         mounted: Option<PathBuf>,
         /// Read what's mounted from this file (findmnt --json output) instead of findmnt
         #[arg(long, hide = true)]
@@ -284,10 +337,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     interrupt::install();
     VERBOSE.store(cli.verbose, std::sync::atomic::Ordering::Relaxed);
+    let elevated = cli.elevated;
     if let Some(code) = dev::record_if_on(Path::new(DEFAULT_CONFIG), cli.in_session) {
-        return code;
+        return commands::elevated_exit(code, elevated);
     }
-    match run(cli) {
+    let code = match run(cli) {
         Ok(code) => code,
         Err(err) => {
             eprintln!("✗ {err}");
@@ -296,7 +350,8 @@ fn main() -> ExitCode {
             }
             ExitCode::FAILURE
         }
-    }
+    };
+    commands::elevated_exit(code, elevated)
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
@@ -306,6 +361,13 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             yes,
             config,
         } => report(&config, dry_run, yes),
+        Command::Publish {
+            repo,
+            yes,
+            dry_run,
+            config,
+            root,
+        } => commands::publish(&config, repo.as_deref(), yes, dry_run, &root),
         Command::Check { config } => {
             let cfg = Config::load(&config)?;
             Ok(report_problems(&cfg, &config))
@@ -374,12 +436,21 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             no_encrypt,
             efi_size,
             swap,
+            no_zram,
             hibernate,
             home_disk,
             ssh,
             edit,
             config,
             dry_run,
+            recommended,
+            user,
+            hostname,
+            timezone,
+            keymap,
+            password_stdin,
+            yes,
+            list_disks,
             lsblk,
             mounted,
             findmnt,
@@ -388,12 +459,21 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             no_encrypt,
             efi_size,
             swap,
+            no_zram,
             hibernate,
             home_disk,
             ssh,
             edit,
             config,
             dry_run,
+            recommended,
+            user,
+            hostname,
+            timezone,
+            keymap,
+            password_stdin,
+            yes,
+            list_disks,
             lsblk,
             mounted,
             findmnt,

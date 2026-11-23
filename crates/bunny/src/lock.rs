@@ -337,7 +337,7 @@ pub fn switch(
 ) -> Result<(Outcome, LockChange)> {
     let old = if lock_path.exists() {
         let old = load(lock_path)?;
-        write_pins(root, &old)?;
+        write_pins(root, &old).map_err(apply::nothing_changed)?;
         Some(old)
     } else {
         None
@@ -382,12 +382,27 @@ pub fn update(
     };
     let outcome = match apply::switch(config, root, &plan, runner, &opts) {
         Ok(outcome) => outcome,
-        Err(err) => {
-            // Put the pins back so the system stays held to the old lock.
+        Err(err) if apply::changed_nothing(&err) => {
+            // Nothing was installed: put the pins back, so the system stays
+            // held to the old lock.
             if let Some(old) = &old {
                 write_pins(root, old)?;
             }
             return Err(err);
+        }
+        Err(err) => {
+            // It stopped partway: some packages may already be updated. The
+            // old pins would make the next switch downgrade them, so the lock
+            // records what's installed now instead.
+            let kept = relock(root, lock_path, old).is_ok();
+            return Err(if kept {
+                err.context(
+                    "The update stopped partway. Packages that finished updating are kept, and \
+                     bunny.lock now records them. Run `bunny update` again to finish.",
+                )
+            } else {
+                err
+            });
         }
     };
     let change = relock(root, lock_path, old)?;
@@ -689,6 +704,49 @@ mod tests {
         };
         assert!(update(&config, r, &lock_path, &mut runner, &opts()).is_err());
         assert!(r.join(PIN_FILE).exists());
+    }
+
+    #[test]
+    fn an_update_that_stops_partway_keeps_what_finished() {
+        let root = fake_system();
+        let r = root.path();
+        write(r, "var/lib/portage/world", "app-misc/tmux\n");
+        std::fs::create_dir_all(r.join(".snapshots")).unwrap();
+        let config = Config::parse("packages = [\"app-misc/tmux\"]").unwrap();
+        let lock_path = r.join("bunny.lock");
+        std::fs::write(&lock_path, render(&from_system(r).unwrap()).unwrap()).unwrap();
+
+        // tmux updates, then the next package fails.
+        struct Partway(PathBuf);
+        impl Runner for Partway {
+            fn run(&mut self, cmd: &[String]) -> Result<bool> {
+                if cmd.last().map(String::as_str) == Some("@world") {
+                    std::fs::rename(
+                        self.0.join("var/db/pkg/app-misc/tmux-3.6a"),
+                        self.0.join("var/db/pkg/app-misc/tmux-3.7"),
+                    )
+                    .unwrap();
+                    return Ok(false);
+                }
+                Ok(true)
+            }
+        }
+        let err = update(
+            &config,
+            r,
+            &lock_path,
+            &mut Partway(r.to_path_buf()),
+            &opts(),
+        )
+        .unwrap_err();
+        assert!(
+            format!("{err:#}").contains("Run `bunny update` again"),
+            "{err:#}"
+        );
+        // No pin below what's installed, so the next switch won't downgrade.
+        assert_eq!(load(&lock_path).unwrap().packages["app-misc/tmux"], "3.7");
+        let pins = std::fs::read_to_string(r.join(PIN_FILE)).unwrap();
+        assert!(pins.contains(">app-misc/tmux-3.7"), "{pins}");
     }
 
     #[test]

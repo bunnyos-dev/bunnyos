@@ -465,7 +465,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
 - [x] **Developer mode reports your own mistakes.** Pressing Ctrl+C at
       sudo's password and a package name that doesn't exist each sent a
       report. Only bunny's own problems should.
-- [ ] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
+- [~] **`bunny remove` asks twice** ("Apply these changes?" then "Remove
       them?"). One question for a plain remove.
 - [~] **`bunny status` shows times in UTC**; the boot menu now uses local
       time. Use local time everywhere (and "as installed" for the first).

@@ -89,7 +89,8 @@ impl std::error::Error for Refused {}
 
 #[derive(Clone)]
 pub struct Options {
-    /// Don't let emerge ask before installing. Removing packages always asks.
+    /// Don't let emerge ask before installing. Removing packages still
+    /// asks (see `remove_quietly`).
     pub yes: bool,
     /// Used to name the snapshot and the backup folder, e.g. `20261116-203000`.
     pub stamp: String,
@@ -320,7 +321,8 @@ fn install_and_update(
 
 /// Step 6: remove packages nothing needs anymore: ones taken out of the
 /// config, and dependencies left over after USE changes or updates (sudo
-/// built without `sendmail` no longer needs a mail server). Always asks.
+/// built without `sendmail` no longer needs a mail server). Asks, unless
+/// the user said yes to a plan that showed exactly these.
 fn remove_unused(
     plan: &Plan,
     runner: &mut dyn Runner,
@@ -333,7 +335,7 @@ fn remove_unused(
         let removed = if opts.verbose || runner.dry() {
             runner.run(&cmd(&["emerge", "--depclean", "--ask"]))?
         } else {
-            remove_quietly(runner, opts, outcome)?
+            remove_quietly(runner, opts, outcome, &plan.remove_packages)?
         };
         if !removed {
             outcome.notes.push(format!(

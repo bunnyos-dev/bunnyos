@@ -32,6 +32,9 @@ a minor version can change how things work).
 - `bunny status`, `bunny generations`, `bunny rollback` and `bunny clean`
   now show times in your own time zone (like "Nov 18, 7:03 PM"), the same
   as the boot menu, instead of UTC.
+- `bunny remove` asks once instead of twice when it removes exactly what
+  the plan showed. It still asks again when emerge wants to remove more
+  (like dependencies nothing else uses), and always with `--yes`.
 - When emerge refuses a switch because a package is a testing version, is
   masked, or needs other USE flags, bunny now explains it from Portage's own
   answer (through bunny's Portage helper), including which packages pulled

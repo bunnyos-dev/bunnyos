@@ -308,7 +308,12 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   Package messages (elog) are shown at the end, a few lines each. Removal
   asks the Portage helper what depclean would remove (or reads `emerge
   --depclean --pretend`'s "All selected packages" line, falling back to
-  emerge's own `--ask` if the count doesn't match), and always asks. Cleanup also runs after USE changes and
+  emerge's own `--ask` if the count doesn't match), and asks. Exception,
+  so a plain `bunny remove` asks once: when the user answered yes to the
+  plan (not `--yes`) and the list is exactly the plan's "would be removed"
+  packages (names compared, slots ignored), it removes without asking
+  again; more than the plan showed (dependencies, leftovers after USE
+  changes) still asks. Cleanup also runs after USE changes and
   updates, since both can orphan dependencies. `--verbose` restores the old
   live, emerge-asks behaviour.
 - **Ctrl+C:** stops bunny at once, except at a question during a switch
@@ -375,7 +380,8 @@ when nothing is set and both are installed).
    plus `00-bunny-kept` (lines bunny can't manage yet, word for word).
 5. Writes the world file from `packages`.
 6. Runs `emerge --update --deep --newuse @world` (with `--ask` unless `--yes`).
-7. Runs `emerge --depclean --ask` if packages were removed. **Always asks.**
+7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
+   said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
 
 With `--root` pointing anywhere but `/`, files are written to that root and

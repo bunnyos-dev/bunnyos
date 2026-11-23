@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: `bunny plan` (and `check`, `switch`, `diff`) with a copy of
+  `bunny.toml` somewhere else left out this computer's host file, so GRUB,
+  the kernel and the rest showed as "would be removed". A copy with no
+  `hosts/` folder next to it now uses this computer's file from
+  `/etc/bunny/hosts/`, and says so.
 - The boot menu's "Earlier versions" and `bunny generations` say what each
   version was before in words: "before removing tree" or "before adding
   tmux and cronie" instead of "before − tree" or "before a switch: + tmux".

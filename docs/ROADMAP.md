@@ -709,24 +709,34 @@ is tested first in a VM with the same layout.
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.
 
-## After 0.1: a daily-driven Nvidia laptop
+## The G16: daily use on real hardware
 
 Decided November 23, 2026. The maintainer is buying an Asus G16 (2026,
-Nvidia) and wants to daily-drive Bunny Linux on it — pushing it hard on real
-hardware, bugs and all, separate from the stability gate above. No rush; take
-the time needed.
+Nvidia) and will daily-drive Bunny Linux on it, bugs and all; this is the
+stability gate's "about a week on the maintainer's laptop". The whole disk is
+Bunny Linux (no dual boot). The maintainer daily-drove Gentoo with Nvidia
+before, so Gentoo's `x11-drivers/nvidia-drivers` is expected to work; what's
+new is doing it through bunny.
 
-- [ ] **Nvidia drivers in the starter config and install flow**: `nvidia-
-      drivers` packaging, kernel config, and a `[desktop]`-style convenience
-      so bunny.toml doesn't need it all written out by hand.
 - [ ] **Secure Boot off first.** v1 has no Secure Boot support (see "Outside
       our control" and phase 8), and most new laptops ship with it on, so
       the install guide needs a plain step: turn it off in firmware before
       booting the USB.
-- [ ] **Hyprland/Mango on Nvidia**: `nvidia_drm.modeset=1`, the right GBM
-      backend env vars, and — if the G16 has hybrid Intel/Nvidia graphics,
-      which is likely — a way to switch GPUs. New ground for the
+- [ ] **The installer on the integrated GPU** (agreed): the live USB and the
+      graphical installer use the integrated graphics; Nvidia is set up on
+      the installed system.
+- [ ] **Nvidia through bunny.toml**: write down what the maintainer's working
+      Gentoo setup used (`nvidia-drivers` and its USE flags, the kernel
+      module and `nvidia_drm.modeset=1`, the video card setting), do it with
+      bunny on the G16, and note anything bunny couldn't express. Later, a
+      `[desktop]`-style convenience so it's one line.
+- [ ] **Hyprland/Mango on Nvidia**: the GBM backend env vars and, since the
+      G16 has hybrid graphics, which GPU drives what. New ground for the
       dynamic-island and desktop-setup work.
+- [ ] **Check the Wi-Fi chip** once the exact model is known.
+- [ ] **Dual boot, tested with Windows on an external drive** (made with
+      Rufus): does the boot menu find it (os-prober), and does bunny leave
+      it alone. Not in the installer yet.
 
 ## Known issues / small fixes
 

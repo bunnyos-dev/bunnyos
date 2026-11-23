@@ -677,7 +677,8 @@ to-do list. Appearance work comes last and a little at a time.
       re-applies to each weekly snapshot; upstream first.
 - [ ] **The Bunny tree is the only tree** (the actual fork): weekly bot merge
       from Gentoo, own binaries and advisories. Needs the maintainer's
-      explicit go-ahead.
+      explicit go-ahead, and only with contributors and support to carry
+      it (decided November 23, 2026). Steps 1 to 4 are the priority.
 
 ### Long-term: Portage-free systems
 - [ ] Portage (Python, its tools) lives only inside the build container;

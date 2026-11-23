@@ -580,7 +580,12 @@ up with it.
 **Rules that keep it manageable:**
 
 - Each step is optional and reversible until step 5. Step 5 needs the
-  maintainer's explicit go-ahead.
+  maintainer's explicit go-ahead, and only once the project has the people
+  and support to carry it (contributors, and something to run its build
+  servers on). Decided November 23, 2026: steps 1 to 4 are what matter;
+  step 5 is welcome someday, with time, if the project grows. Until then
+  Bunny Linux is a personal project shared with anyone who finds it worth
+  their time, and Gentoo does the heavy lifting.
 - Upstream first: fix things in Gentoo when the fix isn't Bunny-specific.
 - Keep the patch queue short. If it grows past what a bot can re-apply
   weekly without help, stop and rethink before adding more.

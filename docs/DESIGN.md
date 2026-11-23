@@ -173,6 +173,13 @@ isolated = false       # compile inside a clean container
 ### Rollback (current behaviour)
 
 - `bunny generations` lists the snapshots in `/.snapshots/bunny-*`.
+- **Times are local:** everything bunny shows a person (`status`,
+  `generations`, `rollback`, `clean`, the boot menu) says when in this
+  computer's time zone, like `Nov 18, 7:03 PM` (the year added when it
+  isn't this year), from one function, `rollback::local_time`. Snapshot
+  and backup names stay UTC (they sort and don't jump when the clock
+  changes). Report headers stay UTC too, marked as such: they're read on
+  GitHub, often from another time zone, next to other reports.
 - `bunny rollback [name]` (default: the latest switch) mounts the btrfs top
   level, snapshots the current `@` as `bunny-<time>-before-rollback` (so the
   rollback can be undone), moves `@` aside to `@replaced-<time>`, and makes a

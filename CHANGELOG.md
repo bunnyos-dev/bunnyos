@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny status`, `bunny generations`, `bunny rollback` and `bunny clean`
+  now show times in your own time zone (like "Nov 18, 7:03 PM"), the same
+  as the boot menu, instead of UTC.
 - A first graphical installer (`bunny-installer`): one question per screen
   on black, over `bunny install`, which still checks every answer and does
   the work. Try it in a window with `bunny-installer --demo`.

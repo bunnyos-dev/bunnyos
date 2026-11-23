@@ -600,6 +600,25 @@ is tested first in a VM with the same layout.
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.
 
+## After 0.1: a daily-driven Nvidia laptop
+
+Decided November 23, 2026. The maintainer is buying an Asus G16 (2026,
+Nvidia) and wants to daily-drive Bunny Linux on it — pushing it hard on real
+hardware, bugs and all, separate from the stability gate above. No rush; take
+the time needed.
+
+- [ ] **Nvidia drivers in the starter config and install flow**: `nvidia-
+      drivers` packaging, kernel config, and a `[desktop]`-style convenience
+      so bunny.toml doesn't need it all written out by hand.
+- [ ] **Secure Boot off first.** v1 has no Secure Boot support (see "Outside
+      our control" and phase 8), and most new laptops ship with it on, so
+      the install guide needs a plain step: turn it off in firmware before
+      booting the USB.
+- [ ] **Hyprland/Mango on Nvidia**: `nvidia_drm.modeset=1`, the right GBM
+      backend env vars, and — if the G16 has hybrid Intel/Nvidia graphics,
+      which is likely — a way to switch GPUs. New ground for the
+      dynamic-island and desktop-setup work.
+
 ## Known issues / small fixes
 
 - [x] Ctrl+C at doas's password question stopped bunny with no words of its

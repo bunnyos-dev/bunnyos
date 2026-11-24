@@ -808,8 +808,12 @@ that runs Bunny Linux and picks up test jobs on its own, so nightly tests
 happen on real hardware without the maintainer. The maintainer's desktop
 stays out of it (a test going wrong there is what we don't want).
 
-The machine: Dell Precision 7520, Intel Core i7-7820HQ (4 cores, VT-x),
-32 GB RAM, hybrid graphics (Intel HD 630 + NVIDIA Quadro M1200, Maxwell).
+The machine, for now: a Dell laptop with an Intel Core i7-8650U (4 cores,
+VT-x), 16 GB RAM, a 128 GB disk and Intel UHD 620 graphics only, so it
+covers plain Intel graphics (one test VM at a time). The first choice, a
+Dell Precision 7520 (i7-7820HQ, 32 GB, Intel HD 630 + NVIDIA Quadro M1200,
+Maxwell), stopped turning on (November 23); if it comes back, it joins for
+the older-Nvidia tests below.
 Ethernet for everyday jobs (through the access point's LAN ports or a small
 switch); Wi-Fi checked on its own now and then.
 

@@ -518,6 +518,19 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
+- [ ] **`bunny wifi`: join Wi-Fi without remembering iwctl** (asked for by
+      the maintainer). On the live USB and on installed systems: finds the
+      Wi-Fi device itself, scans, lists networks by signal strength with
+      numbers ("1. Home-5G ▂▄▆█ secured"), asks "Which one? [1]", asks the
+      password without showing it, connects, and says "✓ Connected to
+      Home-5G." in plain words (or why not: wrong password, out of range).
+      `bunny wifi` with no Wi-Fi device says so. iwd remembers the network.
+      On an installed system, if `iwd` isn't in the config's services it
+      offers to add it (shown like a plan, applied with a switch), so it
+      reconnects after a restart. The live USB's welcome says "Not online?
+      Plug in a cable, or run `bunny wifi`." instead of the iwctl lines,
+      and the Guide's install page uses it too. Later: the graphical
+      installer can use the same code for its Wi-Fi screen.
 - [ ] **`lspci` isn't on the live USB** ("command not found"). Add
       `sys-apps/pciutils` and `sys-apps/usbutils` (`lsusb`): they're the
       first thing anyone checks hardware with, and small. Make sure the

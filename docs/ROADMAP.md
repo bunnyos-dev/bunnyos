@@ -518,6 +518,16 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
+- [ ] **`lspci` isn't on the live USB** ("command not found"). Add
+      `sys-apps/pciutils` and `sys-apps/usbutils` (`lsusb`): they're the
+      first thing anyone checks hardware with, and small. Make sure the
+      image-shrinking step keeps them (and the PCI ID list they read).
+- [ ] **"There's no disk Bunny Linux can be installed on" could say why.**
+      When only USB sticks are found, add the likely causes in plain words:
+      the internal disk isn't connected, or the firmware's storage mode is
+      RAID / Intel RST (set SATA Operation to AHCI), which hides it from
+      Linux on many laptops. (Tested November 23: Ventoy's stick was
+      correctly refused as the live system's own disk.)
 - [ ] **Installing over Wi-Fi leaves the new system offline.** iwd is
       installed but not in the starter config's services (only dhcpcd, for
       a cable), and the Wi-Fi network joined on the live USB isn't carried

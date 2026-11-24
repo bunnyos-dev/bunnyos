@@ -10,6 +10,8 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny status --check` exits with code 1 when anything needs a look, so
+  scripts and scheduled checks can tell.
 - Fixed: the install's recording said it took "0 s". It now says how long
   the install ran.
 - `bunny report` says "Adding `bunny status` to the report…" while it

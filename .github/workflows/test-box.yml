@@ -8,21 +8,31 @@ name: Test machine
 
 on:
   workflow_dispatch:
+  schedule:
+    # Every night at 9:17 UTC: 4:17 AM in Toronto in winter, 5:17 AM in summer.
+    - cron: "17 9 * * *"
 
 permissions:
   contents: read
 
 jobs:
-  hello:
-    name: Say hello from the test machine
+  nightly:
+    name: Nightly check (changes nothing)
     runs-on: [self-hosted, bunny-hw]
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Which machine is this
-        run: |
-          uname -a
-          grep PRETTY_NAME /etc/os-release
-          nproc
-          free -h
+      - uses: actions/checkout@v5
+
+      - name: Health of the machine
+        run: sh tools/test-box/nightly-check.sh
+
+      - name: Config matches the system
+        # `bunny diff` exits 1 when the system has drifted from bunny.toml.
+        run: bunny diff
+
       - name: bunny status
-        run: bunny status
+        # Fails when anything needs a look, including a package list older
+        # than a week or a security advisory. Those are worth knowing about
+        # but aren't breakage, so this step can't turn the whole run red.
+        continue-on-error: true
+        run: bunny status --check

@@ -110,6 +110,25 @@ everything. Bunny's likely shape, to be designed properly first:
 - Fits docs/DESIGN.md's order for apps (Gentoo packages first, Flatpak for
   large GUI apps such as Steam).
 
+**From an outside review (November 23, 2026), worth keeping in mind:**
+
+- [ ] **The lock records versions, not build settings.** `bunny.lock` has
+      each repository's snapshot and each package's version; USE flags live
+      in bunny.toml, but Gentoo's profile defaults, `make.conf` and CPU or
+      video-card flags don't appear anywhere a second machine can compare.
+      After `[hardware]` and `make.conf` are in bunny.toml, have `bunny lock`
+      also record each package's effective USE flags (from
+      `/var/db/pkg/*/USE`) so `bunny plan` can say "same versions, different
+      build options" instead of calling two machines the same.
+- [ ] **Say plainly what's not part of "the same system":** user data,
+      secrets and keys are a third layer (after bunny.toml and the host
+      file), backed up and restored separately, never put in the config. A
+      Guide page on moving to a new computer: copy the config, install,
+      restore `/home` from a backup.
+- [ ] **Publish the reproducibility test**: one config installed twice
+      (two VMs), `bunny plan` on each says they match, then an update and a
+      rollback on both. The home test machine's nightly job can run it.
+
 ### Done so far
 
 - [x] `bunny import`: write a `bunny.toml` from the current system (world set,

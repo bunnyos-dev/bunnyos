@@ -1,0 +1,28 @@
+# Runs on the home test machine (a self-hosted runner labelled bunny-hw).
+#
+# Safety: this repository is public, so jobs for the test machine are only
+# started by hand (workflow_dispatch) or on a schedule, never by pull
+# requests, which anyone can open. Don't add `pull_request` triggers to any
+# workflow that uses `bunny-hw`.
+name: Test machine
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hello:
+    name: Say hello from the test machine
+    runs-on: [self-hosted, bunny-hw]
+    timeout-minutes: 10
+    steps:
+      - name: Which machine is this
+        run: |
+          uname -a
+          grep PRETTY_NAME /etc/os-release
+          nproc
+          free -h
+      - name: bunny status
+        run: bunny status

@@ -518,6 +518,23 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
+- [ ] **"Use the terminal instead" leaves a terminal you can't type in**
+      (real hardware, November 23; picking the terminal entry in the boot
+      menu works). The graphical installer takes over the console in
+      graphics mode and exits with `std::process::exit` without giving it
+      back. Restore the console when it leaves (the VT's text mode and
+      keyboard mode, e.g. let Slint shut down cleanly instead of exiting
+      the process, and reset with `kbd_mode`/`setfont` in
+      tools/iso/bash_profile as a fallback). Workaround until then: Ctrl+Alt+F2.
+- [ ] **Pulling the USB stick out says nothing.** The live system just stops
+      working. Notice the live image disappearing (dracut's live device, or
+      a read error) and show "The USB stick was removed. Put it back and
+      restart the computer." in the installer and on the console; during an
+      install, say the install stopped and nothing was finished.
+- [ ] **The graphical installer's "Install Bunny Linux" button is hard to
+      read on real hardware** (faint text on the white button, an Intel UHD
+      620 laptop screen). Check the button's text colour and contrast; it
+      looked fine in the VM.
 - [ ] **`bunny wifi`: join Wi-Fi without remembering iwctl** (asked for by
       the maintainer). On the live USB and on installed systems: finds the
       Wi-Fi device itself, scans, lists networks by signal strength with

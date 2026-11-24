@@ -518,6 +518,15 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
+- [ ] **Installing over Wi-Fi leaves the new system offline.** iwd is
+      installed but not in the starter config's services (only dhcpcd, for
+      a cable), and the Wi-Fi network joined on the live USB isn't carried
+      over. When the install ran over Wi-Fi: add `iwd` to the services and
+      copy the network iwd saved (`/var/lib/iwd/<name>.psk`, say so in the
+      preview) into the new system, so it's online after the restart.
+- [ ] **Booting the USB from Ventoy**: check the live system starts that
+      way (dracut finds its image), and that the installer leaves the
+      Ventoy stick out of the disk list like it does a plain USB stick.
 
 - [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
       prebuilt package was available. Find out whether the binhost is behind

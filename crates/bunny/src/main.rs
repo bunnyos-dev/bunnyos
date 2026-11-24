@@ -83,6 +83,9 @@ enum Command {
         /// System root to look at (for testing against another system)
         #[arg(long, default_value = "/")]
         root: PathBuf,
+        /// Exit with code 1 if anything needs a look (for scripts and scheduled checks)
+        #[arg(long)]
+        check: bool,
     },
     /// Check bunny.toml for mistakes and explain how to fix them
     Check {
@@ -389,13 +392,22 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Status { config, root } => {
+        Command::Status {
+            config,
+            root,
+            check,
+        } => {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0);
-            print!("{}", status::gather(&config, &root, now).render());
-            Ok(ExitCode::SUCCESS)
+            let status = status::gather(&config, &root, now);
+            print!("{}", status.render());
+            Ok(if check && !status.all_good() {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            })
         }
         Command::Diff { config, root } => diff_cmd(&config, &root),
         Command::Helper { args } => {

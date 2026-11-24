@@ -879,6 +879,11 @@ switch); Wi-Fi checked on its own now and then.
       branches, **never** `pull_request` jobs from forks (GitHub's own
       warning for public repos). Its own label (e.g. `bunny-hw`), and jobs
       that need it say so.
+- [~] **Nightly job, part 0: a read-only check** every night (9:17 UTC):
+      tools/test-box/nightly-check.sh (crashed services, network, disk
+      space, snapshots), `bunny diff`, and `bunny status --check`, which
+      only warns, since a week-old package list or an advisory isn't
+      breakage. Changes nothing; a red run means the machine needs a look.
 - [ ] **Nightly job, part 1: a full install in a VM** (QEMU/KVM) from the
       newest USB image built by the ISO workflow, both installers in turn,
       checking the result (zram, `bunny status`, no compiles), and posting
@@ -893,6 +898,10 @@ switch); Wi-Fi checked on its own now and then.
       tested. Check which branch Gentoo currently keeps for Maxwell.
 - [ ] **Later**: the other older laptops for more hardware (Intel graphics,
       different Wi-Fi), the same way.
+- [ ] **On the G16 instead, by hand** (the Dell can't cover these): Nvidia,
+      an encrypted install (the password prompt at boot can't be answered
+      by a runner), Secure Boot, and the boot-screen look. Part of the
+      G16 week.
 
 ## Known issues / small fixes
 

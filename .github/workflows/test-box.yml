@@ -31,8 +31,9 @@ jobs:
         run: bunny diff
 
       - name: bunny status
-        # Fails when anything needs a look, including a package list older
-        # than a week or a security advisory. Those are worth knowing about
-        # but aren't breakage, so this step can't turn the whole run red.
-        continue-on-error: true
-        run: bunny status --check
+        # Warns (yellow) when anything needs a look, such as a package list
+        # older than a week or a security advisory. Those are worth knowing
+        # about but aren't breakage, so they don't turn the run red or send
+        # failure emails.
+        run: |
+          bunny status --check || echo "::warning title=bunny status::Something needs a look; the lines marked ⚠ or ✗ above say what."

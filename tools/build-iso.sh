@@ -3,6 +3,14 @@
 # USB stick, or boot in the VM).
 #
 #   doas tools/build-iso.sh <bunny binary> [output.iso]
+#   doas env PREVIEW=1 tools/build-iso.sh ...   (a preview image, for testing)
+#   doas env INSTALLER=target/release/bunny-installer tools/build-iso.sh ...
+#       (adds the graphical installer: the USB starts in it, and the terminal
+#       is a boot menu choice)
+#
+# A preview image records every bunny command (developer mode, without
+# sending anything), and bunny install copies its recording into the new
+# system so `bunny report` can send it from there. Release images don't.
 #
 # Needs root (it unpacks a system and runs commands inside it with chroot),
 # a Linux computer, and: wget, tar, xz, sha512sum, mksquashfs
@@ -34,6 +42,8 @@ fail() { printf '\n✗ %s\n' "$*" >&2; exit 1; }
 [ $# -ge 1 ] || fail "Usage: $0 <bunny binary> [output.iso]"
 bunny="$1"
 out="${2:-bunny-linux-live.iso}"
+preview="${PREVIEW:-0}"
+installer="${INSTALLER:-}"
 [ "$(id -u)" = 0 ] || fail "Run this as root (doas $0 …): it unpacks a system and uses chroot."
 [ -x "$bunny" ] || fail "$bunny isn't a bunny binary you can run. Build one first (cargo build --release)."
 "$bunny" --version >/dev/null 2>&1 \
@@ -41,6 +51,8 @@ out="${2:-bunny-linux-live.iso}"
 for tool in wget tar xz sha512sum mksquashfs grub-mkrescue xorriso mformat; do
     command -v "$tool" >/dev/null 2>&1 || fail "$tool is missing. See the top of this script for what to install."
 done
+[ -z "$installer" ] || [ -x "$installer" ] \
+    || fail "INSTALLER=$installer isn't a program you can run. Build it: cargo build --release -p bunny-installer"
 case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 
 work="${WORK:-$(mktemp -d /var/tmp/bunny-iso.XXXXXX)}"
@@ -80,8 +92,24 @@ rm -f "$work/$file" "$work/$file.DIGESTS" "$work/$file.sha512"
 say "Adding bunny and the USB's own files"
 install -D -m 0755 "$bunny" "$root/usr/local/bin/bunny"
 install -D -m 0755 "$here/iso/welcome.sh" "$root/usr/local/bin/welcome"
+install -D -m 0755 "$here/iso/openrc-quiet.sh" "$root/usr/local/sbin/bunny-openrc"
 install -D -m 0644 "$here/iso/bash_profile" "$root/root/.bash_profile"
 install -D -m 0755 "$here/iso/inside.sh" "$root/root/build-inside.sh"
+if [ -n "$installer" ]; then
+    install -D -m 0755 "$installer" "$root/usr/local/bin/bunny-installer"
+fi
+install -D -m 0755 "$here/iso/smaller.sh" "$root/root/build-smaller.sh"
+install -D -m 0755 "$here/iso/check.sh" "$root/root/build-check.sh"
+if [ "$preview" = 1 ]; then
+    # Read by bunny (dev::PREVIEW): record every command on this USB.
+    cat > "$root/etc/bunny-preview.toml" <<'EOF'
+# Bunny Linux preview USB: bunny records every command here (developer
+# mode). Nothing is sent from the USB; bunny install copies its recording
+# into the new system, where `bunny report` shows it and asks before sending.
+[dev]
+report = true
+EOF
+fi
 
 cp --dereference /etc/resolv.conf "$root/etc/"
 mount --types proc /proc "$root/proc"; mounted="proc $mounted"
@@ -92,7 +120,26 @@ mount --bind /run "$root/run"; mount --make-slave "$root/run"; mounted="run $mou
 say "Installing the USB's packages inside it (prebuilt; takes a while)"
 chroot "$root" /bin/bash /root/build-inside.sh \
     || fail "Building inside the image failed (the message is above)."
-rm -f "$root/root/build-inside.sh"
+say "Removing what the USB doesn't need"
+chroot "$root" /bin/bash /root/build-smaller.sh \
+    || fail "Making the image smaller failed (the message is above)."
+say "Checking the finished image"
+chroot "$root" /bin/bash /root/build-check.sh \
+    || fail "The finished image is missing something the USB needs (listed above)."
+if [ -n "$installer" ]; then
+    # After making it smaller: its libraries and data are all still there
+    # (libinput, xkbcommon and its keyboard layouts, fontconfig and a font).
+    # It starts, prints its help and stops, without a screen.
+    chroot "$root" /usr/local/bin/bunny-installer --help >/dev/null \
+        || fail "The graphical installer doesn't start inside the image (a library is missing?)."
+    for need in /usr/share/X11/xkb/symbols/us /etc/fonts/fonts.conf; do
+        [ -e "$root$need" ] \
+            || fail "The graphical installer needs $need, which isn't in the image."
+    done
+    ls "$root"/usr/share/fonts/dejavu/DejaVuSans*.ttf >/dev/null 2>&1 \
+        || fail "The graphical installer's font (DejaVu) isn't in the image."
+fi
+rm -f "$root/root/build-inside.sh" "$root/root/build-smaller.sh" "$root/root/build-check.sh"
 cleanup
 mounted=""
 : > "$root/etc/resolv.conf"
@@ -103,19 +150,49 @@ mv "$root/boot/vmlinuz-live" "$iso/boot/vmlinuz"
 mv "$root/boot/initramfs-live.img" "$iso/boot/initramfs.img"
 cp "$here/iso/grub.cfg" "$iso/boot/grub/grub.cfg"
 version="$("$bunny" --version | awk '{print $NF}')"
-printf 'Bunny Linux live USB, bunny %s, built %s from %s\n' \
-    "$version" "$(date -u +%Y-%m-%d)" "$file" > "$iso/bunny-live.txt"
+kind="live USB"
+[ "$preview" = 1 ] && kind="live USB (preview)"
+printf 'Bunny Linux %s, bunny %s, built %s from %s\n' \
+    "$kind" "$version" "$(date -u +%Y-%m-%d)" "$file" > "$iso/bunny-live.txt"
 cp "$iso/bunny-live.txt" "$root/etc/bunny-live"
 
-mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp zstd -Xcompression-level 19 \
+# What takes the space, for keeping the image small (CI shows it on the
+# run's page).
+sizes="$work/sizes.md"
+sh "$here/iso/sizes.sh" "$root" > "$sizes" || fail "Couldn't measure the image."
+
+# xz with 1 MB blocks and the x86 filter packs the system about a tenth
+# smaller than zstd (Arch's ISO uses the same). It starts a little slower
+# from a USB stick; the kernel reads it (smaller.sh checks).
+mksquashfs "$root" "$iso/LiveOS/squashfs.img" -comp xz -Xbcj x86 -b 1M -Xdict-size 100% \
     -noappend -quiet -e boot/grub
 grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL" >/dev/null 2>&1 \
     || grub-mkrescue --output="$out" "$iso" -- -volid "$LABEL"
 (cd "$(dirname "$out")" && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
 
+mb() { echo $(( ($(stat -c %s "$1") + 524288) / 1048576 )); }
+{
+    echo
+    echo "### The ISO's parts (compressed)"
+    echo
+    echo "| Part | MB |"
+    echo "|---|---:|"
+    echo "| The live system (\`LiveOS/squashfs.img\`) | $(mb "$iso/LiveOS/squashfs.img") |"
+    echo "| Kernel (\`boot/vmlinuz\`) | $(mb "$iso/boot/vmlinuz") |"
+    echo "| Startup image (\`boot/initramfs.img\`) | $(mb "$iso/boot/initramfs.img") |"
+    echo "| **The whole ISO** | **$(mb "$out")** |"
+    echo
+    echo "Boot records (El Torito):"
+    echo
+    echo '```'
+    xorriso -indev "$out" -report_el_torito plain 2>/dev/null || true
+    echo '```'
+} >> "$sizes"
+
 size="$(du -h "$out" | cut -f1)"
 say "Done: $out ($size)"
 echo "  Its SHA256 is in $out.sha256."
+echo "  What takes the space: $sizes"
 echo "  Try it:        tools/bunny-vm.sh run $out"
 echo "  Write a USB:   doas dd if=$out of=/dev/sdX bs=4M status=progress oflag=sync"
 echo "  (The work folder $work can be deleted.)"

@@ -22,6 +22,11 @@ pub const DEFAULT_REPORTS: &str = "bunnyos-dev/bunny-reports";
 /// Set while a command is being recorded, so it isn't recorded twice.
 pub const SESSION_ENV: &str = "BUNNY_SESSION";
 
+/// On a preview live USB (one built for testing), this file turns recording
+/// on for every bunny command, since the USB has no `bunny.toml`. Release
+/// images don't have it.
+pub const PREVIEW: &str = "/etc/bunny-preview.toml";
+
 /// The `[dev]` section.
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
@@ -98,6 +103,94 @@ pub fn settings(config: &Path) -> Dev {
         .unwrap_or_default()
 }
 
+/// `[dev]` from the config, or from `preview` (a preview live USB's file)
+/// when the config doesn't turn recording on.
+pub fn settings_or_preview(config: &Path, preview: &Path) -> Dev {
+    let dev = settings(config);
+    if dev.report != ReportMode::Off {
+        return dev;
+    }
+    let preview = settings(preview);
+    if preview.report != ReportMode::Off {
+        preview
+    } else {
+        dev
+    }
+}
+
+/// The recording of the command running now, if it's being recorded.
+pub fn current_recording() -> Option<PathBuf> {
+    std::env::var_os(SESSION_ENV)
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+}
+
+/// Copies the recording of a command still running (as far as it got) into
+/// `to` (another system's sessions folder), with its notes, so `bunny
+/// report` there sends it. `bunny install` uses it just before it
+/// unmounts the new system, so the last few lines aren't in the copy.
+/// Returns the copied log.
+pub fn copy_recording(log: &Path, to: &Path, args: &[String]) -> Result<PathBuf> {
+    let name = log
+        .file_name()
+        .context("The recording has no file name")?
+        .to_owned();
+    std::fs::create_dir_all(to).with_context(|| format!("Couldn't create {}", to.display()))?;
+    let copied = to.join(name);
+    std::fs::copy(log, &copied).with_context(|| format!("Couldn't copy {}", log.display()))?;
+    let args: Vec<String> = args
+        .iter()
+        .filter(|a| *a != "--in-session")
+        .cloned()
+        .collect();
+    let stem = log
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let started = args
+        .iter()
+        .find(|a| !a.starts_with('-'))
+        .and_then(|sub| stem.strip_suffix(&format!("-{sub}")))
+        .unwrap_or(&stem)
+        .to_string();
+    // From the time in the recording's name: the file's creation time
+    // isn't available on the live USB's filesystem, which made it "0 s".
+    let seconds = seconds_since(&started, unix_now())
+        .or_else(|| {
+            std::fs::metadata(log)
+                .and_then(|m| m.created())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .map(|d| d.as_secs())
+        })
+        .unwrap_or(0);
+    let meta = Meta {
+        args,
+        version: env!("CARGO_PKG_VERSION").into(),
+        started,
+        seconds,
+        // It got this far without failing.
+        exit_code: Some(0),
+        reported: None,
+    };
+    write_meta(&copied.with_extension("toml"), &meta)?;
+    Ok(copied)
+}
+
+/// Seconds since 1970, now.
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
+}
+
+/// How long ago a `YYYYMMDD-HHMMSS` (UTC) stamp was, at `now`. `None` for
+/// a stamp that can't be read or is in the future (the clock moved back).
+fn seconds_since(stamp: &str, now: i64) -> Option<u64> {
+    let then = crate::status::parse_stamp(stamp)?;
+    u64::try_from(now - then).ok()
+}
+
 /// Where recordings are kept: the user's own state folder, so no root needed.
 pub fn sessions_dir() -> PathBuf {
     let base = std::env::var_os("XDG_STATE_HOME")
@@ -148,7 +241,7 @@ pub fn record_if_on(config: &Path, in_session: bool) -> Option<ExitCode> {
     {
         return None;
     }
-    let dev = settings(config);
+    let dev = settings_or_preview(config, Path::new(PREVIEW));
     if dev.report == ReportMode::Off {
         return None;
     }
@@ -230,8 +323,14 @@ pub fn shell_quote(arg: &str) -> String {
     format!("'{}'", arg.replace('\'', "'\\''"))
 }
 
-/// A command "had a problem" if it failed or printed a ⚠ or ✗.
+/// A command "had a problem" if it failed or printed a ⚠ or ✗, unless it
+/// stopped because of what you typed (a name that doesn't exist, a config
+/// mistake, no password at sudo's question): that's yours, not bunny's, even
+/// though it prints a ✗ to tell you.
 pub fn had_problem(meta: &Meta, text: &str) -> bool {
+    if meta.exit_code == Some(i32::from(crate::commands::YOUR_INPUT)) {
+        return false;
+    }
     meta.exit_code != Some(0) || text.contains('✗') || text.contains('⚠')
 }
 
@@ -358,12 +457,38 @@ impl Redactions {
         for (from, to) in &self.swaps {
             text = if from.starts_with('/') {
                 text.replace(from.as_str(), to)
+            } else if SHARED_WORDS.contains(&from.to_lowercase().as_str()) {
+                replace_as_name(&text, from, to)
             } else {
                 replace_word(&text, from, to)
             };
         }
         mask_tokens(&text)
     }
+}
+
+/// Words bunny (and Gentoo) print themselves. A user or computer called
+/// one of these is only swapped where it's clearly a name, so a user named
+/// `bunny` doesn't turn `bunny update` into `you update`.
+const SHARED_WORDS: [&str; 8] = [
+    "bunny", "gentoo", "portage", "emerge", "linux", "root", "admin", "user",
+];
+
+/// Replaces `name` only where it's used as a user or computer name:
+/// `name@host`, `user@name`, `"name"` (like `admins = ["name"]`), and after
+/// `login: ` or `user `.
+fn replace_as_name(text: &str, name: &str, with: &str) -> String {
+    let mut out = text.to_string();
+    for (find, put) in [
+        (format!("{name}@"), format!("{with}@")),
+        (format!("@{name}"), format!("@{with}")),
+        (format!("\"{name}\""), format!("\"{with}\"")),
+        (format!("login: {name}"), format!("login: {with}")),
+        (format!("user {name}"), format!("user {with}")),
+    ] {
+        out = out.replace(&find, &put);
+    }
+    out
 }
 
 /// Replaces `word` where it isn't part of a longer name (letters, digits,
@@ -641,12 +766,23 @@ pub fn prepare(dev: &Dev, bases: &[PathBuf], automatic: bool) -> Result<(String,
         bail!("there are no recordings to send");
     }
     let root = Path::new("/");
-    let status = Command::new(std::env::current_exe()?)
+    if !automatic {
+        // It can take a while (glsa-check reads every advisory), and
+        // without a word it looked like `bunny report` had hung.
+        println!("Adding `bunny status` to the report (this can take a moment the first time)…");
+    }
+    let mut status_cmd = Command::new(std::env::current_exe()?);
+    status_cmd
         .arg("status")
-        .env(SESSION_ENV, "status-for-report")
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+        .env(SESSION_ENV, "status-for-report");
+    let status = match output_within(status_cmd, STATUS_TIME_LIMIT) {
+        Finished::Output(text) => Some(text),
+        Finished::TooSlow => Some(format!(
+            "(bunny status didn't finish within {} seconds, so it's left out.)",
+            STATUS_TIME_LIMIT.as_secs()
+        )),
+        Finished::Failed => None,
+    };
     Ok(compose(
         &sessions,
         status.as_deref(),
@@ -654,6 +790,56 @@ pub fn prepare(dev: &Dev, bases: &[PathBuf], automatic: bool) -> Result<(String,
         automatic,
         &Redactions::for_this_computer(root),
     ))
+}
+
+/// How long `bunny report` waits for `bunny status`.
+const STATUS_TIME_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How a command run with a time limit ended.
+#[derive(Debug, PartialEq)]
+enum Finished {
+    /// What it printed.
+    Output(String),
+    /// Still running at the limit, so it was stopped.
+    TooSlow,
+    /// It couldn't be started.
+    Failed,
+}
+
+/// Runs `cmd`, keeping what it prints, and stops it after `limit`.
+fn output_within(mut cmd: Command, limit: std::time::Duration) -> Finished {
+    use std::io::Read;
+    let Ok(mut child) = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return Finished::Failed;
+    };
+    let mut stdout = child.stdout.take();
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(out) = stdout.as_mut() {
+            let _ = out.read_to_string(&mut text);
+        }
+        text
+    });
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Finished::TooSlow;
+            }
+        }
+    }
+    Finished::Output(reader.join().unwrap_or_default())
 }
 
 /// Files an issue with the GitHub CLI and the user's own login (through the
@@ -737,6 +923,93 @@ mod tests {
     }
 
     #[test]
+    fn a_preview_usb_records_without_a_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("bunny.toml");
+        let preview = dir.path().join("bunny-preview.toml");
+        // No config, no preview file: off.
+        assert_eq!(
+            settings_or_preview(&config, &preview).report,
+            ReportMode::Off
+        );
+        std::fs::write(&preview, "[dev]\nreport = true\n").unwrap();
+        assert_eq!(
+            settings_or_preview(&config, &preview).report,
+            ReportMode::Record
+        );
+        // The config's own [dev] wins when it turns recording on.
+        std::fs::write(&config, "[dev]\nreport = \"auto\"\n").unwrap();
+        assert_eq!(
+            settings_or_preview(&config, &preview).report,
+            ReportMode::Auto
+        );
+    }
+
+    #[test]
+    fn copies_a_recording_into_another_system() {
+        let usb = tempfile::tempdir().unwrap();
+        let log = usb.path().join("20261119-201500-install.log");
+        std::fs::write(&log, "==> Starting\n").unwrap();
+        let to = tempfile::tempdir().unwrap();
+        let sessions = to.path().join("home/you/.local/state/bunny/sessions");
+        let args = vec!["install".to_string(), "--ssh".to_string()];
+        let copied = copy_recording(&log, &sessions, &args).unwrap();
+        assert_eq!(copied, sessions.join("20261119-201500-install.log"));
+        assert_eq!(std::fs::read_to_string(&copied).unwrap(), "==> Starting\n");
+        // `bunny report` in the new system finds it as not sent yet.
+        assert_eq!(
+            unsent(&sessions),
+            [sessions.join("20261119-201500-install")]
+        );
+        let meta = read_meta(&copied.with_extension("toml")).unwrap();
+        assert_eq!(meta.args, args);
+        assert_eq!(meta.started, "20261119-201500");
+        assert_eq!(meta.exit_code, Some(0));
+        assert_eq!(meta.reported, None);
+        // How long it ran comes from the time in its name, not the file's
+        // creation time (unavailable on the live USB, so it said "0 s").
+        let since = seconds_since("20261119-201500", unix_now()).unwrap();
+        assert!(
+            meta.seconds >= since && meta.seconds <= since + 60,
+            "{}",
+            meta.seconds
+        );
+    }
+
+    #[test]
+    fn says_how_long_ago_a_stamp_was() {
+        let then = crate::status::parse_stamp("20261122-100000").unwrap();
+        assert_eq!(seconds_since("20261122-100000", then + 754), Some(754));
+        assert_eq!(seconds_since("20261122-100000", then - 5), None);
+        assert_eq!(seconds_since("garbage", then), None);
+    }
+
+    #[test]
+    fn a_slow_command_is_stopped_at_the_limit() {
+        let mut quick = Command::new("sh");
+        quick.args(["-c", "echo ready"]);
+        assert_eq!(
+            output_within(quick, std::time::Duration::from_secs(10)),
+            Finished::Output("ready\n".into())
+        );
+        let mut slow = Command::new("sleep");
+        slow.arg("30");
+        let started = std::time::Instant::now();
+        assert_eq!(
+            output_within(slow, std::time::Duration::from_millis(200)),
+            Finished::TooSlow
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        assert_eq!(
+            output_within(
+                Command::new("/nonexistent/command"),
+                std::time::Duration::from_secs(1)
+            ),
+            Finished::Failed
+        );
+    }
+
+    #[test]
     fn some_commands_are_never_recorded() {
         assert!(recordable(Some("add")));
         assert!(!recordable(Some("report")));
@@ -765,6 +1038,24 @@ mod tests {
             clean(raw),
             "✓ looks good.\nApply these changes? [Y/n]\n  ✓ Installed 2 packages.\ntype\ndone"
         );
+    }
+
+    #[test]
+    fn your_own_mistakes_are_not_reported_by_themselves() {
+        let yours = Meta {
+            exit_code: Some(i32::from(crate::commands::YOUR_INPUT)),
+            ..Meta::default()
+        };
+        // Ctrl+C at sudo's password question.
+        assert!(!had_problem(
+            &yours,
+            "[sudo] password for you: \n✗ bunny needs admin rights to change the system, and sudo didn't give them,\n  so nothing was changed."
+        ));
+        // A package name that doesn't exist.
+        assert!(!had_problem(
+            &yours,
+            "✗ \"mpvv\" isn't a package. Did you mean media-video/mpv?\nNothing was changed."
+        ));
     }
 
     #[test]
@@ -797,6 +1088,25 @@ mod tests {
             "you@computer ~ $ ls /home/you/docs\n\
              samba and sams stay; user you, mount <tailnet-name>,\n\
              mail <email>."
+        );
+    }
+
+    #[test]
+    fn a_user_called_bunny_keeps_bunnys_own_words() {
+        // From the dry run: the user name was `bunny`.
+        let r = Redactions::new(vec![
+            ("/home/bunny".into(), "/home/you".into()),
+            ("bunny".into(), "you".into()),
+            ("vm-bunny".into(), "computer".into()),
+        ]);
+        let text = "bunny@vm-bunny ~ $ bunny status\n\
+                    ✓ /etc/bunny/bunny.toml looks good. Use `bunny update`.\n\
+                    admins = [\"bunny\"]\nvm-bunny login: bunny\nls /home/bunny/x";
+        assert_eq!(
+            r.apply(text),
+            "you@computer ~ $ bunny status\n\
+             ✓ /etc/bunny/bunny.toml looks good. Use `bunny update`.\n\
+             admins = [\"you\"]\ncomputer login: you\nls /home/you/x"
         );
     }
 

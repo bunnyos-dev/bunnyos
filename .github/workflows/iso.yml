@@ -13,6 +13,7 @@ on:
       - ".github/workflows/iso.yml"
       - "tools/build-iso.sh"
       - "tools/iso/**"
+      - "crates/bunny-installer/**"
   workflow_dispatch:
 
 permissions:
@@ -32,27 +33,40 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools squashfs-tools xorriso mtools \
-            grub-common grub-efi-amd64-bin qemu-system-x86 ovmf
+            grub-common grub-efi-amd64-bin qemu-system-x86 ovmf \
+            libinput-dev libudev-dev libxkbcommon-dev libfontconfig1-dev
       - name: Build bunny (static, runs on the USB)
         run: cargo build --release --locked --target x86_64-unknown-linux-musl
+      - name: Build the graphical installer (uses the USB's libinput, xkbcommon and fontconfig)
+        run: cargo build --release --locked -p bunny-installer
       - name: Name the ISO
         id: name
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             echo "iso=bunny-linux-live-${GITHUB_REF_NAME#v}.iso" >> "$GITHUB_OUTPUT"
+            echo "preview=0" >> "$GITHUB_OUTPUT"
           else
             echo "iso=bunny-linux-live-preview.iso" >> "$GITHUB_OUTPUT"
+            echo "preview=1" >> "$GITHUB_OUTPUT"
           fi
       - name: Build the image
         env:
           WORK: ${{ runner.temp }}/iso-work
+          # Preview images record bunny install (see tools/build-iso.sh).
+          PREVIEW: ${{ steps.name.outputs.preview }}
+          INSTALLER: target/release/bunny-installer
         run: |
           mkdir -p dist
-          sudo --preserve-env=WORK tools/build-iso.sh \
+          sudo --preserve-env=WORK,PREVIEW,INSTALLER tools/build-iso.sh \
             target/x86_64-unknown-linux-musl/release/bunny \
             "dist/${{ steps.name.outputs.iso }}"
           sudo chown -R "$(id -u):$(id -g)" dist
           ls -lh dist
+      - name: What takes the space
+        env:
+          WORK: ${{ runner.temp }}/iso-work
+        run: |
+          sudo cat "$WORK/sizes.md" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Check that it starts
         env:
           WORK: ${{ runner.temp }}/iso-work
@@ -75,6 +89,10 @@ jobs:
             # "Starting local" is the last service of the default runlevel.
             if grep -qE "Starting (local|DHCP Client Daemon)" boot.log; then
               echo "✓ The live system started (OpenRC is starting services)."
+              if [ "${{ steps.name.outputs.preview }}" = 1 ]; then
+                sudo test -f "$WORK/root/etc/bunny-preview.toml" \
+                  || { echo "✗ A preview image without /etc/bunny-preview.toml"; exit 1; }
+              fi
               kill "$qemu" 2>/dev/null || true
               exit 0
             fi

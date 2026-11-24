@@ -37,13 +37,14 @@ pub(crate) fn switch_inner(
     removal_requested: bool,
 ) -> anyhow::Result<Switched> {
     let real_system = root == Path::new("/");
+    let _changing = super::changing(real_system, false)?;
 
-    let cfg = Config::load(config)?;
+    let cfg = Config::load(config).map_err(apply::nothing_changed)?;
     if report_problems(&cfg, config) != ExitCode::SUCCESS {
         eprintln!("Fix these first, then run `bunny switch` again.");
-        return Ok(Switched::NotApplied(ExitCode::FAILURE));
+        return Ok(Switched::NotApplied(super::your_input()));
     }
-    let mut plan = plan::make(&cfg, root)?;
+    let mut plan = plan::make(&cfg, root).map_err(apply::nothing_changed)?;
     plan.removal_requested = removal_requested;
     print!("{}", plan.render());
     if !plan.unknown_packages.is_empty() {
@@ -51,7 +52,7 @@ pub(crate) fn switch_inner(
             "Nothing was changed. Fix the package names in {}, then run `bunny switch` again.",
             config.display()
         );
-        return Ok(Switched::NotApplied(ExitCode::FAILURE));
+        return Ok(Switched::NotApplied(super::your_input()));
     }
     if !plan.security.problems.is_empty() {
         eprintln!(
@@ -256,10 +257,11 @@ pub(crate) fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Resul
     if let Some(code) = elevate(real_system)? {
         return Ok(code);
     }
+    let _changing = super::changing(real_system, false)?;
     let cfg = Config::load(config)?;
     if report_problems(&cfg, config) != ExitCode::SUCCESS {
         eprintln!("Fix these first, then run `bunny update` again.");
-        return Ok(ExitCode::FAILURE);
+        return Ok(super::your_input());
     }
     println!(
         "\nThis will sync the Gentoo package tree, update everything to the newest\n\

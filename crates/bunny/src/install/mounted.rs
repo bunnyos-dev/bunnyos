@@ -378,6 +378,12 @@ pub fn add_subvolumes(
             format!("{}{target}", folder.to_string_lossy().trim_end_matches('/'))
         }
     };
+    super::say(
+        runner,
+        "Making the subvolumes",
+        "Adds the standard btrfs subvolumes to your filesystem and mounts\n\
+         them in place, so the system can be saved and undone.",
+    );
     let mut step = |what: &str, cmd: Vec<String>| -> Result<()> {
         if !runner.run(&cmd)? {
             bail!(
@@ -388,7 +394,6 @@ pub fn add_subvolumes(
         Ok(())
     };
     let v = |parts: &[&str]| parts.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    println!("\n==> Making the subvolumes");
     step("unmount it", v(&["umount", "--recursive", &at("/")]))?;
     step(
         "mount it",

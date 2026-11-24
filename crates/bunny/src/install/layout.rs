@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Result};
 
 use super::disks::partition;
+use super::say;
 use crate::apply::Runner;
 
 /// btrfs mount options for every subvolume.
@@ -40,6 +41,8 @@ pub struct Choices {
     pub efi_mib: u64,
     /// Size of the swapfile in MiB; 0 for none.
     pub swap_mib: u64,
+    /// Compressed swap in memory (zram), as big as memory up to 8 GB.
+    pub zram: bool,
     /// Set up resuming from the swapfile (hibernation).
     pub hibernate: bool,
     /// A second disk, all of it for /home.
@@ -59,6 +62,7 @@ impl Default for Choices {
             encrypt: true,
             efi_mib: 2048,
             swap_mib: 0,
+            zram: true,
             hibernate: false,
             home_disk: None,
             mnt: PathBuf::from("/mnt/bunny"),
@@ -156,12 +160,23 @@ impl Choices {
             "   Your files (/home), logs and caches are kept apart from the system, so undo never touches them."
                 .into(),
         );
+        if self.zram {
+            out.push(
+                "   Swap: compressed, in memory (zram), as big as your memory up to 8 GB".into(),
+            );
+        }
         if self.swap_mib > 0 {
             out.push(format!(
-                "   A {} swapfile in /swap{}",
+                "   {}: {}, a file in /swap{}{}",
+                if self.zram { "Then on disk" } else { "Swap" },
                 mib(self.swap_mib),
+                if self.encrypt {
+                    ", encrypted with the system"
+                } else {
+                    ""
+                },
                 if self.hibernate {
-                    ", set up for hibernation"
+                    "; set up for hibernation"
                 } else {
                     ""
                 }
@@ -318,10 +333,6 @@ fn failed(what: &str, tool: &str) -> String {
     )
 }
 
-fn say(text: &str) {
-    println!("\n==> {text}");
-}
-
 /// Erases the disk(s), makes the layout and mounts it at `choices.mnt`.
 /// `home_key` is a file holding a random key for the /home disk (only used
 /// with `--home-disk` and encryption).
@@ -334,7 +345,15 @@ pub fn prepare(
     let d = choices.devices();
     let disk = choices.disk.as_str();
 
-    say(&format!("Partitioning {disk}"));
+    say(
+        runner,
+        &format!("Partitioning {disk}"),
+        &format!(
+            "Erases {disk}'s partition table and makes two partitions: EFI ({}),\n\
+             which the computer starts from, and the rest for Bunny Linux.",
+            mib(choices.efi_mib)
+        ),
+    );
     step(
         runner,
         "clear the old partition table",
@@ -358,7 +377,11 @@ pub fn prepare(
     // Wait for the new partitions to appear.
     let _ = runner.run(&s(&["udevadm", "settle"]));
 
-    say("Creating the EFI partition's filesystem");
+    say(
+        runner,
+        "Creating the EFI partition's filesystem",
+        "Formats the EFI partition as FAT32, the format computers start from.",
+    );
     step(
         runner,
         "format the EFI partition",
@@ -366,7 +389,12 @@ pub fn prepare(
     )?;
 
     if choices.encrypt {
-        say("Encrypting the disk (LUKS2)");
+        say(
+            runner,
+            "Encrypting the disk (LUKS2)",
+            "Encrypts the Bunny Linux partition with your password, then unlocks\n\
+             it so the install can write to it.",
+        );
         step_with_input(
             runner,
             "encrypt the disk",
@@ -397,7 +425,16 @@ pub fn prepare(
         )?;
     }
 
-    say("Creating the btrfs filesystem and its subvolumes");
+    let names: Vec<&str> = choices.subvolumes().iter().map(|(sv, _)| *sv).collect();
+    say(
+        runner,
+        "Creating the btrfs filesystem and its subvolumes",
+        &format!(
+            "Makes a btrfs filesystem with subvolumes, so the system can be saved\n\
+             and undone without touching your files:\n{}.",
+            names.join(", ")
+        ),
+    );
     step(
         runner,
         "create the btrfs filesystem",
@@ -428,7 +465,12 @@ pub fn prepare(
         )?;
     }
 
-    say(&format!("Mounting the new system at {mnt}"));
+    say(
+        runner,
+        &format!("Mounting the new system at {mnt}"),
+        "Mounts the subvolumes and the EFI partition (at /boot) where the new\n\
+         system is put together.",
+    );
     let opts = |sv: &str| format!("{BTRFS_OPTS},subvol={sv}");
     step(
         runner,
@@ -462,7 +504,11 @@ pub fn prepare(
     )?;
 
     if choices.swap_mib > 0 {
-        say("Making the swapfile");
+        say(
+            runner,
+            "Making the swapfile",
+            &format!("Makes the swap file in /swap ({}).", mib(choices.swap_mib)),
+        );
         step(
             runner,
             "make the swapfile",
@@ -488,7 +534,18 @@ fn prepare_home_disk(
     home_key: &Path,
     runner: &mut dyn Runner,
 ) -> Result<()> {
-    say(&format!("Setting up {disk} for /home"));
+    say(
+        runner,
+        &format!("Setting up {disk} for /home"),
+        &if choices.encrypt {
+            format!(
+                "Erases {disk} and makes one encrypted partition for /home. It unlocks\n\
+                 with a key file kept in the encrypted system, so one password opens both."
+            )
+        } else {
+            format!("Erases {disk} and makes one partition for /home.")
+        },
+    );
     step(
         runner,
         "clear the /home disk",

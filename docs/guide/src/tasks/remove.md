@@ -13,13 +13,28 @@ that nothing else uses**:
 
 ```
 These packages aren't needed anymore (nothing you asked for uses them):
-  - media-video/mpv  0.40.0
-  - media-libs/libass  0.17.3
+  - media-libs/libass  0.17.3  (only media-video/mpv used it)
+  - media-video/mpv    0.40.0
 Remove them? [Y/n]
 ```
 
-That question **always** appears, even with `--yes`, because removing
-packages is the one thing you want to see first.
+When a package goes only because another one in the list goes, bunny says
+which. Exactly the packages listed are removed, nothing else.
+
+That second question appears whenever the list has **more** than the plan
+showed (here, libass, which the plan didn't know about), and always with
+`--yes`, because removing packages is the one thing you want to see first.
+
+When the list is exactly what the plan showed, you've already said yes to
+it, so bunny doesn't ask again. Removing a program nothing else came with
+asks once:
+
+```
+These packages aren't needed anymore (nothing you asked for uses them):
+  - app-text/tree  2.2.1
+  These are the packages the plan showed, so removing them now.
+  ✓ Removed 1 package.
+```
 
 Like every change, removal saves a snapshot first, so it can be undone with
 [`bunny rollback`](undo.md).

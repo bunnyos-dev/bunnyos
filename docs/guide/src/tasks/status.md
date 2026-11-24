@@ -26,6 +26,16 @@ If you see **"Also starting at boot, not in your config"**, a service was
 turned on outside bunny. Add it to `services` in `bunny.toml` to keep it, or
 turn it off with `sudo rc-update del <name>`.
 
+## In scripts and scheduled checks
+
+```sh
+bunny status --check
+```
+
+Prints the same screen, then exits with code 1 if anything is marked ⚠ or ✗
+(0 when everything is in order), so a script or a scheduled job can tell
+something needs a look.
+
 ## See exactly what's different
 
 ```sh

@@ -56,7 +56,7 @@ impl Diff<'_> {
                 } else {
                     "in your config, not installed yet"
                 };
-                let _ = writeln!(out, "  config only   {atom}   ({why})");
+                let _ = writeln!(out, "  config only   {}   ({why})", p.label(atom));
             }
             for atom in &p.remove_packages {
                 let _ = writeln!(
@@ -72,7 +72,7 @@ impl Diff<'_> {
             out.push_str("USE flags\n");
             for change in &p.use_changes {
                 let (config_only, system_only) = flag_sides(change);
-                let _ = writeln!(out, "  {}", change.atom);
+                let _ = writeln!(out, "  {}", p.label(&change.atom));
                 if !config_only.is_empty() {
                     let _ = writeln!(out, "    config only   {}", describe_flags(&config_only));
                 }
@@ -136,12 +136,17 @@ impl Diff<'_> {
         if has_services {
             let _ = writeln!(out, "Services at boot ({})", p.init_name);
             for s in &p.enable_services {
-                let _ = writeln!(out, "  config only   {s}   (not started at boot yet)");
+                let _ = writeln!(
+                    out,
+                    "  config only   {}   (not started at boot yet)",
+                    p.label(s)
+                );
             }
             for s in &p.missing_services {
                 let _ = writeln!(
                     out,
-                    "  config only   {s}   (not installed, so it can't start yet)"
+                    "  config only   {}   (not installed, so it can't start yet)",
+                    p.label(s)
                 );
             }
             for s in &p.extra_services {
@@ -177,7 +182,7 @@ impl Diff<'_> {
             out.push_str("Boot menu\n  config only   the undo step in the startup image   (not added yet)\n\n");
         }
         if self.plan.boot.remove_entry {
-            out.push_str("Boot menu\n  system only   the \"undo the last change\" entry   (turned off in your config)\n\n");
+            out.push_str("Boot menu\n  system only   bunny's entries (Undo, Earlier versions)   (turned off in your config)\n\n");
         }
 
         // Versions
@@ -224,25 +229,45 @@ impl Diff<'_> {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
+        // What [desktop] adds can't be taken out item by item: turning the
+        // section off is the one edit.
+        let ours = |name: &&String| !p.from_desktop.contains(*name);
         let mut edits = String::new();
+        let desktop_differs = p.add_packages.iter().any(|a| p.from_desktop.contains(a))
+            || p.enable_services.iter().any(|s| p.from_desktop.contains(s))
+            || p.missing_services
+                .iter()
+                .any(|s| p.from_desktop.contains(s))
+            || p.use_changes
+                .iter()
+                .any(|c| c.from.is_empty() && p.from_desktop.contains(&c.atom));
+        if desktop_differs {
+            edits.push_str(
+                "    • take `wayland = true` out of [desktop] (or the whole section), or set\n      \
+                 [pkg] lines of your own for the packages it marks\n",
+            );
+        }
         if !p.remove_packages.is_empty() {
             let items: Vec<&String> = p.remove_packages.iter().collect();
             let _ = writeln!(edits, "    • add to `packages`: {}", quoted(&items));
         }
-        if !p.add_packages.is_empty() {
-            let items: Vec<&String> = p.add_packages.iter().collect();
+        let items: Vec<&String> = p.add_packages.iter().filter(ours).collect();
+        if !items.is_empty() {
             let _ = writeln!(edits, "    • take out of `packages`: {}", quoted(&items));
         }
         if !p.extra_services.is_empty() {
             let items: Vec<&String> = p.extra_services.iter().collect();
             let _ = writeln!(edits, "    • add to `services`: {}", quoted(&items));
         }
-        let mut unwanted: Vec<&String> = p.enable_services.iter().collect();
-        unwanted.extend(&p.missing_services);
+        let mut unwanted: Vec<&String> = p.enable_services.iter().filter(ours).collect();
+        unwanted.extend(p.missing_services.iter().filter(ours));
         if !unwanted.is_empty() {
             let _ = writeln!(edits, "    • take out of `services`: {}", quoted(&unwanted));
         }
         for change in &p.use_changes {
+            if change.from.is_empty() && p.from_desktop.contains(&change.atom) {
+                continue;
+            }
             if change.from.is_empty() {
                 let _ = writeln!(
                     edits,
@@ -410,6 +435,43 @@ mod tests {
         assert!(text.contains("system only   rsyncd   (turned on outside bunny"));
         assert!(text.contains("    • add to `services`: \"rsyncd\""));
         assert!(text.contains("    • take out of `services`: \"sshd\""));
+    }
+
+    #[test]
+    fn desktop_settings_are_marked_and_turned_off_in_one_edit() {
+        let mut p = plan();
+        p.enable_services = vec!["elogind".into(), "sshd".into()];
+        p.add_packages = vec!["sys-auth/elogind".into()];
+        p.use_changes = vec![UseChange {
+            atom: "sys-auth/pambase".into(),
+            from: vec![],
+            to: vec!["elogind".into()],
+        }];
+        p.from_desktop = ["elogind", "sys-auth/elogind", "sys-auth/pambase"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let text = Diff {
+            config: "bunny.toml",
+            plan: &p,
+            drift: None,
+        }
+        .render();
+        assert!(
+            text.contains("config only   elogind   (from [desktop])   (not started"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  sys-auth/pambase   (from [desktop])\n    config only   elogind on")
+        );
+        assert!(text.contains("    • take `wayland = true` out of [desktop]"));
+        // Only your own lines are listed one by one.
+        assert!(
+            text.contains("    • take out of `services`: \"sshd\"\n"),
+            "{text}"
+        );
+        assert!(!text.contains("take out of `packages`"), "{text}");
+        assert!(!text.contains("[pkg.\"sys-auth/pambase\"]"), "{text}");
     }
 
     #[test]

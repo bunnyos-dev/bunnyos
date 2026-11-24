@@ -518,6 +518,11 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
+- [ ] **SSH from kitty (and other new terminals) gets "cannot initialize
+      terminal type xterm-kitty"** on a Bunny system: nano and other
+      full-screen programs refuse to start. Add the terminfo of common
+      terminals to the base system (`x11-terms/kitty-terminfo`, and check
+      foot, alacritty and wezterm), so SSHing in from any of them just works.
 - [ ] **"Use the terminal instead" leaves a terminal you can't type in**
       (real hardware, November 23; picking the terminal entry in the boot
       menu works). The graphical installer takes over the console in
@@ -857,8 +862,17 @@ the older-Nvidia tests below.
 Ethernet for everyday jobs (through the access point's LAN ports or a small
 switch); Wi-Fi checked on its own now and then.
 
-- [ ] **Install Bunny Linux on it** (whole disk), developer mode on.
-- [ ] **Make it a GitHub Actions self-hosted runner** for bunnyos-dev/bunnyos.
+- [x] **Install Bunny Linux on it** (whole disk, not encrypted so it can restart
+      unattended), developer mode on. Done November 23 with the terminal
+      installer from the USB through Ventoy, over Wi-Fi.
+- [x] **Make it a GitHub Actions self-hosted runner** for bunnyos-dev/bunnyos
+      (online November 23 as `dell-bunny`, label `bunny-hw`; the first job,
+      .github/workflows/test-box.yml, passed). Set up by hand: a `runner`
+      user with no sudo, `dev-libs/icu`, the runner in
+      /home/runner/actions-runner, and an OpenRC service
+      (`/etc/init.d/github-runner`, supervise-daemon) in the config's services;
+      fork pull requests from outside contributors need approval. Later: ship
+      that service and the setup as a script in tools/ so it can be redone.
       It connects out to GitHub; no token from Claude sessions sits on it.
       The repository is public, so the runner takes **only** scheduled jobs,
       manual runs (`workflow_dispatch`) and pushes to the maintainer's own

@@ -21,7 +21,7 @@ jobs:
     runs-on: [self-hosted, bunny-hw]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Health of the machine
         run: sh tools/test-box/nightly-check.sh

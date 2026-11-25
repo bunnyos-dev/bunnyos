@@ -45,8 +45,8 @@ the maintainer says go. Tell the maintainer when the gate looks met:
       maintainer moved to later).
 - [ ] Two fresh installs from the USB in a row with nothing new found: one
       with the terminal, one with the graphical installer.
-- [ ] The encrypted laptop-shaped VM passes (#47, #74, undo from the boot
-      menu with `/boot` on the EFI partition).
+- [ ] The encrypted laptop-shaped VM passes (#47 passed November 24; #74,
+      undo from the boot menu with `/boot` on the EFI partition).
 - [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
       with developer mode on, and the reports show nothing new that's
       serious.
@@ -240,7 +240,7 @@ review before the installer adds a lot more of it.
       files, how to run the tests and the VM, and the rules from
       `CLAUDE.md` that apply to everyone. Comments on each Portage call in
       `bunny-portage.py` explaining what it asks Portage and why.
-- [~] **Independent review:** (done; fixes #47 and #48 still waiting for VM tests) a separate agent that hasn't seen the code
+- [~] **Independent review:** (done; #47's fixes passed the VM test November 24) a separate agent that hasn't seen the code
       being written reads the whole repo (Rust, the Portage helper and the
       shell scripts, especially the ones that touch disks) and files each
       finding as an issue. Real bugs get fixed before the ISO work.

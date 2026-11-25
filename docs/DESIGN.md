@@ -202,10 +202,20 @@ isolated = false       # compile inside a clean container
   `/boot`'s kernel files exactly that generation's set (copy in, then remove)
   and runs `grub-mkconfig`. The undo entry boots the copies from `/boot`
   (`search --fs-uuid` on that partition). The boot-time undo can't touch
-  `/boot`, so `bunny status` warns about kernels in `/boot` with no
-  `/lib/modules` in the running system; restoring `/boot` after a boot-menu
-  undo is a follow-up. `clean` drops lists of deleted generations and unused
-  copies.
+  `/boot`, so it writes the generation's name to `/var/lib/bunny/boot-undo`
+  in the restored `@`. The `bunny-finish-undo` OpenRC service (boot
+  runlevel, `need localmount`; installed with the dracut module, through
+  `InitSystem::add_boot_service`) runs `bunny finish-undo` when that note
+  exists: only if `bunny-state.toml` still says the last action was a
+  rollback to that generation (otherwise the note is stale and dropped), it
+  restores `/boot`'s set like `bunny rollback`, runs `grub-mkconfig`, drops
+  the undo entry from `/boot/grub/custom.cfg`, clears the note and writes
+  `/var/lib/bunny/boot-undo-done.toml` (generation, kernels before and after,
+  any problem). `bunny status` shows that as a ✓ Kernel line while the undo
+  is the last action, or a ⚠ with the reason (the note is then kept, so the
+  next start tries again). `bunny status` still warns about kernels in
+  `/boot` with no `/lib/modules` in the running system (older generations).
+  `clean` drops lists of deleted generations and unused copies.
 - **Nested subvolumes** (subvolumes inside `@`, e.g. `/srv` when tmpfiles
   creates it as a subvolume on btrfs) aren't part of snapshots. Rollback moves
   them over to the restored system, like `/home`, and `clean` deletes them

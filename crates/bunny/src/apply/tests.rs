@@ -1106,6 +1106,9 @@ fn undo_entry_is_set_up_in_one_switch() {
         "new image with the undo step"
     );
     assert!(outcome.backup_dir.join("initramfs-6.12.58.img").exists());
+    // The start-up service that finishes an undo from the boot menu.
+    assert!(r.join("etc/init.d/bunny-finish-undo").is_file());
+    assert!(std::fs::symlink_metadata(r.join("etc/runlevels/boot/bunny-finish-undo")).is_ok());
 
     let cfg = std::fs::read_to_string(r.join(crate::boot::BUNNY_CFG)).unwrap();
     assert!(cfg.contains("linux /@snapshots/bunny-20261116-120000/boot/vmlinuz-6.12.58 root=UUID=1234-abcd ro rootflags=subvol=@ bunny.rollback=bunny-20261116-120000"), "{cfg}");

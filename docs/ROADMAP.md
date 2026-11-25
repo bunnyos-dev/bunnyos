@@ -777,7 +777,7 @@ is tested first in a VM with the same layout.
       the laptop VM until it's boring.
 - [x] **A kernel per generation on the EFI partition**, so undo works across
       kernel updates when `/boot` isn't part of the system (encrypted disks).
-- [ ] **After an undo from the boot menu, put `/boot`'s kernel back too**
+- [~] **After an undo from the boot menu, put `/boot`'s kernel back too**
       (the startup image can't reach the EFI partition; bunny could do it on
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.

@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- After an undo from the boot menu on an encrypted disk (where `/boot` is its
+  own partition), bunny now puts `/boot`'s kernel back to the one that version
+  used, early in the first start afterwards, and rebuilds the boot menu.
+  `bunny status` says what it did. The next switch adds the small
+  `bunny-finish-undo` start-up service for this.
+
 - `tools/convert-layout.sh` fixes from the code review: it now stops
   before changing anything if `/boot` isn't its own partition (it used to stop
   partway and could leave the computer unable to start); a `/home` that was

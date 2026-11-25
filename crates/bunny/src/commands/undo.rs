@@ -360,6 +360,37 @@ pub(crate) fn rollback_cmd(
     Ok(ExitCode::SUCCESS)
 }
 
+/// `bunny finish-undo`: run by the bunny-finish-undo service at start-up,
+/// after an undo from the boot menu.
+pub(crate) fn finish_undo_cmd(quiet: bool, root: &Path) -> anyhow::Result<ExitCode> {
+    use crate::finish_undo::{self, Finished};
+    if finish_undo::waiting(root).is_none() && !root.join(finish_undo::MARKER).exists() {
+        if !quiet {
+            println!("{}", finish_undo::describe(&Finished::NothingWaiting));
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let real_system = root == Path::new("/");
+    if let Some(code) = elevate(real_system)? {
+        return Ok(code);
+    }
+    let stamp = timestamp();
+    let done = if real_system {
+        finish_undo::finish(root, &mut apply::SystemRunner, &stamp)?
+    } else {
+        finish_undo::finish(root, &mut apply::PrintRunner, &stamp)?
+    };
+    let failed = matches!(done, Finished::Failed(_));
+    if !(quiet && done == Finished::NothingWaiting) {
+        println!("{}", finish_undo::describe(&done));
+    }
+    Ok(if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

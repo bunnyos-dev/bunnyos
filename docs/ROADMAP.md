@@ -891,9 +891,11 @@ that runs Bunny Linux and picks up test jobs on its own, so nightly tests
 happen on real hardware without the maintainer. The maintainer's desktop
 stays out of it (a test going wrong there is what we don't want).
 
-The machine, for now: a Dell laptop with an Intel Core i7-8650U (4 cores,
+The machine, for now: a Dell Latitude 7490 with an Intel Core i7-8650U (4 cores,
 VT-x), 16 GB RAM, a 128 GB disk and Intel UHD 620 graphics only, so it
-covers plain Intel graphics (one test VM at a time). The first choice, a
+covers plain Intel graphics (one test VM at a time). Its worn battery
+(59% of new) charges only between 50% and 80% (BIOS, November 24), and
+"Wake on AC" turns it back on after a power cut. The first choice, a
 Dell Precision 7520 (i7-7820HQ, 32 GB, Intel HD 630 + NVIDIA Quadro M1200,
 Maxwell), stopped turning on (November 23); if it comes back, it joins for
 the older-Nvidia tests below.

@@ -10,8 +10,9 @@ polished, quiet experience from power button to desktop.
 - **Errors in plain English:** with suggested fixes instead of raw emerge output.
 
 > **Status:** pre-alpha. It installs from its own USB (a graphical installer
-> or the terminal) and runs day to day in a VM, but it isn't ready for real
-> machines yet. Test it in a VM (see `tools/bunny-vm.sh`). It becomes 0.1
+> or the terminal), in a VM and on a first real laptop, which now runs
+> nightly checks as a test machine. It isn't ready for everyday use yet: try
+> it in a VM (see `tools/bunny-vm.sh`). It becomes 0.1
 > alpha when the "Stability first" checklist in the roadmap is met.
 
 ## Progress
@@ -24,12 +25,12 @@ polished, quiet experience from power button to desktop.
 | 4. Same system everywhere (lockfile) | ✅ Done |
 | 5. Understandable errors | ✅ Done |
 | 6. Fast installs (package cache) | ⬜ |
-| 7. Installing Bunny Linux (installer, ISO) | 🟨 Works in the VM: live USB, graphical and terminal installers |
+| 7. Installing Bunny Linux (installer, ISO) | 🟨 Works in the VM and on real hardware: live USB, graphical and terminal installers |
 | 8. Security + gaming | ⬜ |
 | 9. The look (boot animation, GRUB, login) | ⬜ |
 
-Version 1 (phases 1–5) is done and tested in the VM, and a first live USB
-with an installer works there too. Next: making everything stable on real
+Version 1 (phases 1–5) is done and tested in the VM, and the live USB with
+its installers works in the VM and on real hardware. Next: making everything stable on real
 hardware (the "Stability first" checklist), then 0.1 alpha. Details and the
 full to-do list are in the [roadmap](docs/ROADMAP.md).
 

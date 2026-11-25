@@ -12,7 +12,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh run download 45243568679 -R "$GITHUB_REPOSITORY" -n iso-boot-log -D bl
-          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' bl/boot.log | head -400
+          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' bl/boot.log > b.txt
+          wc -l b.txt
+          echo "== insmod lines with context"; grep -n -B3 -A3 -i "insmod" b.txt | head -80
+          echo "== non-timestamped lines"; grep -v "^\[ *[0-9]" b.txt | head -120
+          echo "== dracut / udev lines"; grep -n -i "dracut\|udev\|deprecated\|modprobe" b.txt | head -60
       - name: dracut's own scripts
         run: |
           docker create -v /var/db/repos/gentoo --name portage gentoo/portage:latest /bin/true
@@ -25,5 +29,9 @@ jobs:
             echo "== getargbool"; grep -n "^getargbool" -A25 $d/*base/dracut-lib.sh | head -40
             echo "== deprecated helper"; grep -n "is deprecated" -B5 -A5 $d/*base/dracut-lib.sh | head -60
             echo "== insmod / modprobe -v / quiet"; grep -rn "insmod\|modprobe.*-v\|rd.info\|DRACUT_QUIET\|rd.udev.log\|udev_log\|kmsg\|loglevel" $d --include=*.sh | head -80
+            echo "== overlayfs-lib"; cat $d/70overlayfs/overlayfs-lib.sh
+            echo "== prepare-overlayfs"; sed -n 1,64p $d/70overlayfs/prepare-overlayfs.sh
+            echo "== dmsquash overlay lines"; grep -n "overlay" $d/70dmsquash-live/*.sh | head -40
+            echo "== any insmod/verbose anywhere"; grep -rln "insmod\|modprobe -v\|--verbose" $d | head; grep -rn "modprobe" $d/80base $d/13modsign $d/70kernel-modules 2>/dev/null | head -30
             echo "== modules-load"; grep -rn "modules-load\|rd.driver.pre" $d --include=*.sh | head -30
           '

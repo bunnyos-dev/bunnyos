@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `tools/convert-layout.sh` fixes from the code review: it now stops
+  before changing anything if `/boot` isn't its own partition (it used to stop
+  partway and could leave the computer unable to start); a `/home` that was
+  already a subvolume isn't copied twice or mounted twice; folders that are
+  their own filesystem (like a tmpfs `/var/tmp/portage`) are left alone;
+  and `--finish` only edits the boot menu on the real system.
 - `bunny status --check` exits with code 1 when anything needs a look, so
   scripts and scheduled checks can tell.
 - Fixed: the install's recording said it took "0 s". It now says how long

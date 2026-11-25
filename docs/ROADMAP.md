@@ -17,7 +17,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ✅ Done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
-| 7. Installing Bunny Linux | installer, ISO, hosting | 🟡 A first, minimal ISO works: terminal installer, tested in the VM dry run |
+| 7. Installing Bunny Linux | installer, ISO, hosting | 🟡 Live USB (826 MB) with graphical and terminal installers; installed on real hardware November 23 |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
 | 9. The look | boot animation, GRUB theme, login screen | ⬜ |
 
@@ -27,12 +27,13 @@ The **whole vision** (all 9 phases) is roughly **two fifths done**.
 **Order agreed with the maintainer (November 2026):**
 
 1. ~~Code cleanup so other people can review the code, then an independent
-   review~~ (done; two fix PRs still to test)
+   review~~ (done; its fixes tested and merged)
 2. ~~A first, minimal ISO (terminal installer, no desktop)~~ (done)
 3. ~~The maintainer's dry run in the VM~~ (done, November 2026)
-4. Guide and bunny fixes from what the dry run found (**now**, bugs first,
-   then the clean boot menu)
-5. The maintainer's laptop
+4. ~~Guide and bunny fixes from what the dry run found~~ (done)
+5. **Now: the "Stability first" gate below**: fixes from real-hardware
+   installs, a clean install pair, then a week of daily use on the
+   maintainer's new laptop (the G16; see its section)
 6. The rest of the Portage helper
 
 **Stability first (decided November 21, 2026).** The graphical installer
@@ -48,7 +49,7 @@ the maintainer says go. Tell the maintainer when the gate looks met:
 - [x] The encrypted laptop-shaped VM passes (#47 and #74 passed November 24:
       conversion, then undo from the boot menu with `/boot` on the EFI
       partition, kernel put back on the next start).
-- [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
+- [ ] The maintainer's laptop (the G16) runs Bunny Linux day to day for about a week
       with developer mode on, and the reports show nothing new that's
       serious.
 - [ ] No open PR older than a few days that's waiting on a fix.

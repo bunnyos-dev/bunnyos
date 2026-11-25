@@ -74,7 +74,7 @@ means no more prebuilt packages for what it affects.
 23, 2026).** Teach people to read Gentoo's own information instead of
 copying flags that change:
 
-- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+- [~] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
       read a package's flags on packages.gentoo.org and the Gentoo wiki,
       what `+`/`-` and defaults mean, and how to write what you found in
       `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the

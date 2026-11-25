@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny status` says "Updates: package list from 18 hours ago" instead of
+  "last checked 18 hours ago": it counts from when Gentoo made the list, which
+  read oddly on a system installed minutes before.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

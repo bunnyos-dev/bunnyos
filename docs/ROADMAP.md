@@ -45,8 +45,9 @@ the maintainer says go. Tell the maintainer when the gate looks met:
       maintainer moved to later).
 - [ ] Two fresh installs from the USB in a row with nothing new found: one
       with the terminal, one with the graphical installer.
-- [ ] The encrypted laptop-shaped VM passes (#47 passed November 24; #74,
-      undo from the boot menu with `/boot` on the EFI partition).
+- [x] The encrypted laptop-shaped VM passes (#47 and #74 passed November 24:
+      conversion, then undo from the boot menu with `/boot` on the EFI
+      partition, kernel put back on the next start).
 - [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
       with developer mode on, and the reports show nothing new that's
       serious.
@@ -777,7 +778,7 @@ is tested first in a VM with the same layout.
       the laptop VM until it's boring.
 - [x] **A kernel per generation on the EFI partition**, so undo works across
       kernel updates when `/boot` isn't part of the system (encrypted disks).
-- [~] **After an undo from the boot menu, put `/boot`'s kernel back too**
+- [x] **After an undo from the boot menu, put `/boot`'s kernel back too**
       (the startup image can't reach the EFI partition; bunny could do it on
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.
@@ -904,6 +905,18 @@ switch); Wi-Fi checked on its own now and then.
       G16 week.
 
 ## Known issues / small fixes
+
+From the laptop VM test of #74 (November 24):
+- [ ] The boot menu's main entry still said **"Gentoo"** after a switch that
+      said it renamed it to "Bunny Linux" (theme off and BootNext gone did
+      work). Find why the rename didn't reach `grub.cfg`.
+- [ ] `bunny status` run as you on an encrypted install (where `/boot` is
+      root-only) silently skips the kernel check, so a kernel without drivers
+      went unmentioned. Say "run with doas to check the kernel too", the way
+      `bunny plan` does for the boot menu.
+- [ ] After the kernel is put back, status says "(it had 6.18.63…, 9.9.9-test
+      from …)", listing the kernel that stayed too. Name only the kernels
+      that were removed.
 
 - [x] Ctrl+C at doas's password question stopped bunny with no words of its
       own (sudo got "nothing was changed"). Now doas gets it too.

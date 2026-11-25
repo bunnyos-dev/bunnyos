@@ -82,7 +82,7 @@ pub const PACKAGE_EXAMPLES: [&str; 2] = ["\"app-misc/tmux\",", "\"net-misc/chron
 pub const SERVICE_EXAMPLES: [&str; 1] = ["\"chronyd\","];
 pub const PKG_EXAMPLES: [&str; 3] = [
     "[pkg.\"app-misc/tmux\"]",
-    "use = [\"-vim-syntax\"]",
+    "use = [\"vim-syntax\"]",
     "keywords = [\"~amd64\"]",
 ];
 
@@ -276,7 +276,7 @@ mod tests {
         assert!(c.packages.contains(&"net-misc/chrony".to_string()));
         assert!(c.services.contains(&"chronyd".to_string()));
         let tmux = &c.pkg["app-misc/tmux"];
-        assert_eq!(tmux.use_flags, ["-vim-syntax"]);
+        assert_eq!(tmux.use_flags, ["vim-syntax"]);
         assert_eq!(tmux.keywords, ["~amd64"]);
         // The sections after them still belong where they did (the TOML
         // section trap).

@@ -937,7 +937,9 @@ Needs the Baseline image (phases 6 and 7).
   builds it from Gentoo's stage3 with prebuilt packages: gentoo-kernel-bin,
   linux-firmware, the disk tools, dhcpcd + iwd, chrony, git and bunny.
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
-  overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
+  overlayfs for changes, `rd.overlay`: dracut 110 renamed
+  `rd.live.overlay.overlayfs=1`, and the CI boot check fails on a
+  deprecated option); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
   **Quiet start-up:** the normal menu entries have `quiet` on the kernel
   line; `/etc/inittab` runs every runlevel through
@@ -948,7 +950,16 @@ Needs the Baseline image (phases 6 and 7).
   `rc_verbose` (it only adds detail), over sending OpenRC's output to a
   log (errors would disappear too) and over a different inittab per entry
   (one squashfs serves every entry). The CI boot check boots without
-  `quiet`, so it still sees "Starting local".
+  `quiet`, so it still sees "Starting local". One line got past
+  `EINFO_QUIET`: OpenRC's `modules` service loads what
+  `/usr/lib/modules-load.d` lists (iwd's `pkcs8_key_parser`) with `modprobe
+  --verbose`, which prints `insmod …` itself. The USB's
+  `/etc/conf.d/modules` (read by the service first) defines a `modprobe`
+  function that drops `--verbose` when `EINFO_QUIET=YES`; chosen over
+  editing the package's init script and over sending OpenRC's whole output
+  to a log (the console font and keymap services write to the console).
+  sysvinit's own `INIT: version … booting` and `INIT: Entering runlevel`
+  lines still show (later, with the boot screen).
   **Console font** (also set by `bunny install`, and by a switch on
   systems that don't have it yet: `console_font.rs`, shown in the plan,
   `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;

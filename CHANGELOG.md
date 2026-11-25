@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The live USB no longer shows dracut's warning about a renamed boot option
+  (`rd.overlay` replaces `rd.live.overlay.overlayfs`), or an `insmod …`
+  line, when it starts. "Show start-up messages" still shows everything.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

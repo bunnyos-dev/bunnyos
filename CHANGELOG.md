@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- A switch that turns on services or the console font no longer shows OpenRC's
+  raw lines ("service consolefont added to runlevel boot", "WARNING: you are
+  stopping a boot service"). bunny says what it did in a line, and keeps
+  OpenRC's output in /var/log/bunny/<time>-services.log. `--verbose` still
+  shows it.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

@@ -602,7 +602,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       terminal install keeps it on ("Keeping the recording of this install").
       Make them behave the same (check how the terminal path decides, and
       what `bunny install --yes` from the graphical installer misses).
-- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+- [~] **Switching on the console font prints OpenRC's raw lines** ("service
       consolefont added to runlevel boot", "WARNING: you are stopping a boot
       service", "Caching service dependencies … [ ok ]"). Run rc-update and
       the service quietly and say it in bunny's own words, keeping the

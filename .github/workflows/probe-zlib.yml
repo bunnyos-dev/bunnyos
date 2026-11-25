@@ -1,37 +1,16 @@
-name: Probe quiet boot of the live USB (temporary)
+name: Probe tmux and chrony (temporary)
 on: push
 permissions:
   contents: read
-  actions: read
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Get the ISO and its kernel
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: In a fresh Gentoo
         run: |
-          sudo apt-get update -q >/dev/null && sudo apt-get install -y -q qemu-system-x86 xorriso >/dev/null
-          gh run download 45243568679 -R "$GITHUB_REPOSITORY" -n bunny-linux-live-preview -D iso
-          ls -la iso
-          xorriso -osirrox on -indev iso/*.iso -extract /boot/vmlinuz vmlinuz -extract /boot/initramfs.img initramfs.img
-          xorriso -osirrox on -indev iso/*.iso -extract /boot/grub/grub.cfg grub.cfg; cat grub.cfg
-          sudo chmod 666 /dev/kvm || true
-      - name: Boot quietly, old option
-        run: |
-          timeout 150 qemu-system-x86_64 -accel kvm -m 2048 -nographic -no-reboot -cdrom iso/*.iso \
-            -kernel vmlinuz -initrd initramfs.img \
-            -append "root=live:CDLABEL=BUNNY rd.live.image rd.live.overlay.overlayfs=1 quiet console=ttyS0" > a.log 2>&1 || true
-          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' a.log | cat -A | head -120
-      - name: Boot quietly, rd.overlay
-        run: |
-          timeout 150 qemu-system-x86_64 -accel kvm -m 2048 -nographic -no-reboot -cdrom iso/*.iso \
-            -kernel vmlinuz -initrd initramfs.img \
-            -append "root=live:CDLABEL=BUNNY rd.live.image rd.overlay quiet console=ttyS0" > b.log 2>&1 || true
-          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' b.log | cat -A | head -120
-      - name: Boot with rd.overlay, not quiet (does the overlay work?)
-        run: |
-          timeout 150 qemu-system-x86_64 -accel kvm -m 2048 -nographic -no-reboot -cdrom iso/*.iso \
-            -kernel vmlinuz -initrd initramfs.img \
-            -append "root=live:CDLABEL=BUNNY rd.live.image rd.overlay console=ttyS0" > c.log 2>&1 || true
-          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' c.log | grep -i -E "dracut|overlay|deprecated|Starting local|insmod|read-only|emergency" | head -40
+          docker create -v /var/db/repos/gentoo --name portage gentoo/portage:latest /bin/true
+          docker run --rm --volumes-from portage gentoo/stage3:latest sh -c '
+            for e in /var/db/repos/gentoo/app-misc/tmux/*.ebuild; do echo "-- $e"; grep -E "^KEYWORDS|IUSE" "$e"; done
+            grep -A2 "vim-syntax" /var/db/repos/gentoo/app-misc/tmux/metadata.xml /var/db/repos/gentoo/profiles/use.desc
+            ls /var/db/repos/gentoo/net-misc/chrony/; grep -l "chronyd" /var/db/repos/gentoo/net-misc/chrony/files/* | head
+          '

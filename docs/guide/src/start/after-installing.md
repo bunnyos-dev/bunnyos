@@ -22,6 +22,11 @@ installs it and adds it to `bunny.toml`. If you don't like the result:
 bunny rollback
 ```
 
+You can also edit the file yourself. It has a few examples in it, commented
+out with `#`: a package, a service, and a package's USE flags. Remove the `#`
+from an example's lines to use it, then run `sudo bunny switch`. Each one
+says which Guide page tells you more.
+
 That's the whole idea; [The big idea](the-big-idea.md) explains it more, and
 [Everyday tasks](../tasks/install.md) covers the rest.
 

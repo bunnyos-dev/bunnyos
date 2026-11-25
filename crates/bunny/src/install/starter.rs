@@ -57,12 +57,44 @@ pub fn services(account: &Account) -> Vec<&'static str> {
 pub const BASE_SERVICES: [&str; 2] = ["local", "netmount"];
 
 fn list(items: &[&str]) -> String {
+    list_with_examples(items, &[])
+}
+
+/// A list, with commented-out example lines before its closing bracket.
+fn list_with_examples(items: &[&str], examples: &[&str]) -> String {
     let mut out = String::from("[\n");
     for item in items {
         out.push_str(&format!("    \"{item}\",\n"));
     }
+    for line in examples {
+        out.push_str(&format!("    # {line}\n"));
+    }
     out.push(']');
     out
+}
+
+/// The starter config's examples, commented out: how each kind of setting
+/// is written. Each is a line of the file without its `# `, so a test can
+/// uncomment exactly these and check the result. Only structural examples
+/// (nothing that goes stale as Gentoo changes): a package, a service with
+/// the package it needs, and a package's USE flags and keywords.
+pub const PACKAGE_EXAMPLES: [&str; 2] = ["\"app-misc/tmux\",", "\"net-misc/chrony\","];
+pub const SERVICE_EXAMPLES: [&str; 1] = ["\"chronyd\","];
+pub const PKG_EXAMPLES: [&str; 3] = [
+    "[pkg.\"app-misc/tmux\"]",
+    "use = [\"-vim-syntax\"]",
+    "keywords = [\"~amd64\"]",
+];
+
+/// Every example line, as it appears in the file (commented out).
+#[cfg(test)]
+pub fn example_lines() -> Vec<&'static str> {
+    PACKAGE_EXAMPLES
+        .iter()
+        .chain(SERVICE_EXAMPLES.iter())
+        .chain(PKG_EXAMPLES.iter())
+        .copied()
+        .collect()
 }
 
 /// The starter `bunny.toml`.
@@ -79,14 +111,24 @@ pub fn config(account: &Account) -> String {
 # so this file works on any computer: keep it in git and use it everywhere.
 
 # What you want installed. Add things with `bunny add <name>`, or here.
+# The lines starting with # at the end are examples: remove the # to use one.
+# More: {GUIDE}tasks/install.html
 packages = {packages}
 
 # Package repositories besides Gentoo's own. \"bunny\" is Bunny Linux's own
 # (bunny-release, which makes the system say Bunny Linux).
 repositories = [\"{own}\"]
 
-# Services that start when the computer does.
+# Services that start when the computer does. The example, chronyd, keeps
+# the clock right; it needs net-misc/chrony in `packages` too.
+# More: {GUIDE}reference/config.html#services
 services = {services}
+
+# Settings for one package: USE flags turn its features on, or off with a
+# - in front, and keywords = [\"~amd64\"] accepts its testing versions. An
+# example (remove the # from all three lines to use it):
+{pkg_examples}
+# More: {GUIDE}tasks/use-flags.html
 
 # Who can use sudo.
 [security]
@@ -99,9 +141,20 @@ admins = [\"{user}\"]
 undo_entry = true
 ",
         host = account.hostname,
-        packages = list(&[&BASE_PACKAGES[..], &OWN_PACKAGES[..]].concat()),
+        packages = list_with_examples(
+            &[&BASE_PACKAGES[..], &OWN_PACKAGES[..]].concat(),
+            &PACKAGE_EXAMPLES
+        ),
         own = crate::overlays::OWN,
-        services = list(&[services(account), BASE_SERVICES.to_vec()].concat()),
+        services = list_with_examples(
+            &[services(account), BASE_SERVICES.to_vec()].concat(),
+            &SERVICE_EXAMPLES
+        ),
+        pkg_examples = PKG_EXAMPLES
+            .iter()
+            .map(|l| format!("# {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
         user = account.username,
     )
 }
@@ -181,6 +234,81 @@ mod tests {
         assert!(c.boot.undo_entry);
         assert!(text.contains("hosts/laptop.toml"));
         assert!(text.contains(GUIDE));
+    }
+
+    /// The starter config with every example uncommented.
+    fn with_examples_on(text: &str) -> String {
+        let mut out = text.to_string();
+        for line in example_lines() {
+            let commented = format!("# {line}\n");
+            assert_eq!(out.matches(&commented).count(), 1, "{line:?} once\n{text}");
+            out = out.replace(&commented, &format!("{line}\n"));
+        }
+        out
+    }
+
+    #[test]
+    fn the_examples_are_commented_out_and_point_to_the_guide() {
+        let text = config(&account());
+        let c = Config::parse(&text).unwrap();
+        assert!(!c.packages.iter().any(|p| p == "app-misc/tmux"));
+        assert!(!c.services.iter().any(|s| s == "chronyd"));
+        assert!(c.pkg.is_empty());
+        for page in [
+            "tasks/install.html",
+            "reference/config.html#services",
+            "tasks/use-flags.html",
+        ] {
+            assert!(text.contains(&format!("# More: {GUIDE}{page}")), "{page}");
+        }
+    }
+
+    #[test]
+    fn uncommented_examples_pass_bunnys_check() {
+        let text = with_examples_on(&config(&account()));
+        // What `bunny check` does: read the file, then look for mistakes.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bunny.toml");
+        std::fs::write(&path, &text).unwrap();
+        let c = Config::load(&path).unwrap_or_else(|e| panic!("{e}\n{text}"));
+        assert!(c.problems().is_empty(), "{:?}\n{text}", c.problems());
+        assert!(c.packages.contains(&"app-misc/tmux".to_string()));
+        assert!(c.packages.contains(&"net-misc/chrony".to_string()));
+        assert!(c.services.contains(&"chronyd".to_string()));
+        let tmux = &c.pkg["app-misc/tmux"];
+        assert_eq!(tmux.use_flags, ["-vim-syntax"]);
+        assert_eq!(tmux.keywords, ["~amd64"]);
+        // The sections after them still belong where they did (the TOML
+        // section trap).
+        assert_eq!(c.security.unwrap().admins, ["you"]);
+        assert!(c.boot.undo_entry);
+
+        // And a plan against a fake root takes them in.
+        let root = tempfile::tempdir().unwrap();
+        let world = root.path().join("var/lib/portage/world");
+        std::fs::create_dir_all(world.parent().unwrap()).unwrap();
+        std::fs::write(&world, "net-misc/dhcpcd\n").unwrap();
+        let c = Config::parse(&text).unwrap();
+        let plan = crate::plan::make(&c, root.path()).unwrap();
+        assert!(plan.add_packages.iter().any(|p| p == "app-misc/tmux"));
+        assert!(
+            plan.use_changes.iter().any(|u| u.atom == "app-misc/tmux"),
+            "{:?}",
+            plan.use_changes
+        );
+    }
+
+    #[test]
+    fn bunny_add_keeps_the_examples() {
+        let text = config(&account());
+        let edited = crate::edit::add_packages(&text, &["app-editors/vim".to_string()]).unwrap();
+        let after = Config::parse(&edited.text).unwrap();
+        assert!(after.packages.contains(&"app-editors/vim".to_string()));
+        for line in example_lines() {
+            assert!(edited.text.contains(&format!("# {line}")), "{line} kept");
+        }
+        // Still uncomments cleanly.
+        Config::parse(&with_examples_on(&edited.text)).unwrap();
     }
 
     #[test]

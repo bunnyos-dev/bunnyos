@@ -79,7 +79,7 @@ copying flags that change:
       what `+`/`-` and defaults mean, and how to write what you found in
       `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
       worked example, but teach the method, not a fixed list of flags.
-- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+- [~] **Starter `bunny.toml`: a few commented-out examples** showing how
       each thing is written (a package with USE flags, a testing keyword, a
       service), each pointing to its Guide page. Only stable, structural
       examples; a test uncomments them and runs `bunny check`.

@@ -1072,7 +1072,16 @@ testing and decisions.
   filesystem has no creation times), to
   `/home/<user>/.local/state/bunny/sessions/` in the new system (owned by the
   user), so `bunny report` there sends it. A failed install leaves it on the
-  USB. Release images record nothing.
+  USB. Release images record nothing. The graphical installer runs `bunny
+  install` with pipes, not a terminal, and `script` needs one, so a `bunny
+  install` without a terminal (except `--list-disks`) is recorded by bunny
+  itself: it runs again with its output piped through the first bunny,
+  which passes it on unchanged and appends it to the recording; standard
+  input (the password) goes straight to the child and isn't recorded.
+  Chosen over running `script` from the installer (the pty would echo the
+  password into the recording) and over the installer writing the
+  recording (bunny would then depend on the installer to be recorded).
+  Other commands run without a terminal stay unrecorded.
 
 ## Testing
 

@@ -147,7 +147,8 @@ If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run
 `bunny install` again and it starts over from the beginning.
 
-On a **preview USB** (built for testing), the install is recorded, and just
+On a **preview USB** (built for testing), the install is recorded (from the
+terminal or the graphical installer alike), and just
 before unmounting it copies the recording into your home folder in the new
 system ("Keeping the recording of this install"), so `bunny report` can send
 it after you restart. See

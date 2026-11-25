@@ -598,7 +598,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.
-- [ ] **The graphical installer leaves developer mode off**, while the
+- [~] **The graphical installer leaves developer mode off**, while the
       terminal install keeps it on ("Keeping the recording of this install").
       Make them behave the same (check how the terminal path decides, and
       what `bunny install --yes` from the graphical installer misses).

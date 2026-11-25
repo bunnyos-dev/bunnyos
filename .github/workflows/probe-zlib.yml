@@ -1,37 +1,28 @@
-name: Probe dracut options (temporary)
+name: Probe modules-load and firefox (temporary)
 on: push
 permissions:
   contents: read
-  actions: read
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: The ISO's boot log (run 45243568679)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download 45243568679 -R "$GITHUB_REPOSITORY" -n iso-boot-log -D bl
-          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' bl/boot.log > b.txt
-          wc -l b.txt
-          echo "== insmod lines with context"; grep -n -B3 -A3 -i "insmod" b.txt | head -80
-          echo "== non-timestamped lines"; grep -v "^\[ *[0-9]" b.txt | head -120
-          echo "== dracut / udev lines"; grep -n -i "dracut\|udev\|deprecated\|modprobe" b.txt | head -60
-      - name: dracut's own scripts
+      - name: In a fresh Gentoo
         run: |
           docker create -v /var/db/repos/gentoo --name portage gentoo/portage:latest /bin/true
           docker run --rm --volumes-from portage gentoo/stage3:latest sh -c '
             getuto >/dev/null 2>&1
-            FEATURES="getbinpkg" emerge -q --getbinpkgonly --nodeps sys-kernel/dracut >/dev/null 2>&1 || FEATURES="getbinpkg" emerge -q --nodeps sys-kernel/dracut >/dev/null 2>&1
-            ls /var/db/pkg/sys-kernel/
-            d=/usr/lib/dracut/modules.d; ls $d
-            echo "== overlay"; grep -rn "rd.overlay\|overlayfs\b\|rd.live.overlay.overlayfs\|deprecated" $d --include=*.sh | grep -v "^\s*#" | head -80
-            echo "== getargbool"; grep -n "^getargbool" -A25 $d/*base/dracut-lib.sh | head -40
-            echo "== deprecated helper"; grep -n "is deprecated" -B5 -A5 $d/*base/dracut-lib.sh | head -60
-            echo "== insmod / modprobe -v / quiet"; grep -rn "insmod\|modprobe.*-v\|rd.info\|DRACUT_QUIET\|rd.udev.log\|udev_log\|kmsg\|loglevel" $d --include=*.sh | head -80
-            echo "== overlayfs-lib"; cat $d/70overlayfs/overlayfs-lib.sh
-            echo "== prepare-overlayfs"; sed -n 1,64p $d/70overlayfs/prepare-overlayfs.sh
-            echo "== dmsquash overlay lines"; grep -n "overlay" $d/70dmsquash-live/*.sh | head -40
-            echo "== any insmod/verbose anywhere"; grep -rln "insmod\|modprobe -v\|--verbose" $d | head; grep -rn "modprobe" $d/80base $d/13modsign $d/70kernel-modules 2>/dev/null | head -30
-            echo "== modules-load"; grep -rn "modules-load\|rd.driver.pre" $d --include=*.sh | head -30
+            FEATURES="getbinpkg" emerge -q --getbinpkgonly net-wireless/iwd >/dev/null 2>&1
+            echo "== openrc version"; ls /var/db/pkg/sys-apps/ | grep openrc
+            for f in /etc/init.d/modules /etc/init.d/modules-load /etc/conf.d/modules /etc/conf.d/modules-load; do echo "== $f"; cat $f 2>/dev/null; done
+            echo "== who asks for pkcs8"; grep -rn pkcs8 /usr/lib/modules-load.d /etc/modules-load.d /lib/modules-load.d /run/modules-load.d 2>/dev/null
+            echo "== modules-load in runlevels"; ls /etc/runlevels/*/ | head -40
+            echo "== firefox ebuilds"; ls /var/db/repos/gentoo/www-client/firefox/
+            for e in /var/db/repos/gentoo/www-client/firefox/*.ebuild; do echo "-- $e"; grep -E "^KEYWORDS|^IUSE|^[[:space:]]+IUSE|^SLOT" "$e"; done
+            echo "== stable firefox, as emerge sees it"; emerge -pv --nodeps www-client/firefox 2>&1 | tail -6
+            echo "== metadata.xml"; cat /var/db/repos/gentoo/www-client/firefox/metadata.xml
+            echo "== global flags"; for f in X dbus debug hardened jack libproxy pulseaudio selinux sndio test wayland wifi clang lto pgo telemetry; do grep -E "^$f - " /var/db/repos/gentoo/profiles/use.desc; done
+            echo "== profile defaults"; emerge --info 2>/dev/null | grep "^USE="
+            echo "== binhost has firefox?"; FEATURES=getbinpkg emerge -pv --getbinpkgonly --nodeps www-client/firefox 2>&1 | tail -8
+            echo "== firefox-bin"; ls /var/db/repos/gentoo/www-client/firefox-bin/ 
+            echo "== gentoolkit binary?"; FEATURES=getbinpkg emerge -pv --getbinpkgonly app-portage/gentoolkit 2>&1 | tail -4
           '

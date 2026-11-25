@@ -765,6 +765,42 @@ to-do list. Appearance work comes last and a little at a time.
 - Epic accepting Bunny Linux's signing key (anti-cheat games)
 - A Microsoft-signed shim (Secure Boot on the install USB)
 
+## A solid base, and room to leave it (after alpha)
+
+Decided November 24, 2026. The default install stays one tested path
+(dracut, GRUB, btrfs with undo, no cron by default). Anything a Gentoo user would
+choose differently should be writable in `bunny.toml`, with bunny adapting
+instead of assuming. btrfs stays required for undo.
+
+- [ ] **Initramfs choice**: `[boot] initramfs = "dracut" | "ugrd"`, behind one
+      interface (like `InitSystem`). bunny's boot features follow it: the
+      boot-menu undo step gets a ugrd version (or says plainly it's
+      dracut-only), and `bunny check` warns about combinations that won't
+      boot. Plymouth stays dracut-only until ugrd's support matures.
+      `bunny install --initramfs ugrd` and the installer's Advanced panel.
+- [ ] **Bootloader choice**: GRUB (default), systemd-boot, Limine, EFI stub,
+      the alternatives Gentoo documents. Each needs its own way to show the
+      undo entry and earlier versions, so one at a time.
+- [ ] **Cron and other "pick one" services** (cronie, dcron, fcron, bcron):
+      `[services] cron = "cronie"`, including the extra step some need
+      (`crontab /etc/crontab` for dcron, `emerge --config` for fcron).
+- [ ] **Users in bunny.toml**: `[users.you] admin = true, shell = ..., groups
+      = [...]`, created on switch; never deleted automatically (a user
+      removed from the config is reported, not removed, since that loses
+      their files). Passwords stay out of the config (set with `passwd`, or
+      a hashed password file outside the repo, the secrets layer).
+- [ ] **Mounts in bunny.toml instead of hand-editing fstab**: the installer
+      writes fstab today and nothing manages it after. `[mounts."/data"]
+      disk = "LABEL=data"` (or UUID, with `bunny disks` listing them by name,
+      size and label so nobody copies UUIDs by hand), options and btrfs
+      subvolumes; bunny writes a managed block in /etc/fstab, checks it with
+      `findmnt --verify` before switching, and keeps hand-written lines.
+      `bunny import` reads the existing fstab into it (like genfstab, once).
+- [ ] **The test machine runs the combinations**: each supported choice gets
+      a nightly VM install on the Dell, tested against the default (not
+      every combination with every other): ugrd, each bootloader, each cron,
+      encrypted and not. A choice is "supported" once it has its test.
+
 ## The maintainer's laptop
 
 Getting Bunny Linux onto a real, encrypted Gentoo laptop safely. Everything

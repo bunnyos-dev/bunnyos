@@ -11,10 +11,10 @@ That's useful for testing.
 
 | Command | What it does |
 |---|---|
-| `bunny status [config]` | One screen saying whether everything is in order, and what to do if not. |
+| `bunny status [config]` | One screen saying whether everything is in order, and what to do if not. Add `--check` to exit 1 when anything needs a look. |
 | `bunny diff [config]` | Your config and your system side by side, and how to fix each difference either way. Exits 1 if they differ. |
 | `bunny check [config]` | Finds mistakes in the config and says how to fix each. |
-| `bunny plan [config]` | Shows what a switch would change: packages, USE flags, services, packages that don't exist, and differences from `bunny.lock`. |
+| `bunny plan [config]` | Shows what a switch would change: packages, USE flags, services, packages that don't exist, and differences from `bunny.lock`. Needs no admin rights, but where `/boot` can only be read as root (encrypted installs, whose `/boot` is the EFI partition), the boot menu isn't checked and it says so: run `sudo bunny plan` to include it. |
 | `bunny search <words>` | Searches package names and descriptions. Marks installed ones. |
 | `bunny rollback list` / `bunny generations` | Lists saved generations, numbered, with what each was saved before. |
 | `bunny explain [file]` | Explains an emerge message. Without a file, paste it and press Ctrl+D. |
@@ -31,12 +31,14 @@ That's useful for testing.
 | `bunny lock [config]` | Accepts the system as it is now: writes `bunny.lock` from the installed versions. |
 | `bunny rollback [number]` | Puts the system back to a generation (the last switch if no number). Takes effect after a reboot. |
 | `bunny clean [--keep N]` | Removes old generations and rollback leftovers. Keeps the newest 5 by default. |
-| `bunny publish [repository]` | Sends your config folder (`/etc/bunny`) to a GitHub repository, with your own GitHub sign-in (needs `gh auth login` first, as yourself). The first time, it starts the folder's git history if there's none, makes the repository (private; `my-system` unless you name one, like `laptop-config` or `you/laptop-config`) and connects the folder to it; after that it commits what changed ("Saved with bunny publish") and sends it. `--dry-run` shows the exact commands; `--yes` doesn't ask. Root's git asks your `gh` for the password each time (`runuser … gh auth git-credential`), so nothing is copied into root's files. A repository that's public gets a warning, and Enter means no. |
+| `bunny publish [repository]` | Sends your config folder (`/etc/bunny`) to a GitHub repository, with your own GitHub sign-in (needs `gh auth login` first, as yourself). The first time, it starts the folder's git history if there's none, makes the repository (private; `my-system` unless you name one, like `laptop-config` or `you/laptop-config`) and connects the folder to it; after that it commits what changed ("Saved with bunny publish") and sends it. `--dry-run` shows the exact commands; `--yes` doesn't ask. Root's git asks your `gh` for the password each time (`runuser … gh auth git-credential`), so nothing is copied into root's files. A repository that's public gets a warning, and Enter means no. It also lets your user read the folder's history: it adds the folder to git's `safe.directory` in `/etc/gitconfig`, once (without it, `git log` there as yourself says "detected dubious ownership", since the folder belongs to root). |
 
 `switch`, `add`, `remove` and `update` take:
 
 - `-y` / `--yes`: skip the questions. **Removing packages from the system
-  always asks**, even with `--yes`.
+  still asks**, even with `--yes`. Without `--yes`, it asks a second time
+  only when emerge wants to remove more than the plan showed (usually
+  dependencies nothing else uses).
 - `-v` / `--verbose`: show emerge's full output as it runs, and let emerge ask
   its own questions, instead of bunny's list and progress line.
 
@@ -69,3 +71,13 @@ too.
 - **Erasing a disk** (`bunny install`) asks you to type the disk's name
   instead, so it can't happen by pressing Enter.
 - Anything other than yes or no is asked again rather than guessed.
+
+## Exit codes
+
+| Code | Means |
+|---|---|
+| 0 | It worked (or you answered no, and nothing was changed). |
+| 1 | Something went wrong. bunny says what. |
+| 4 | Stopped because of what was typed, and nothing was changed: a package name that doesn't exist, a mistake in the config, or no password at sudo's or doas's question (Ctrl+C there included). |
+
+`bunny diff` has its own: 0 when there are no differences, 1 when there are.

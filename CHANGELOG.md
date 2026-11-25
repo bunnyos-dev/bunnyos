@@ -16,6 +16,108 @@ a minor version can change how things work).
   `bunny status` says what it did. The next switch adds the small
   `bunny-finish-undo` start-up service for this.
 
+- `tools/convert-layout.sh` fixes from the code review: it now stops
+  before changing anything if `/boot` isn't its own partition (it used to stop
+  partway and could leave the computer unable to start); a `/home` that was
+  already a subvolume isn't copied twice or mounted twice; folders that are
+  their own filesystem (like a tmpfs `/var/tmp/portage`) are left alone;
+  and `--finish` only edits the boot menu on the real system.
+- `bunny status --check` exits with code 1 when anything needs a look, so
+  scripts and scheduled checks can tell.
+- Fixed: the install's recording said it took "0 s". It now says how long
+  the install ran.
+- `bunny report` says "Adding `bunny status` to the report…" while it
+  works that out, instead of seeming to hang, and leaves it out if it takes
+  over a minute.
+- `bunny remove` asks once instead of twice when it removes exactly what
+  the plan showed. It still asks again when emerge wants to remove more
+  (like dependencies nothing else uses), and always with `--yes`.
+- Existing systems now get the console font that draws ✓ ✗ ⚠ too (before,
+  only new installs did): the next `bunny switch` sets it up, shown in the
+  plan first, and undo takes it away again. A font you chose yourself is
+  left alone.
+- Fixed: `bunny plan` (and `check`, `switch`, `diff`) with a copy of
+  `bunny.toml` somewhere else left out this computer's host file, so GRUB,
+  the kernel and the rest showed as "would be removed". A copy with no
+  `hosts/` folder next to it now uses this computer's file from
+  `/etc/bunny/hosts/`, and says so.
+- The boot menu's "Earlier versions" and `bunny generations` say what each
+  version was before in words: "before removing tree" or "before adding
+  tmux and cronie" instead of "before − tree" or "before a switch: + tmux".
+- `bunny install` is quieter: each step is its heading and one "✓ Done"
+  line, instead of what wipefs, mkfs, btrfs and cryptsetup print. Their
+  output goes to `/var/log/bunny/<time>-install.log` (copied into the new
+  system); a failing tool shows its last lines. `--verbose` shows it all.
+
+- Fixed: the first switch on a new install rebuilt curl, gettext, iputils,
+  libb2 and portage-utils. Gentoo's base system is built with a few
+  features off; the install now swaps those packages for Gentoo's prebuilt
+  ones with the usual settings, so the first switch rebuilds nothing.
+
+- The live USB starts quietly: OpenRC's "Starting … [ ok ]" lines only show
+  with the boot menu's "show start-up messages" entry. Errors still show.
+
+- The live USB image is about 850 MB instead of about 1.45 GB, so a 1 GB
+  USB stick is enough. It no longer carries a compiler, Portage, Python or
+  firmware for phone chips, cameras and sound; network and graphics drivers
+  and firmware all stay, and installing works the same.
+- Test VMs: each named VM (`VM=…`) now has its own SSH port (2223, 2224, …,
+  kept in its folder and shown when it starts), so two can run at once. The
+  main VM stays on 2222. `tools/bunny-vm.sh port` prints it.
+
+- `bunny status`, `bunny generations`, `bunny rollback` and `bunny clean`
+  now show times in your own time zone (like "Nov 18, 7:03 PM"), the same
+  as the boot menu, instead of UTC.
+- A first graphical installer (`bunny-installer`): one question per screen
+  on black, over `bunny install`, which still checks every answer and does
+  the work. Try it in a window with `bunny-installer --demo`.
+- The graphical installer: a short explanation of zram vs. a swap file vs.
+  hibernate on the setup screen; a ✓ when the two passwords you typed match;
+  confirming the erase is now a button and a popup ("Erase and install?"),
+  not typing the disk's name; and a spinner so a running step doesn't look
+  frozen.
+- `bunny install` can take every answer as an option (`--recommended`,
+  `--user`, `--hostname`, `--timezone`, `--keymap`, `--password-stdin`,
+  `--yes`) and list the disks as JSON (`--list-disks`).
+- `bunny install` asks "Use the recommended setup?": Enter gives an encrypted
+  disk with compressed swap in memory (zram, like Fedora); `n` asks about
+  encryption and swap one at a time (zram, a swap file too, hibernate, or
+  none). The summary shows the options that repeat your choices on another
+  computer. New systems get zram swap by default (`--no-zram` turns it off).
+- When emerge refuses a switch because a package is a testing version, is
+  masked, or needs other USE flags, bunny now explains it from Portage's own
+  answer (through bunny's Portage helper), including which packages pulled
+  it in. Other problems are still read from emerge's message.
+- New installs say Bunny Linux instead of Gentoo (in `/etc/os-release`, so
+  in fastfetch too, with a placeholder logo): the starter config adds
+  `sys-apps/bunny-release` from Bunny Linux's own repository, `"bunny"`,
+  which bunny now knows by name.
+- Fixed: pressing Ctrl+C at doas's password question now gets the same
+  "nothing was changed" message as sudo.
+- The boot menu is tidier: no Gentoo theme, the main entry is "Bunny Linux"
+  (not "Bunny Linux GNU/Linux") with "Advanced options" under it, and the
+  "(EFI BootNext)" entries are gone. New installs get it straight away;
+  existing systems with the boot-menu undo entry get it on the next switch,
+  shown in `bunny plan` first and undone by undo.
+- Fixed: `git log` in `/etc/bunny` as your own user said "detected dubious
+  ownership". `bunny install` and `bunny publish` now add `/etc/bunny` to
+  git's `safe.directory` in `/etc/gitconfig`, once.
+- `bunny install` no longer refuses a password under 8 characters. It says
+  it's easy to guess and suggests a longer one, then lets you keep it (type
+  it again) or choose another (press Enter).
+- `bunny install --dry-run` no longer asks for a password: a dry run
+  encrypts nothing and makes no account.
+- Fixed: `bunny plan` without sudo said the boot menu's undo entry couldn't
+  be set up, when it just couldn't read `/boot`. It now says the boot menu
+  wasn't checked and to run `sudo bunny plan` to include it.
+- Developer mode's `"auto"` no longer sends a report when you mistype a
+  package name, make a config mistake, or don't give sudo your password
+  (Ctrl+C at its question). These now end with exit code 4 ("stopped
+  because of what was typed; nothing was changed") instead of 1.
+
+- A package you add that emerge can't install (for example one with only a
+  testing version) is now explained, instead of emerge quietly leaving it out
+  and bunny saying the system matches your config.
 - Fixed: with a user name like `bunny`, `bunny report` swapped the word
   everywhere, turning `bunny update` into `you update`. Names that are also
   bunny's own words are now only swapped where they're used as names.
@@ -79,6 +181,11 @@ a minor version can change how things work).
 - `bunny install --dry-run` now shows each step in plain words (its name
   and what it does) instead of a wall of commands. `--dry-run --verbose`
   shows every command and file, as before.
+- The live USB and newly installed systems use a console font that can draw
+  ✓ and ✗ (they showed as `v` and `x`); ⚠ shows as `!`.
+- `tools/bunny-vm.sh`: each VM remembers its own SSH key, so a new VM no
+  longer trips "REMOTE HOST IDENTIFICATION HAS CHANGED". New `forget-key`
+  for after a reinstall, and `VM_USER` for a VM whose user isn't `you`.
 - New: `repositories` in `bunny.toml` for package repositories besides
   Gentoo's own (like GURU). bunny looks them up in Gentoo's list, sets them
   up and downloads them before installing, so a package from one installs in

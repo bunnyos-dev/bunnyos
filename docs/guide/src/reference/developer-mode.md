@@ -21,7 +21,7 @@ name = "laptop"     # what to call this computer in reports
 
 | Setting | Values | Default | Meaning |
 |---|---|---|---|
-| `report` | `false` / `true` / `"auto"` | `false` | `true` records every command; you send them with `bunny report`. `"auto"` also sends a command by itself when it fails or shows a ⚠ or ✗. Notes marked `·` (like the reminder to only add repositories you trust) don't count. |
+| `report` | `false` / `true` / `"auto"` | `false` | `true` records every command; you send them with `bunny report`. `"auto"` also sends a command by itself when it fails or shows a ⚠ or ✗. Notes marked `·` (like the reminder to only add repositories you trust) don't count, and neither do your own slips: a package name that doesn't exist, a config mistake, or no password at sudo's question (exit code 4; see [exit codes](commands.md#exit-codes)). Those are still recorded, and `bunny report` sends them if you ask. |
 | `name` | any text | `"this computer"` | Shown in reports, so you can tell your computers apart. |
 | `reports` | `"owner/name"` | `"bunnyos-dev/bunny-reports"` | The GitHub repository reports are filed in. It should be private. |
 
@@ -50,9 +50,14 @@ bunny report --dry-run
 ## What a report contains
 
 - Each recorded command: what you typed, everything bunny showed, how it
-  ended (worked, or the exit code) and how long it took. Commands with a
+  ended (worked, or the exit code) and how long it took (for an install,
+  until its recording was copied into the new system). Commands with a
   problem are opened up; the rest are folded.
-- `bunny status` at the moment of sending.
+- `bunny status` at the moment of sending. Working that out can take a
+  moment, mostly the first time after starting the computer (it reads
+  every Gentoo security advisory), so `bunny report` says "Adding `bunny
+  status` to the report…" while it waits. If it takes over a minute, it's
+  left out of the report and the report is sent without it.
 - bunny's version, the kernel version, the Gentoo profile and the Portage
   version.
 

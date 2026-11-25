@@ -12,15 +12,19 @@ bunny rollback list
 ```
 Saved generations (oldest first):
 
-   1. 2026-11-16 21:24:17 UTC   before a switch: + tmux, + cronie, start cronie
+   1. Nov 16, 9:24 PM   before adding tmux and cronie, starting cronie
       bunny-20261116-212417
-   2. 2026-11-17 09:15:00 UTC   before a switch: + mpv
+   2. Nov 17, 9:15 AM   before adding mpv
       bunny-20261117-091500
 
-Running now: your system after the switch at 2026-11-17 09:15:00 UTC.
+Running now: your system after the switch at Nov 17, 9:15 AM.
 ```
 
-Each one says what came **right after** it. So "before a switch: + mpv" is
+Times are in your computer's time zone, the same as in the boot menu
+(the year is added for anything from an earlier year). The name under each
+one, like `bunny-20261117-091500`, is the moment in UTC.
+
+Each one says what came **right after** it. So "before adding mpv" is
 your system as it was just before mpv was added.
 
 ## Go back
@@ -74,16 +78,22 @@ Turn on the boot menu's undo entry once, in `bunny.toml`:
 undo_entry = true
 ```
 
-and run `bunny switch`. From then on, the boot menu has two of bunny's
-entries, right under Bunny Linux's own:
+and run `bunny switch`. (New installs have it on already.) From then on, the
+boot menu has two of bunny's entries, right under Bunny Linux's own:
 
 ```
 Bunny Linux
-Advanced options for Bunny Linux
+Advanced options
 Undo the last change (+ mangowm, + dejavu, Nov 18, 7:03 PM)
 Earlier versions (11 saved)
 UEFI Firmware Settings
 ```
+
+The same switch tidies what Gentoo's setup leaves in the menu: its theme
+(the menu is plain dark until Bunny Linux has its own look), "GNU/Linux"
+after the name, and the "(EFI BootNext)" entries. Other systems on the
+computer, like Windows, still show. `bunny plan` lists each of these under
+"Boot menu, tidied" first, and undoing that switch puts them back.
 
 **Undo the last change** says what it undoes and when (in your time zone).
 If a change leaves the system unable to start, restart, pick it, and the
@@ -102,7 +112,8 @@ rollback`.) If it's somehow picked twice for the same change, the second
 time does nothing and the computer starts normally.
 
 **Earlier versions** lists the newest 10 saved versions, newest first, like
-`Nov 18, 7:03 PM · before + repository guru, + mangowm, + dejavu`. Pick one
+`Nov 18, 7:03 PM · before adding the repository guru, adding mangowm and dejavu`
+(that version is your system just before those were added). Pick one
 to see what came after it, one change per line, and **Go back to this
 version** to start from it. That's undoable too. (The lines describing the
 changes do nothing when picked: GRUB can only show menu entries.) `bunny

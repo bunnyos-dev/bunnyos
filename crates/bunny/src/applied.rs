@@ -51,10 +51,16 @@ pub fn save(root: &Path, config: &Path) -> Result<()> {
         std::env::current_dir()?.join(config)
     };
     std::fs::write(dir.join(PATH_FILE), format!("{}\n", absolute.display()))?;
-    // This computer's host file, read on top of the config.
-    let host = crate::config::this_host(root)
-        .map(|name| crate::config::host_path(&absolute, &name))
-        .filter(|path| path.is_file());
+    // This computer's host file, read on top of the config (borrowed
+    // from /etc/bunny/hosts for a copy with no hosts/ folder, the same
+    // one the switch used).
+    let system_hosts = root.join(crate::config::SYSTEM_HOSTS.trim_start_matches('/'));
+    let host = crate::config::this_host(root).and_then(|name| {
+        crate::config::host_file_for(&absolute, &name, Some(&system_hosts))
+            .ok()
+            .flatten()
+            .map(|(path, _)| path)
+    });
     match host {
         Some(path) => {
             std::fs::copy(&path, dir.join(HOST))
@@ -310,5 +316,30 @@ mod tests {
         save(root.path(), &config).unwrap();
         assert!(!dir.join(HOST).exists());
         assert!(!dir.join(HOST_PATH_FILE).exists());
+    }
+
+    #[test]
+    fn save_keeps_the_borrowed_host_file_for_a_copy() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("etc/conf.d")).unwrap();
+        std::fs::write(
+            root.path().join("etc/conf.d/hostname"),
+            "hostname=\"laptop\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.path().join("etc/bunny/hosts")).unwrap();
+        let system_host = root.path().join("etc/bunny/hosts/laptop.toml");
+        std::fs::write(&system_host, "packages = [\"a/b\"]\n").unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let copy = home.path().join("bunny.toml");
+        std::fs::write(&copy, "packages = []\n").unwrap();
+        save(root.path(), &copy).unwrap();
+        let dir = root.path().join(DIR);
+        assert_eq!(
+            std::fs::read_to_string(dir.join(HOST_PATH_FILE))
+                .unwrap()
+                .trim(),
+            system_host.display().to_string()
+        );
     }
 }

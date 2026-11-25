@@ -1,0 +1,27 @@
+#! /bin/sh
+# Written by bunny. GRUB's own /etc/grub.d/10_linux, with tidier titles:
+# "Bunny Linux" instead of "Bunny Linux GNU/Linux" (10_linux always adds
+# " GNU/Linux" to GRUB_DISTRIBUTOR), and "Advanced options" for its submenu.
+# Everything else (kernels, startup images, microcode, settings) is
+# 10_linux's own work, unchanged.
+#
+# bunny made 10_linux non-executable, so grub-mkconfig skips it and the
+# entries aren't listed twice. If 10_linux is executable again (a GRUB update
+# can do that), this prints nothing: the menu says "GNU/Linux" again until
+# the next `bunny switch` tidies it, but nothing is listed twice.
+set -e
+linux="$(dirname "$0")/10_linux"
+[ -f "$linux" ] || exit 0
+[ -x "$linux" ] && exit 0
+name="${GRUB_DISTRIBUTOR:-}"
+if [ -z "$name" ]; then
+    exec sh "$linux"
+fi
+# The name, safe to use in a sed pattern and in its replacement.
+pattern=$(printf '%s\n' "$name" | sed 's/[]\/$*.^[]/\\&/g')
+replacement=$(printf '%s\n' "$name" | sed 's/[\/&]/\\&/g')
+# Kept in a variable first, so a failing 10_linux fails grub-mkconfig too.
+entries=$(sh "$linux")
+printf '%s\n' "$entries" | sed \
+    -e "/^[[:space:]]*submenu '/s/'[^']* $pattern GNU\/Linux'/'Advanced options'/" \
+    -e "/^[[:space:]]*menuentry '/s/'$pattern GNU\/Linux/'$replacement/"

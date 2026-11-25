@@ -32,16 +32,11 @@ pub(crate) fn generations(root: &Path) -> anyhow::Result<ExitCode> {
 
     println!("Saved generations (oldest first):\n");
     for (i, g) in gens.iter().enumerate() {
-        let what = match notes::read_note(root, &g.name) {
-            Some(n) if n.kind == notes::Kind::Rollback => match &n.to {
-                Some(to) => format!("before rolling back to {}", number(to)),
-                None => "before a rollback".to_string(),
-            },
-            Some(n) if !n.summary.is_empty() => format!("before a switch: {}", n.summary),
-            Some(_) => "before a switch".to_string(),
-            None if g.is_pre_rollback() => "before a rollback".to_string(),
-            None => "before a switch".to_string(),
-        };
+        let what = what_came_after(
+            notes::read_note(root, &g.name),
+            g.is_pre_rollback(),
+            &number,
+        );
         let marker = if running == Some(g.name.as_str()) {
             "   ← running a copy of this"
         } else {
@@ -78,6 +73,25 @@ pub(crate) fn generations(root: &Path) -> anyhow::Result<ExitCode> {
         gens.len()
     );
     Ok(ExitCode::SUCCESS)
+}
+
+/// What a generation was the version before, for `bunny generations`:
+/// "before adding mpv", "before rolling back to #3".
+fn what_came_after(
+    note: Option<notes::Note>,
+    pre_rollback: bool,
+    number: &dyn Fn(&str) -> String,
+) -> String {
+    match note {
+        Some(n) if n.kind == notes::Kind::Rollback => match &n.to {
+            Some(to) => format!("before rolling back to {}", number(to)),
+            None => "before a rollback".to_string(),
+        },
+        Some(n) if !n.summary.is_empty() => format!("before {}", notes::before_words(&n.summary)),
+        Some(_) => "before a switch".to_string(),
+        None if pre_rollback => "before a rollback".to_string(),
+        None => "before a switch".to_string(),
+    }
 }
 
 pub(crate) fn clean_cmd(keep: usize, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
@@ -375,4 +389,41 @@ pub(crate) fn finish_undo_cmd(quiet: bool, root: &Path) -> anyhow::Result<ExitCo
     } else {
         ExitCode::SUCCESS
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn says_what_each_generation_was_before() {
+        let switch = |summary: &str| notes::Note {
+            kind: notes::Kind::Switch,
+            summary: summary.into(),
+            to: None,
+        };
+        let number = |_: &str| "#3".to_string();
+        assert_eq!(
+            what_came_after(Some(switch("- tree")), false, &number),
+            "before removing tree"
+        );
+        assert_eq!(
+            what_came_after(Some(switch("+ mpv")), false, &number),
+            "before adding mpv"
+        );
+        assert_eq!(
+            what_came_after(Some(switch("")), false, &number),
+            "before a switch"
+        );
+        let rollback = notes::Note {
+            kind: notes::Kind::Rollback,
+            summary: String::new(),
+            to: Some("bunny-x".into()),
+        };
+        assert_eq!(
+            what_came_after(Some(rollback), false, &number),
+            "before rolling back to #3"
+        );
+        assert_eq!(what_came_after(None, true, &number), "before a rollback");
+    }
 }

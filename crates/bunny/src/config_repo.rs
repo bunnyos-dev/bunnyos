@@ -91,6 +91,72 @@ pub fn start(dir: &Path, who: &Identity, message: &str, runner: &mut dyn Runner)
     Ok(true)
 }
 
+/// git's system-wide settings, where `safe.directory` is read from.
+pub const SYSTEM_GITCONFIG: &str = "etc/gitconfig";
+
+/// Whether git's system-wide settings at `root` already trust `dir` (a path
+/// inside that system, like `/etc/bunny`): a `directory = /etc/bunny` (or
+/// `*`) line in a `[safe]` section.
+pub fn trusted(root: &Path, dir: &str) -> bool {
+    let Ok(text) = std::fs::read_to_string(root.join(SYSTEM_GITCONFIG)) else {
+        return false;
+    };
+    let mut in_safe = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_safe = line
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .trim()
+                .eq_ignore_ascii_case("safe");
+            continue;
+        }
+        if !in_safe {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            let value = value.trim().trim_matches('"');
+            if key.trim().eq_ignore_ascii_case("directory")
+                && (value == "*" || value.trim_end_matches('/') == dir.trim_end_matches('/'))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Lets every user on the system read the history of `dir` (owned by root):
+/// git refuses ("detected dubious ownership") unless it's listed in
+/// `safe.directory`. Adds it to git's system-wide settings (`/etc/gitconfig`
+/// at `root`), once. Returns whether anything was added.
+pub fn trust(root: &Path, dir: &str, runner: &dyn Runner) -> Result<bool> {
+    if trusted(root, dir) {
+        return Ok(false);
+    }
+    let path = root.join(SYSTEM_GITCONFIG);
+    if runner.dry() {
+        println!("  (would add) safe.directory = {dir} to {}", path.display());
+        return Ok(true);
+    }
+    let mut text = std::fs::read_to_string(&path).unwrap_or_default();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&format!(
+        "# Added by bunny: lets you read the history of {dir}, which belongs to root.\n\
+         [safe]\n\tdirectory = {dir}\n"
+    ));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| anyhow::anyhow!("Couldn't create {}: {e}", parent.display()))?;
+    }
+    std::fs::write(&path, text)
+        .map_err(|e| anyhow::anyhow!("Couldn't write {}: {e}", path.display()))?;
+    Ok(true)
+}
+
 /// Writes `.gitignore`, keeping one that's already there.
 fn write_gitignore(dir: &Path, runner: &dyn Runner) -> Result<()> {
     let path = dir.join(".gitignore");
@@ -215,6 +281,9 @@ pub struct Publish {
     pub uncommitted: Vec<String>,
     /// The identity for a new repository's commits.
     pub identity: Identity,
+    /// Not yet readable by your user: the system's root and the folder's
+    /// path in it, for git's `safe.directory` (set by `bunny publish`).
+    pub trust: Option<(PathBuf, String)>,
 }
 
 /// Looks at the folder and at GitHub, changing nothing.
@@ -327,6 +396,7 @@ pub fn look(
         connected: origin.is_some(),
         uncommitted,
         identity: Identity::placeholder(&person.name, host),
+        trust: None,
     })
 }
 
@@ -362,6 +432,12 @@ impl Publish {
                 self.uncommitted.join(", ")
             ));
         }
+        if let Some((_, dir)) = &self.trust {
+            out.push_str(&format!(
+                "  • Let your user read its history (`git log`): add {dir} to git's safe.directory\n    \
+                 in /etc/gitconfig\n"
+            ));
+        }
         out.push_str("  • Send the history to GitHub\n");
         if self.public {
             out.push_str(&format!(
@@ -381,6 +457,11 @@ impl Publish {
             println!("\n==> Starting the history of {}", dir.display());
             if !start(dir, &self.identity, "My system", runner)? {
                 bail!("Couldn't start the git history (the message is above). Nothing was sent.");
+            }
+        }
+        if let Some((root, inside)) = &self.trust {
+            if let Err(e) = trust(root, inside, runner) {
+                println!("  ⚠ {e:#}. Your user can't read its history with git yet.");
             }
         }
         if self.create {
@@ -745,5 +826,94 @@ pub(crate) mod tests {
         assert!(start(dir.path(), &Identity::placeholder("you", "pc"), "x", &mut r).unwrap());
         assert!(!dir.path().join(".gitignore").exists());
         assert_eq!(r.ran.len(), 5);
+    }
+
+    #[test]
+    fn lets_everyone_read_the_history_once() {
+        let root = tempfile::tempdir().unwrap();
+        let r = root.path();
+        let real = Recorded::default();
+        assert!(!trusted(r, "/etc/bunny"));
+        assert!(trust(r, "/etc/bunny", &real).unwrap());
+        let text = std::fs::read_to_string(r.join(SYSTEM_GITCONFIG)).unwrap();
+        assert!(
+            text.contains("[safe]\n\tdirectory = /etc/bunny\n"),
+            "{text}"
+        );
+        assert!(trusted(r, "/etc/bunny"));
+        // Twice changes nothing.
+        assert!(!trust(r, "/etc/bunny", &real).unwrap());
+        assert_eq!(
+            std::fs::read_to_string(r.join(SYSTEM_GITCONFIG)).unwrap(),
+            text
+        );
+    }
+
+    #[test]
+    fn keeps_what_the_system_gitconfig_already_says() {
+        let root = tempfile::tempdir().unwrap();
+        let r = root.path();
+        std::fs::create_dir_all(r.join("etc")).unwrap();
+        let mine = "[core]\n\teditor = vim\n[safe]\n\tdirectory = /srv/repo";
+        std::fs::write(r.join(SYSTEM_GITCONFIG), mine).unwrap();
+        assert!(!trusted(r, "/etc/bunny"));
+        trust(r, "/etc/bunny", &Recorded::default()).unwrap();
+        let text = std::fs::read_to_string(r.join(SYSTEM_GITCONFIG)).unwrap();
+        assert!(text.starts_with(&format!("{mine}\n")), "{text}");
+        assert!(trusted(r, "/etc/bunny"));
+        assert!(trusted(r, "/srv/repo"));
+
+        // Trusting everything (`*`) already covers it.
+        let all = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(all.path().join("etc")).unwrap();
+        std::fs::write(
+            all.path().join(SYSTEM_GITCONFIG),
+            "[Safe]\n  directory = *\n",
+        )
+        .unwrap();
+        assert!(trusted(all.path(), "/etc/bunny"));
+        // Only in a [safe] section.
+        std::fs::write(
+            all.path().join(SYSTEM_GITCONFIG),
+            "[core]\n  directory = /etc/bunny\n",
+        )
+        .unwrap();
+        assert!(!trusted(all.path(), "/etc/bunny"));
+    }
+
+    #[test]
+    fn a_dry_run_adds_no_safe_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let dry = Recorded {
+            dry: true,
+            ..Default::default()
+        };
+        assert!(trust(root.path(), "/etc/bunny", &dry).unwrap());
+        assert!(!root.path().join(SYSTEM_GITCONFIG).exists());
+    }
+
+    #[test]
+    fn publish_lets_your_user_read_the_history() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("etc/bunny");
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        let mut r = Recorded {
+            answers: answers(&[
+                ("gh api user", "octo\n"),
+                ("remote get-url", "https://github.com/octo/my-system.git\n"),
+                ("status --porcelain", ""),
+                ("gh repo view", "PRIVATE\n"),
+            ]),
+            ..Default::default()
+        };
+        let mut plan = look(&dir, &you(), "pc", None, true, &mut r).unwrap();
+        plan.trust = Some((root.path().to_path_buf(), "/etc/bunny".into()));
+        let preview = plan.preview();
+        assert!(
+            preview.contains("add /etc/bunny to git's safe.directory"),
+            "{preview}"
+        );
+        plan.carry_out(&mut r).unwrap();
+        assert!(trusted(root.path(), "/etc/bunny"));
     }
 }

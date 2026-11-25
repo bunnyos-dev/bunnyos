@@ -75,8 +75,8 @@ bunny status
 ```
 ✓ Config        the system matches your config
 ✓ Versions      all 812 packages match bunny.lock
-· Last change   a switch, 2026-11-17 09:15:00 UTC (3 hours ago)
-✓ Undo          1 generation saved, newest 2026-11-17 09:15:00 UTC
+· Last change   a switch, Nov 17, 9:15 AM (3 hours ago)
+✓ Undo          1 generation saved, newest Nov 17, 9:15 AM
                 `bunny rollback list` shows them.
 ✓ Updates       last checked 2 days ago
 

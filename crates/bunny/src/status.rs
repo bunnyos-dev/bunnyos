@@ -581,7 +581,8 @@ impl Status {
         out
     }
 
-    /// "2026-11-17 09:15 UTC (3 hours ago)" from a `YYYYMMDD-HHMMSS` stamp.
+    /// "Nov 17, 9:15 AM (3 hours ago)" in local time, from a
+    /// `YYYYMMDD-HHMMSS` stamp (UTC), the same wording as the boot menu.
     fn when(&self, stamp: &str) -> String {
         let pretty = rollback::Generation {
             name: format!("bunny-{stamp}"),
@@ -701,7 +702,13 @@ mod tests {
         let text = s.render();
         assert!(text.contains("✓ Config        the system matches your config"));
         assert!(text.contains("all 812 packages match bunny.lock"));
-        assert!(text.contains("a switch, 2026-11-17 09:15:00 UTC (1 day ago)"));
+        // Local time, like the boot menu, never UTC.
+        let local = rollback::local_time("bunny-20261117-091500").unwrap();
+        assert!(
+            text.contains(&format!("a switch, {local} (1 day ago)")),
+            "{text}"
+        );
+        assert!(!text.contains("UTC"), "{text}");
         assert!(text.contains("1 generation saved"));
         assert!(text.contains("last checked 2 days ago"));
         assert!(text.ends_with("Everything is in order.\n"));

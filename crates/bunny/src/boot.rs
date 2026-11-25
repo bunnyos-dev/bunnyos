@@ -24,6 +24,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub mod tidy;
+
 /// The `[boot]` section.
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 #[serde(deny_unknown_fields)]
@@ -67,11 +69,17 @@ pub struct Changes {
     /// Why it can't be set up on this system (shown, but doesn't stop the
     /// rest of the switch).
     pub problems: Vec<String>,
+    /// Gentoo's leftovers in the menu to tidy (theme, "GNU/Linux",
+    /// "(EFI BootNext)").
+    pub tidy: Vec<tidy::Tidy>,
+    /// `/boot` can only be read as root (an EFI partition usually is), and
+    /// this isn't root: nothing about the boot menu could be checked.
+    pub needs_root: bool,
 }
 
 impl Changes {
     pub fn is_empty(&self) -> bool {
-        self.install_module.is_none() && !self.remove_entry
+        self.install_module.is_none() && !self.remove_entry && self.tidy.is_empty()
     }
 }
 
@@ -114,8 +122,31 @@ pub fn kernels(root: &Path) -> Vec<String> {
     found
 }
 
+/// Whether `/boot` can't be read because of its permissions (only root can
+/// read an EFI partition mounted with `fmask=0077`). Root is never refused.
+fn boot_needs_root(root: &Path) -> bool {
+    let denied = |r: std::io::Result<std::fs::Metadata>| {
+        r.is_err_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+    };
+    std::fs::read_dir(root.join("boot"))
+        .is_err_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+        || denied(std::fs::metadata(root.join("boot/grub/grub.cfg")))
+}
+
 pub fn changes(boot: &Boot, root: &Path) -> Changes {
+    changes_reading(boot, root, boot_needs_root(root))
+}
+
+/// [`changes`], told whether `/boot` can be read (for tests, which run as
+/// root and so can't be refused).
+fn changes_reading(boot: &Boot, root: &Path, needs_root: bool) -> Changes {
     let mut out = Changes::default();
+    if boot.undo_entry && needs_root {
+        // Every check below reads /boot, and would wrongly say there's no
+        // GRUB or startup image.
+        out.needs_root = true;
+        return out;
+    }
     if !boot.undo_entry {
         out.remove_entry =
             std::fs::read_to_string(root.join(CUSTOM_CFG)).is_ok_and(|text| text.contains(BEGIN));
@@ -124,6 +155,8 @@ pub fn changes(boot: &Boot, root: &Path) -> Changes {
     if !root.join("boot/grub/grub.cfg").exists() {
         out.problems
             .push("the undo entry needs GRUB, and there's no /boot/grub/grub.cfg".into());
+    } else {
+        out.tidy = tidy::needed(root);
     }
     if !root.join("usr/bin/dracut").exists() {
         out.problems
@@ -335,7 +368,11 @@ pub fn render_earlier(versions: &[MenuVersion], saved: usize) -> String {
         let label = if v.summary.is_empty() {
             v.when.clone()
         } else {
-            format!("{} · before {}", v.when, shorten(&v.summary, 48))
+            format!(
+                "{} · before {}",
+                v.when,
+                shorten(&crate::notes::before_words(&v.summary), 56)
+            )
         };
         let _ = writeln!(out, "    submenu '{}' {{", title(&label));
         menuentry(
@@ -497,8 +534,12 @@ mod tests {
         let menu = render_earlier(&versions, 11);
         assert!(menu.starts_with(EARLIER_BEGIN), "{menu}");
         assert!(menu.contains("submenu 'Earlier versions (11 saved)'"));
-        assert!(menu
-            .contains("submenu 'Nov 18, 7:03 PM · before + repository guru, + mangowm, + dejavu'"));
+        assert!(
+            menu.contains(
+                "submenu 'Nov 18, 7:03 PM · before adding the repository guru, adding mangowm and dejavu'"
+            ),
+            "{menu}"
+        );
         assert!(menu.contains("menuentry 'Go back to this version (Nov 18, 7:03 PM)'"));
         assert!(menu.contains("        submenu '    + mangowm' {\n            true\n        }"));
         assert!(menu.contains("submenu 'Nov 18, 4:46 PM' {"));
@@ -594,6 +635,26 @@ mod tests {
             )
             .unwrap();
         assert!(changes(&boot, root.path()).is_empty());
+    }
+
+    #[test]
+    fn doesnt_guess_when_boot_can_only_be_read_as_root() {
+        // Run as yourself on an encrypted install: /boot is the EFI
+        // partition, readable only by root, so nothing there can be seen.
+        let root = tempfile::tempdir().unwrap();
+        let c = changes_reading(&Boot { undo_entry: true }, root.path(), true);
+        assert!(c.needs_root);
+        assert!(c.problems.is_empty(), "{:?}", c.problems);
+        assert!(c.install_module.is_none());
+        assert!(c.is_empty());
+        // Readable: the usual checks.
+        let c = changes_reading(&Boot { undo_entry: true }, root.path(), false);
+        assert!(!c.needs_root);
+        assert!(!c.problems.is_empty());
+        // Turned off: there's nothing to check.
+        assert!(!changes_reading(&Boot { undo_entry: false }, root.path(), true).needs_root);
+        // A /boot that's simply readable isn't mistaken for one that isn't.
+        assert!(!boot_needs_root(fake_root().path()));
     }
 
     #[test]

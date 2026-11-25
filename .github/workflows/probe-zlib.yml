@@ -1,0 +1,32 @@
+name: Probe zlib binhost (temporary)
+on: push
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Binhost index
+        run: |
+          curl -sSfL -o Packages https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages
+          head -12 Packages
+          awk 'BEGIN{RS="";FS="\n"} /\nCPV: sys-libs\/zlib-/ || /^CPV: sys-libs\/zlib-/ {print $0; print "----"}' Packages
+          for t in $(awk 'BEGIN{RS="";FS="\n"} /CPV: sys-libs\/zlib-/' Packages | sed -n 's/^BUILD_TIME: //p'); do date -u -d @"$t"; done
+          echo "== directory"; curl -sSfL https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/sys-libs/zlib/ | grep -o 'zlib-[^"<]*gpkg.tar[^<]*</a>[^<]*' | head -40
+      - name: What a fresh install's world update does
+        run: |
+          docker create -v /var/db/repos/gentoo --name portage gentoo/portage:latest /bin/true
+          docker run --rm --volumes-from portage gentoo/stage3:latest sh -c '
+            cat /var/db/repos/gentoo/metadata/timestamp.chk
+            ls /var/db/repos/gentoo/sys-libs/zlib/
+            grep -H KEYWORDS /var/db/repos/gentoo/sys-libs/zlib/*.ebuild
+            grep -H "^IUSE" /var/db/repos/gentoo/sys-libs/zlib/*.ebuild
+            ls -d /var/db/pkg/sys-libs/zlib-*; cat /var/db/pkg/sys-libs/zlib-*/USE; echo
+            cat /etc/portage/binrepos.conf/* 2>/dev/null
+            printf "FEATURES=\"getbinpkg binpkg-request-signature\"\nACCEPT_LICENSE=\"-* @FREE @BINARY-REDISTRIBUTABLE\"\nGRUB_PLATFORMS=\"efi-64\"\n" >> /etc/portage/make.conf
+            mkdir -p /etc/portage/package.use; printf "sys-kernel/installkernel dracut grub\napp-admin/sudo -sendmail\n" > /etc/portage/package.use/bunny-install
+            getuto >/dev/null 2>&1 || true
+            emerge -pv --update --deep --newuse @world 2>&1 | tail -40
+            echo "== zlib alone"; emerge -pv sys-libs/zlib 2>&1 | tail -15
+            echo "== zlib binary only"; emerge -pv --getbinpkgonly sys-libs/zlib 2>&1 | tail -25
+          '

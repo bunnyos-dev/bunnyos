@@ -579,7 +579,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       prebuilt package was available. Find out whether the binhost is behind
       Gentoo's tree, and make a fresh install compile only bunny's own
       packages (`bunny-release`).
-- [ ] **The "Note: If this change stops the system from starting…" line wraps
+- [~] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
 - [x] **A smaller live USB** (asked for by the maintainer): it was about
       1.45 GB, near its budget. Measure what takes the space and remove what

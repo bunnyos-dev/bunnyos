@@ -945,6 +945,16 @@ switch); Wi-Fi checked on its own now and then.
 
 ## Known issues / small fixes
 
+From the test machine (November 24):
+- [ ] Logging in on the console prints "Starting user.bunny … failed to start
+      user.bunny / ERROR: user.bunny failed to start" (OpenRC's per-user
+      services, started at login through PAM). Find why it fails on a fresh
+      install (missing XDG_RUNTIME_DIR, elogind, or the user runlevel), and
+      either make it start or don't start it, with no error shown.
+- [ ] After changing BIOS settings and restarting, the Dell didn't come back
+      online until it was restarted a second time (no screen was captured).
+      Watch for it; if it happens again, keep the console output.
+
 From the laptop VM test of #74 (November 24):
 - [ ] The boot menu's main entry still said **"Gentoo"** after a switch that
       said it renamed it to "Bunny Linux" (theme off and BootNext gone did

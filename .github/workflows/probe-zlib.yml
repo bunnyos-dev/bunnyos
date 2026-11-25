@@ -1,32 +1,29 @@
-name: Probe zlib binhost (temporary)
+name: Probe dracut options (temporary)
 on: push
 permissions:
   contents: read
+  actions: read
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Binhost index
+      - name: The ISO's boot log (run 45243568679)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -sSfL -o Packages https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages
-          head -12 Packages
-          awk 'BEGIN{RS="";FS="\n"} /\nCPV: sys-libs\/zlib-/ || /^CPV: sys-libs\/zlib-/ {print $0; print "----"}' Packages
-          for t in $(awk 'BEGIN{RS="";FS="\n"} /CPV: sys-libs\/zlib-/' Packages | sed -n 's/^BUILD_TIME: //p'); do date -u -d @"$t"; done
-          echo "== directory"; curl -sSfL https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/sys-libs/zlib/ | grep -o 'zlib-[^"<]*gpkg.tar[^<]*</a>[^<]*' | head -40
-      - name: What a fresh install's world update does
+          gh run download 45243568679 -R "$GITHUB_REPOSITORY" -n iso-boot-log -D bl
+          sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' bl/boot.log | head -400
+      - name: dracut's own scripts
         run: |
           docker create -v /var/db/repos/gentoo --name portage gentoo/portage:latest /bin/true
           docker run --rm --volumes-from portage gentoo/stage3:latest sh -c '
-            cat /var/db/repos/gentoo/metadata/timestamp.chk
-            ls /var/db/repos/gentoo/sys-libs/zlib/
-            grep -H KEYWORDS /var/db/repos/gentoo/sys-libs/zlib/*.ebuild
-            grep -H "^IUSE" /var/db/repos/gentoo/sys-libs/zlib/*.ebuild
-            ls -d /var/db/pkg/sys-libs/zlib-*; cat /var/db/pkg/sys-libs/zlib-*/USE; echo
-            cat /etc/portage/binrepos.conf/* 2>/dev/null
-            printf "FEATURES=\"getbinpkg binpkg-request-signature\"\nACCEPT_LICENSE=\"-* @FREE @BINARY-REDISTRIBUTABLE\"\nGRUB_PLATFORMS=\"efi-64\"\n" >> /etc/portage/make.conf
-            mkdir -p /etc/portage/package.use; printf "sys-kernel/installkernel dracut grub\napp-admin/sudo -sendmail\n" > /etc/portage/package.use/bunny-install
-            getuto >/dev/null 2>&1 || true
-            emerge -pv --update --deep --newuse @world 2>&1 | tail -40
-            echo "== zlib alone"; emerge -pv sys-libs/zlib 2>&1 | tail -15
-            echo "== zlib binary only"; emerge -pv --getbinpkgonly sys-libs/zlib 2>&1 | tail -25
+            getuto >/dev/null 2>&1
+            FEATURES="getbinpkg" emerge -q --getbinpkgonly --nodeps sys-kernel/dracut >/dev/null 2>&1 || FEATURES="getbinpkg" emerge -q --nodeps sys-kernel/dracut >/dev/null 2>&1
+            ls /var/db/pkg/sys-kernel/
+            d=/usr/lib/dracut/modules.d; ls $d
+            echo "== overlay"; grep -rn "rd.overlay\|overlayfs\b\|rd.live.overlay.overlayfs\|deprecated" $d --include=*.sh | grep -v "^\s*#" | head -80
+            echo "== getargbool"; grep -n "^getargbool" -A25 $d/*base/dracut-lib.sh | head -40
+            echo "== deprecated helper"; grep -n "is deprecated" -B5 -A5 $d/*base/dracut-lib.sh | head -60
+            echo "== insmod / modprobe -v / quiet"; grep -rn "insmod\|modprobe.*-v\|rd.info\|DRACUT_QUIET\|rd.udev.log\|udev_log\|kmsg\|loglevel" $d --include=*.sh | head -80
+            echo "== modules-load"; grep -rn "modules-load\|rd.driver.pre" $d --include=*.sh | head -30
           '

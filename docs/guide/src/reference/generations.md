@@ -198,7 +198,9 @@ might not have. bunny makes up for that:
                   (it had 6.12.60-gentoo-dist from the version you went back from)
   ```
 
-  That line shows until your next change. If it couldn't be done, the note
+  The second line names only the kernels that were taken out of `/boot`; a
+  kernel both versions had isn't listed, and when nothing was taken out
+  there's no second line. That line shows until your next change. If it couldn't be done, the note
   stays, bunny tries again at the next start, and `bunny status` shows a
   **Kernel** warning with the reason; `sudo bunny finish-undo` tries again
   straight away. A note is only acted on while that undo is still the last

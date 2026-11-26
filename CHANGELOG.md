@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- After the kernel is put back following an undo from the boot menu, `bunny
+  status`'s "(it had … from the version you went back from)" now names only
+  the kernels that were taken out, not one that stayed.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

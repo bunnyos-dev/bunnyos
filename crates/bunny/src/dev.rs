@@ -16,6 +16,8 @@ use std::process::{Command, ExitCode};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::config_repo::Person;
+
 /// Where reports go unless `[dev] reports` says otherwise.
 pub const DEFAULT_REPORTS: &str = "bunnyos-dev/bunny-reports";
 
@@ -842,13 +844,48 @@ fn output_within(mut cmd: Command, limit: std::time::Duration) -> Finished {
     Finished::Output(reader.join().unwrap_or_default())
 }
 
-/// Files an issue with the GitHub CLI and the user's own login (through the
-/// REST API, which works with every kind of GitHub token).
+/// Who `gh` runs as: under `sudo bunny` or `doas bunny`, the person who
+/// ran it (root has no GitHub sign-in), the way `bunny publish` does.
+/// `None` means run `gh` as we are.
+fn gh_person() -> Option<Person> {
+    if crate::commands::is_root() {
+        Person::invoking(Path::new("/"))
+    } else {
+        None
+    }
+}
+
+/// The command that files an issue in `repo` with `gh` (through the REST
+/// API, which works with every kind of GitHub token), run as `person` when
+/// there is one. The body comes on standard input.
+fn issue_command(repo: &str, title: &str, person: Option<&Person>) -> Vec<String> {
+    let path = format!("repos/{repo}/issues");
+    let title = format!("title={title}");
+    let gh = [
+        "gh",
+        "api",
+        &path,
+        "--method",
+        "POST",
+        "-f",
+        &title,
+        "-F",
+        "body=@-",
+        "--jq",
+        ".html_url",
+    ];
+    match person {
+        Some(person) => person.run_as(&gh),
+        None => gh.iter().map(|a| a.to_string()).collect(),
+    }
+}
+
+/// Files an issue with the GitHub CLI and the user's own login.
 fn file_issue(repo: &str, title: &str, body: &str) -> Result<String> {
-    let mut child = Command::new("gh")
-        .args(["api", &format!("repos/{repo}/issues"), "--method", "POST"])
-        .args(["-f", &format!("title={title}"), "-F", "body=@-"])
-        .args(["--jq", ".html_url"])
+    let person = gh_person();
+    let cmd = issue_command(repo, title, person.as_ref());
+    let mut child = Command::new(&cmd[0])
+        .args(&cmd[1..])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -871,15 +908,22 @@ fn file_issue(repo: &str, title: &str, body: &str) -> Result<String> {
             String::from_utf8_lossy(&out.stderr),
             String::from_utf8_lossy(&out.stdout)
         );
-        bail!("{}", explain_gh_failure(repo, &said));
+        bail!("{}", explain_gh_failure(repo, &said, person.as_ref()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 /// gh's error, as something to do about it.
-fn explain_gh_failure(repo: &str, said: &str) -> String {
+fn explain_gh_failure(repo: &str, said: &str, person: Option<&Person>) -> String {
     if said.contains("auth login") || said.contains("HTTP 401") || said.contains("not logged") {
-        "gh isn't signed in to GitHub. Run `gh auth login` once, then try again".into()
+        match person {
+            Some(p) => format!(
+                "{} isn't signed in to GitHub. Run `gh auth login` once as yourself \
+                 (not with sudo or doas), then try again",
+                p.name
+            ),
+            None => "gh isn't signed in to GitHub. Run `gh auth login` once, then try again".into(),
+        }
     } else if said.contains("HTTP 404") || said.contains("Not Found") {
         format!("couldn't find {repo}, or this GitHub account can't open it")
     } else if said.contains("HTTP 410") || said.contains("disabled") {
@@ -1197,13 +1241,38 @@ mod tests {
     #[test]
     fn explains_why_sending_failed() {
         let repo = "o/r";
-        assert!(explain_gh_failure(
-            repo,
-            "To get started with GitHub CLI, please run:  gh auth login"
+        let said = "To get started with GitHub CLI, please run:  gh auth login";
+        assert!(explain_gh_failure(repo, said, None).contains("gh isn't signed in"));
+        let you = Person::named("you", Path::new("/nonexistent"));
+        let as_you = explain_gh_failure(repo, said, Some(&you));
+        assert!(as_you.starts_with("you isn't signed in"), "{as_you}");
+        assert!(as_you.contains("not with sudo or doas"), "{as_you}");
+        assert!(explain_gh_failure(repo, "gh: Not Found (HTTP 404)", None)
+            .contains("couldn't find o/r"));
+        assert!(explain_gh_failure(repo, "something else", None).contains("something else"));
+    }
+
+    #[test]
+    fn files_the_issue_as_whoever_ran_sudo() {
+        // As yourself: gh straight away.
+        let plain = issue_command("o/r", "t", None);
+        assert_eq!(plain[..3], ["gh", "api", "repos/o/r/issues"]);
+        // Under sudo or doas: gh runs as you, with your own settings, so it
+        // finds your sign-in instead of root's (the same as bunny publish).
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("etc")).unwrap();
+        std::fs::write(
+            root.path().join("etc/passwd"),
+            "root:x:0:0::/root:/bin/bash\nyou:x:1000:1000::/home/you:/bin/bash\n",
         )
-        .contains("isn't signed in"));
-        assert!(explain_gh_failure(repo, "gh: Not Found (HTTP 404)").contains("couldn't find o/r"));
-        assert!(explain_gh_failure(repo, "something else").contains("something else"));
+        .unwrap();
+        let you = Person::named("you", root.path());
+        let cmd = issue_command("o/r", "t", Some(&you));
+        assert_eq!(cmd[..4], ["runuser", "-u", "you", "--"]);
+        assert!(cmd.contains(&"HOME=/home/you".to_string()), "{cmd:?}");
+        assert!(cmd.contains(&"XDG_CONFIG_HOME=/home/you/.config".to_string()));
+        let gh = cmd.iter().position(|a| a == "gh").unwrap();
+        assert_eq!(cmd[gh..], plain[..]);
     }
 
     #[test]

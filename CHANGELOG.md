@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Fixed: reports sent under `sudo bunny …` or `doas bunny …` said "gh
+  isn't signed in", because they used root's GitHub sign-in. They now use
+  the sign-in of whoever ran sudo or doas, like `bunny publish`.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

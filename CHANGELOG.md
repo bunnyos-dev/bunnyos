@@ -25,6 +25,10 @@ a minor version can change how things work).
 - `bunny status` says "Updates: package list from 18 hours ago" instead of
   "last checked 18 hours ago": it counts from when Gentoo made the list, which
   read oddly on a system installed minutes before.
+- New Guide page, "Finding and using USE flags" (Everyday tasks): how to read a
+  package's flags on packages.gentoo.org and the Gentoo wiki, check them with
+  emerge or equery, write them in bunny.toml and see what they change, with
+  Firefox as the example.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

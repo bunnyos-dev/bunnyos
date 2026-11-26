@@ -959,7 +959,7 @@ From the laptop VM test of #74 (November 24):
 - [ ] The boot menu's main entry still said **"Gentoo"** after a switch that
       said it renamed it to "Bunny Linux" (theme off and BootNext gone did
       work). Find why the rename didn't reach `grub.cfg`.
-- [ ] `bunny status` run as you on an encrypted install (where `/boot` is
+- [~] `bunny status` run as you on an encrypted install (where `/boot` is
       root-only) silently skips the kernel check, so a kernel without drivers
       went unmentioned. Say "run with doas to check the kernel too", the way
       `bunny plan` does for the boot menu.

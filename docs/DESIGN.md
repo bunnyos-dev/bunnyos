@@ -447,8 +447,12 @@ commands are only printed.
     `202501-03 [N] Title ( cat/pkg )`; `[A]`/`[U]` are skipped. Not
     installed: a neutral suggestion to add gentoolkit. Only on the real
     system.
-  - **Updates:** when the Gentoo tree was last synced (newest of
-    `metadata/timestamp.chk` and `.git/FETCH_HEAD`); older than 7 days is a ⚠.
+  - **Updates:** how old the Gentoo tree is (newest of
+    `metadata/timestamp.chk` and `.git/FETCH_HEAD`), shown as "package list
+    from 18 hours ago"; older than 7 days is a ⚠. Worded as the list's age,
+    not "last checked": emerge-webrsync keeps the snapshot's date on
+    `timestamp.chk`, so a brand-new install's list is already hours old, and
+    that age (not the download time) is what matters for security fixes.
     It doesn't run emerge to count pending updates, to stay instant.
 
 ### Config files (`/etc`)

@@ -25,6 +25,7 @@ Everything bunny writes, so nothing is a mystery.
 | `/var/lib/bunny/news-seen` | How many unread Gentoo news items bunny last told you about, so the tip only comes back when there's something new. |
 | `/var/lib/bunny/applied/` | A copy of the config and lock from the last successful switch, so undoing a later change can put them back. Part of the system, so each generation carries its own. |
 | `/var/log/bunny/<time>-emerge.log` | emerge's full output from each switch or update. |
+| `/var/log/bunny/<time>-services.log` | What OpenRC printed (`rc-update`, `rc-service`) when a switch enabled and started services or set up the console font. |
 | `/var/log/bunny/<time>-download-<name>.log` | `emaint sync`'s full output when a new repository is downloaded. |
 | `/var/lib/bunny/backups/<time>/` | Copies of the files above, from before each switch. |
 
@@ -63,6 +64,13 @@ bunny puts the world file and package.use back, so nothing has changed. While
 installing it shows one progress line; emerge's full output is saved to
 `/var/log/bunny/<time>-emerge.log`. With `--verbose`, emerge runs with
 `--verbose --ask` and its output is shown live instead, as it used to be.
+
+Services work the same way: OpenRC's own lines ("service sshd added to
+runlevel default", "Caching service dependencies … [ ok ]") go to
+`/var/log/bunny/<time>-services.log`, and bunny says what happened, like
+`✓ Started sshd; it starts at every boot too.` A service that didn't start
+gets a note with the command to check it, and the note says where the log
+is. `--verbose` shows OpenRC's lines live instead.
 
 When Portage can't work out a plan, bunny's Portage helper also says why,
 as data, for three kinds of problem: a package that's only available as a

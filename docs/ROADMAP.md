@@ -575,10 +575,16 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       way (dracut finds its image), and that the installer leaves the
       Ventoy stick out of the disk list like it does a plain USB stick.
 
-- [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
+- [~] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
       prebuilt package was available. Find out whether the binhost is behind
       Gentoo's tree, and make a fresh install compile only bunny's own
-      packages (`bunny-release`).
+      packages (`bunny-release`). **Found (November 25):** the binhost was
+      behind. Its zlib 1.4 packages were built on November 23 between 09:11
+      and 12:21 UTC, the day of the install; with the tree of November 24 and
+      bunny's exact settings, the install's world update takes zlib 1.4 (and
+      everything else) prebuilt. Nothing in bunny's settings differs from
+      the prebuilt one, so no change in bunny; the install reference says
+      why it can happen.
 - [~] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
 - [x] **A smaller live USB** (asked for by the maintainer): it was about

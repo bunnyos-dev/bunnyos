@@ -29,6 +29,9 @@ a minor version can change how things work).
   package's flags on packages.gentoo.org and the Gentoo wiki, check them with
   emerge or equery, write them in bunny.toml and see what they change, with
   Firefox as the example.
+- The live USB no longer shows dracut's warning about a renamed boot option
+  (`rd.overlay` replaces `rd.live.overlay.overlayfs`), or an `insmod …`
+  line, when it starts. "Show start-up messages" still shows everything.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

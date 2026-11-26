@@ -591,11 +591,11 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       1.45 GB, near its budget. Measure what takes the space and remove what
       the USB never needs, keeping network and graphics drivers and
       firmware. Now 826 MB; installed from it in the VM on November 23.
-- [ ] **The live USB's boot line uses a renamed dracut option**: "Kernel
+- [~] **The live USB's boot line uses a renamed dracut option**: "Kernel
       command line option 'rd.live.overlay.overlayfs' is deprecated, use
       'rd.overlay' instead." Update tools/iso/grub.cfg (every entry) and
       check dracut's docs for the new spelling.
-- [ ] **Early-boot lines still show on the quiet entries**: `insmod
+- [~] **Early-boot lines still show on the quiet entries**: `insmod
       /lib/modules/…/asymmetric_keys/pkc…` and a few more, before OpenRC
       starts (so #106's quiet start doesn't cover them). Find what prints
       them (dracut's module loading, the kernel's log level) and quiet them

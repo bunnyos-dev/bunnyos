@@ -12,3 +12,7 @@ Real emerge output used to test `bunny explain`.
   be replaced with real captures when they show up.
 
 When you hit a confusing emerge message, save it here and add a test.
+
+Also `lsblk-only-usb.json`: what `bunny install` reads (`--lsblk`) on a
+computer whose own disk isn't seen, so only the live USB is there (written
+by hand in lsblk's JSON format).

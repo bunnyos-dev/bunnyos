@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- When the USB stick is the only disk `bunny install` finds, it now says the
+  stick is left out on purpose and no other disk was found, and what to
+  check: that the disk is fitted and turned on in the firmware (the NVMe/RAID
+  storage mode on many laptops), then `lsblk` to look.
+  The disk list also calls the stick "the USB stick you started from"
+  instead of "in use (mounted at /run/initramfs/live)".
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

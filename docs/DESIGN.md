@@ -832,7 +832,11 @@ GPT
      subvolumes: offers to add them). Allowed and checked, not every layout
      tested.
 - **The config is written for you, but it's yours.** Every mode writes a
-  starter `bunny.toml` (like `nixos-generate-config`). `--edit` stops to edit
+  starter `bunny.toml` (like `nixos-generate-config`), with commented-out
+  examples of how each thing is written (a package, a service with its
+  package, a `[pkg]` entry with USE flags and keywords), each pointing to
+  its Guide page; only structural examples, so they don't go stale, and a
+  test uncomments them and runs the config check. `--edit` stops to edit
   it before installing; `--config <file or repo>` installs from your own.
   Disk details go in the host file (`hosts/<host>.toml`), like NixOS's
   `hardware-configuration.nix`, so the main config works on any machine.

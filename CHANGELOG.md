@@ -13,6 +13,10 @@ a minor version can change how things work).
 - Long notes after a switch or undo (like "If this change stops the system
   from starting…") now wrap between words on an 80-column console, instead of
   breaking a word in two at the screen's edge.
+- On a preview USB, an install from the graphical installer is now recorded
+  and its recording kept in the new system, like an install from the
+  terminal ("Keeping the recording of this install"), so `bunny report`
+  can send it after restarting.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

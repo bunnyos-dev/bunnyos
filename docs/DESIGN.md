@@ -202,10 +202,20 @@ isolated = false       # compile inside a clean container
   `/boot`'s kernel files exactly that generation's set (copy in, then remove)
   and runs `grub-mkconfig`. The undo entry boots the copies from `/boot`
   (`search --fs-uuid` on that partition). The boot-time undo can't touch
-  `/boot`, so `bunny status` warns about kernels in `/boot` with no
-  `/lib/modules` in the running system; restoring `/boot` after a boot-menu
-  undo is a follow-up. `clean` drops lists of deleted generations and unused
-  copies.
+  `/boot`, so it writes the generation's name to `/var/lib/bunny/boot-undo`
+  in the restored `@`. The `bunny-finish-undo` OpenRC service (boot
+  runlevel, `need localmount`; installed with the dracut module, through
+  `InitSystem::add_boot_service`) runs `bunny finish-undo` when that note
+  exists: only if `bunny-state.toml` still says the last action was a
+  rollback to that generation (otherwise the note is stale and dropped), it
+  restores `/boot`'s set like `bunny rollback`, runs `grub-mkconfig`, drops
+  the undo entry from `/boot/grub/custom.cfg`, clears the note and writes
+  `/var/lib/bunny/boot-undo-done.toml` (generation, kernels before and after,
+  any problem). `bunny status` shows that as a ✓ Kernel line while the undo
+  is the last action, or a ⚠ with the reason (the note is then kept, so the
+  next start tries again). `bunny status` still warns about kernels in
+  `/boot` with no `/lib/modules` in the running system (older generations).
+  `clean` drops lists of deleted generations and unused copies.
 - **Nested subvolumes** (subvolumes inside `@`, e.g. `/srv` when tmpfiles
   creates it as a subvolume on btrfs) aren't part of snapshots. Rollback moves
   them over to the restored system, like `/home`, and `clean` deletes them
@@ -534,6 +544,63 @@ the install script's own emerge only sees Gentoo's tree. `[pkg] keywords` go in
 well-known packages outside `::gentoo` (Mango in GURU, Hyprland in
 hyproverlay) and offers their repository and keywords. Custom repository
 addresses (not in Gentoo's list) are later work.
+
+### Relationship to Gentoo (towards a fork, one step at a time)
+
+Decided November 2026. Today Bunny Linux is a **Gentoo-based distribution**:
+it uses Portage and the `::gentoo` tree as they are, and adds the `::bunny`
+overlay, defaults and the `bunny` tool. The maintainer wants it to become a
+**real fork** over time, slowly. A fork here means Bunny Linux publishes its
+own package tree, and users sync from that tree instead of from Gentoo's.
+
+The model is **ChromeOS**, which is a working Portage-based fork. It keeps two
+kinds of packages apart: unchanged copies of Gentoo ebuilds (its
+`portage-stable`) and the ones it has changed (its `chromiumos-overlay`).
+Gentoo stays the upstream, and changes come in on purpose, not by accident.
+The opposite example is **Funtoo**, which carried its own changes to much of
+the tree and has since wound down, largely because a small team couldn't keep
+up with it.
+
+**What Bunny Linux would own, step by step:**
+
+1. **An overrides list.** Every ebuild in `::bunny` that has the same name as
+   one in `::gentoo` gets a line in the overlay's `OVERRIDES.md` explaining
+   why, with a check that fails when one is missing. This is how
+   drifting into a fork stays visible.
+2. **The Bunny tree.** The tested weekly baseline (phase 6) publishes its tree
+   snapshot as a git repository (`bunny-tree`): `::gentoo` at the tested
+   commit, plus an archive of every ebuild that a published lock still uses.
+   This also fixes the lockfile's known limit (a locked version that Gentoo
+   removed can't be reinstalled). Users can still switch back to plain
+   `::gentoo` at any time.
+3. **Bunny profiles.** `bunny:default/linux/amd64/…/desktop` and friends,
+   inheriting Gentoo's profiles, so Bunny Linux's defaults (USE flags,
+   OpenRC, the look) come from the profile instead of each machine's config.
+4. **A patch queue.** Changes to Gentoo packages that Bunny Linux needs (for
+   example a quiet boot in OpenRC) live as small patches applied on top of
+   each weekly snapshot, and are re-applied by a bot. Anything that isn't
+   Bunny-specific is sent to Gentoo first ("upstream first").
+5. **The Bunny tree is the only tree.** Users' systems sync only from
+   `bunny-tree`; a bot merges from Gentoo weekly, and the tested baseline is
+   what ships. Bunny Linux builds every binary it ships and publishes its own
+   advisories (taken from Gentoo's GLSAs, plus its own patches). **This is
+   the point where Bunny Linux is a fork.**
+6. **Portage-free systems and an own solver** (see "Ideas for later").
+
+**Rules that keep it manageable:**
+
+- Each step is optional and reversible until step 5. Step 5 needs the
+  maintainer's explicit go-ahead, and only once the project has the people
+  and support to carry it (contributors, and something to run its build
+  servers on). Decided November 23, 2026: steps 1 to 4 are what matter;
+  step 5 is welcome someday, with time, if the project grows. Until then
+  Bunny Linux is a personal project shared with anyone who finds it worth
+  their time, and Gentoo does the heavy lifting.
+- Upstream first: fix things in Gentoo when the fix isn't Bunny-specific.
+- Keep the patch queue short. If it grows past what a bot can re-apply
+  weekly without help, stop and rethink before adding more.
+- Security updates keep flowing at Gentoo's speed: the weekly merge never
+  waits on Bunny Linux's own changes.
 
 ## Desktop
 

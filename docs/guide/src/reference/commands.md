@@ -11,7 +11,7 @@ That's useful for testing.
 
 | Command | What it does |
 |---|---|
-| `bunny status [config]` | One screen saying whether everything is in order, and what to do if not. |
+| `bunny status [config]` | One screen saying whether everything is in order, and what to do if not. Add `--check` to exit 1 when anything needs a look. |
 | `bunny diff [config]` | Your config and your system side by side, and how to fix each difference either way. Exits 1 if they differ. |
 | `bunny check [config]` | Finds mistakes in the config and says how to fix each. |
 | `bunny plan [config]` | Shows what a switch would change: packages, USE flags, services, packages that don't exist, and differences from `bunny.lock`. Needs no admin rights, but where `/boot` can only be read as root (encrypted installs, whose `/boot` is the EFI partition), the boot menu isn't checked and it says so: run `sudo bunny plan` to include it. |

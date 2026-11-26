@@ -13,7 +13,7 @@ bunny keeps an eye on:
 | **Versions** | Installed versions match `bunny.lock`. | `bunny switch` puts them back; `bunny lock` accepts them as they are. If it says packages are "not in bunny.lock yet" (installed outside bunny), `bunny switch` records them. |
 | **Last change** | (just information) | If it says to restart after a rollback, run `sudo reboot`. |
 | **Undo** | Generations are being saved. | Your disk isn't set up for undo; see [The disk layout](../reference/disk-layout.md). |
-| **Kernel** | (only shown when there's a problem) | `/boot` starts a kernel this system has no drivers for, usually after undoing a kernel update from the boot menu. Hold Esc while starting and pick the older kernel under "Advanced options". |
+| **Kernel** | (only shown after an undo from the boot menu, or when there's a problem) `/boot`'s kernel was put back to match the version you went back to. | The undo from the boot menu couldn't put `/boot`'s kernel back (the line says why): bunny tries again at the next start, or run `sudo bunny finish-undo`. Or `/boot` starts a kernel this system has no drivers for: hold Esc while starting and pick the older kernel under "Advanced options". |
 | **Updates** | The package list was synced in the last week. | Run [`bunny update`](update.md). |
 | **Security** | No Gentoo security advisory affects your packages. | Run [`bunny update`](update.md) to get the fixes. `glsa-check --dump <number>` shows an advisory in full. |
 
@@ -25,6 +25,16 @@ Advisories arrive with the package list, so it's only as current as your last
 If you see **"Also starting at boot, not in your config"**, a service was
 turned on outside bunny. Add it to `services` in `bunny.toml` to keep it, or
 turn it off with `sudo rc-update del <name>`.
+
+## In scripts and scheduled checks
+
+```sh
+bunny status --check
+```
+
+Prints the same screen, then exits with code 1 if anything is marked ⚠ or ✗
+(0 when everything is in order), so a script or a scheduled job can tell
+something needs a look.
 
 ## See exactly what's different
 

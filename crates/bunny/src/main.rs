@@ -13,6 +13,7 @@ mod diff;
 mod edit;
 mod emerge;
 mod explain;
+mod finish_undo;
 mod glsa;
 mod helper;
 mod import;
@@ -83,6 +84,9 @@ enum Command {
         /// System root to look at (for testing against another system)
         #[arg(long, default_value = "/")]
         root: PathBuf,
+        /// Exit with code 1 if anything needs a look (for scripts and scheduled checks)
+        #[arg(long)]
+        check: bool,
     },
     /// Check bunny.toml for mistakes and explain how to fix them
     Check {
@@ -130,6 +134,16 @@ enum Command {
     /// List the saved generations you can roll back to
     Generations {
         /// System root (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Finish an undo from the boot menu: put /boot's kernel back (run at start-up)
+    #[command(hide = true)]
+    FinishUndo {
+        /// Say nothing when there's nothing to do
+        #[arg(long)]
+        quiet: bool,
+        /// System root (for testing on a fake system; commands are only printed)
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
@@ -389,13 +403,22 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Status { config, root } => {
+        Command::Status {
+            config,
+            root,
+            check,
+        } => {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0);
-            print!("{}", status::gather(&config, &root, now).render());
-            Ok(ExitCode::SUCCESS)
+            let status = status::gather(&config, &root, now);
+            print!("{}", status.render());
+            Ok(if check && !status.all_good() {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            })
         }
         Command::Diff { config, root } => diff_cmd(&config, &root),
         Command::Helper { args } => {
@@ -414,6 +437,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Switch { config, yes, root } => switch(&config, yes, &root),
         Command::Generations { root } => generations(&root),
         Command::Rollback { name, yes, root } => rollback_cmd(name, yes, &root),
+        Command::FinishUndo { quiet, root } => commands::finish_undo_cmd(quiet, &root),
         Command::Clean { keep, yes, root } => clean_cmd(keep, yes, &root),
         Command::Lock { config, root } => lock_cmd(&config, &root),
         Command::Explain { file } => explain_cmd(file.as_deref()),

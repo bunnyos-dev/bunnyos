@@ -61,6 +61,12 @@ pub struct Status {
     /// Kernels in a separate /boot that this system has no modules (drivers)
     /// for, e.g. after undoing a kernel update from the boot menu.
     pub kernels_without_drivers: Vec<String>,
+    /// What bunny did at start-up after the last undo from the boot menu
+    /// (only while that undo is the last thing that happened).
+    pub boot_undo: Option<crate::finish_undo::Record>,
+    /// An undo from the boot menu that hasn't been finished yet (its
+    /// generation), on a system with a separate /boot.
+    pub boot_undo_waiting: Option<String>,
     /// Now (seconds since 1970), passed in so tests are repeatable.
     pub now: i64,
 }
@@ -143,6 +149,19 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
         _ => None,
     };
 
+    let separate_boot = crate::kernels::separate_boot(&crate::kernels::mountinfo(root));
+    let boot_undo = crate::finish_undo::read_record(root).filter(|record| {
+        last.as_ref().is_some_and(|s| {
+            s.last == notes::Kind::Rollback && s.to.as_deref() == Some(record.to.as_str())
+        })
+    });
+    let boot_undo_waiting = crate::finish_undo::waiting(root).filter(|generation| {
+        separate_boot
+            && last.as_ref().is_some_and(|s| {
+                s.last == notes::Kind::Rollback && s.to.as_deref() == Some(generation.as_str())
+            })
+    });
+
     let reboot_pending = root == Path::new("/")
         && std::fs::read_to_string("/proc/self/mountinfo")
             .ok()
@@ -162,12 +181,13 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
         tree_synced: tree_synced(root),
         // glsa-check reads the real system only.
         security: (root == Path::new("/")).then(crate::glsa::check),
-        kernels_without_drivers: if crate::kernels::separate_boot(&crate::kernels::mountinfo(root))
-        {
+        kernels_without_drivers: if separate_boot {
             crate::kernels::missing_modules(root, root)
         } else {
             Vec::new()
         },
+        boot_undo,
+        boot_undo_waiting,
         now,
     }
 }
@@ -194,6 +214,8 @@ impl Status {
             && !self.reboot_pending
             && !self.tree_stale()
             && self.kernels_without_drivers.is_empty()
+            && self.boot_undo_waiting.is_none()
+            && !self.boot_undo.as_ref().is_some_and(|r| r.problem.is_some())
             && !matches!(&self.security, Some(crate::glsa::Check::Done(found)) if !found.is_empty())
     }
 
@@ -392,8 +414,59 @@ impl Status {
             }
         }
 
-        // Kernel (only shown when something's wrong)
-        if !self.kernels_without_drivers.is_empty() {
+        // Kernel (only shown after an undo from the boot menu, or when
+        // something's wrong)
+        let unfinished = self
+            .boot_undo
+            .as_ref()
+            .and_then(|r| r.problem.clone())
+            .or_else(|| {
+                self.boot_undo_waiting
+                    .as_ref()
+                    .map(|_| "/boot may still have the newer kernel".to_string())
+            });
+        if let Some(problem) = unfinished {
+            line(
+                &mut out,
+                "⚠",
+                "Kernel",
+                &format!("the undo from the boot menu isn't finished: {problem}"),
+            );
+            more(
+                &mut out,
+                &format!(
+                    "bunny tries again at the next start, or run: {} bunny finish-undo",
+                    crate::security::admin()
+                ),
+            );
+        } else if let Some(record) = &self.boot_undo {
+            let after = record.kernels_after.join(", ");
+            if record.kernels_before == record.kernels_after {
+                line(
+                    &mut out,
+                    "✓",
+                    "Kernel",
+                    &format!(
+                        "/boot's kernel {after} was put back after the undo from the boot menu"
+                    ),
+                );
+            } else {
+                line(
+                    &mut out,
+                    "✓",
+                    "Kernel",
+                    &format!("/boot has kernel {after} again, put back after the undo from the boot menu"),
+                );
+                more(
+                    &mut out,
+                    &format!(
+                        "(it had {} from the version you went back from)",
+                        record.kernels_before.join(", ")
+                    ),
+                );
+            }
+        }
+        if !self.kernels_without_drivers.is_empty() && self.boot_undo_waiting.is_none() {
             line(
                 &mut out,
                 "⚠",
@@ -599,6 +672,8 @@ mod tests {
             tree_synced: Some(NOW - 2 * 86_400),
             security: Some(crate::glsa::Check::Done(vec![])),
             kernels_without_drivers: vec![],
+            boot_undo: None,
+            boot_undo_waiting: None,
             now: NOW,
         }
     }
@@ -770,5 +845,76 @@ mod tests {
         assert!(text.contains("⚠ Kernel"), "{text}");
         assert!(text.contains("6.12.60-gentoo-dist"), "{text}");
         assert!(text.contains("Advanced options"), "{text}");
+    }
+
+    #[test]
+    fn says_what_was_done_after_an_undo_from_the_boot_menu() {
+        let mut s = good();
+        s.boot_undo = Some(crate::finish_undo::Record {
+            to: "bunny-20261117-091500".into(),
+            at: "20261118-080000".into(),
+            kernels_before: vec!["6.12.60-gentoo-dist".into()],
+            kernels_after: vec!["6.12.58-gentoo-dist".into()],
+            problem: None,
+        });
+        let text = s.render();
+        assert!(s.all_good(), "{text}");
+        assert!(
+            text.contains(
+                "✓ Kernel        /boot has kernel 6.12.58-gentoo-dist again, put back after the undo from the boot menu"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("(it had 6.12.60-gentoo-dist"), "{text}");
+    }
+
+    #[test]
+    fn an_unfinished_undo_from_the_boot_menu_is_a_warning() {
+        let mut s = good();
+        s.boot_undo_waiting = Some("bunny-20261117-091500".into());
+        s.kernels_without_drivers = vec!["6.12.60-gentoo-dist".into()];
+        let text = s.render();
+        assert!(!s.all_good());
+        assert!(
+            text.contains("⚠ Kernel        the undo from the boot menu isn't finished"),
+            "{text}"
+        );
+        assert!(text.contains("bunny finish-undo"), "{text}");
+        // One Kernel line, not two.
+        assert_eq!(text.matches("Kernel").count(), 1, "{text}");
+
+        let mut s = good();
+        s.boot_undo = Some(crate::finish_undo::Record {
+            to: "bunny-20261117-091500".into(),
+            problem: Some(
+                "the kernel files are back, but the boot menu couldn't be rebuilt".into(),
+            ),
+            ..Default::default()
+        });
+        assert!(!s.all_good());
+        assert!(s.render().contains("boot menu couldn't be rebuilt"));
+    }
+
+    #[test]
+    fn gather_reads_the_record_only_while_the_undo_is_the_last_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        std::fs::create_dir_all(r.join("var/lib/bunny")).unwrap();
+        std::fs::write(
+            r.join(crate::finish_undo::RECORD),
+            "to = \"bunny-20261117-091500\"\nat = \"20261118-080000\"\nkernels_before = [\"a\"]\nkernels_after = [\"b\"]\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(r.join(".snapshots")).unwrap();
+        let state = |last: notes::Kind| notes::State {
+            last,
+            at: "20261118-080000".into(),
+            to: Some("bunny-20261117-091500".into()),
+        };
+        notes::write_state(r, &state(notes::Kind::Rollback)).unwrap();
+        let config = r.join("bunny.toml");
+        assert!(gather(&config, r, NOW).boot_undo.is_some());
+        notes::write_state(r, &state(notes::Kind::Switch)).unwrap();
+        assert!(gather(&config, r, NOW).boot_undo.is_none());
     }
 }

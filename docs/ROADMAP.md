@@ -17,7 +17,7 @@ Legend: `[ ]` to do · `[~]` PR open, waiting for testing · `[x]` merged
 | 4. Same system everywhere | lockfile, `update` | ✅ Done, tested in the VM |
 | 5. Understandable errors | plain-English emerge errors, `status`, `diff` | ✅ Done |
 | 6. Fast installs | prebuilt package cache, `bunny serve` | ⬜ |
-| 7. Installing Bunny Linux | installer, ISO, hosting | 🟡 A first, minimal ISO works: terminal installer, tested in the VM dry run |
+| 7. Installing Bunny Linux | installer, ISO, hosting | 🟡 Live USB (826 MB) with graphical and terminal installers; installed on real hardware November 23 |
 | 8. Security + gaming | Secure Boot, gaming kernel | ⬜ |
 | 9. The look | boot animation, GRUB theme, login screen | ⬜ |
 
@@ -27,12 +27,13 @@ The **whole vision** (all 9 phases) is roughly **two fifths done**.
 **Order agreed with the maintainer (November 2026):**
 
 1. ~~Code cleanup so other people can review the code, then an independent
-   review~~ (done; two fix PRs still to test)
+   review~~ (done; its fixes tested and merged)
 2. ~~A first, minimal ISO (terminal installer, no desktop)~~ (done)
 3. ~~The maintainer's dry run in the VM~~ (done, November 2026)
-4. Guide and bunny fixes from what the dry run found (**now**, bugs first,
-   then the clean boot menu)
-5. The maintainer's laptop
+4. ~~Guide and bunny fixes from what the dry run found~~ (done)
+5. **Now: the "Stability first" gate below**: fixes from real-hardware
+   installs, a clean install pair, then a week of daily use on the
+   maintainer's new laptop (the G16; see its section)
 6. The rest of the Portage helper
 
 **Stability first (decided November 21, 2026).** The graphical installer
@@ -45,9 +46,10 @@ the maintainer says go. Tell the maintainer when the gate looks met:
       maintainer moved to later).
 - [ ] Two fresh installs from the USB in a row with nothing new found: one
       with the terminal, one with the graphical installer.
-- [ ] The encrypted laptop-shaped VM passes (#47, #74, undo from the boot
-      menu with `/boot` on the EFI partition).
-- [ ] The maintainer's laptop runs Bunny Linux day to day for about a week
+- [x] The encrypted laptop-shaped VM passes (#47 and #74 passed November 24:
+      conversion, then undo from the boot menu with `/boot` on the EFI
+      partition, kernel put back on the next start).
+- [ ] The maintainer's laptop (the G16) runs Bunny Linux day to day for about a week
       with developer mode on, and the reports show nothing new that's
       serious.
 - [ ] No open PR older than a few days that's waiting on a fix.
@@ -109,6 +111,25 @@ everything. Bunny's likely shape, to be designed properly first:
   `[desktop]` covers them.
 - Fits docs/DESIGN.md's order for apps (Gentoo packages first, Flatpak for
   large GUI apps such as Steam).
+
+**From an outside review (November 23, 2026), worth keeping in mind:**
+
+- [ ] **The lock records versions, not build settings.** `bunny.lock` has
+      each repository's snapshot and each package's version; USE flags live
+      in bunny.toml, but Gentoo's profile defaults, `make.conf` and CPU or
+      video-card flags don't appear anywhere a second machine can compare.
+      After `[hardware]` and `make.conf` are in bunny.toml, have `bunny lock`
+      also record each package's effective USE flags (from
+      `/var/db/pkg/*/USE`) so `bunny plan` can say "same versions, different
+      build options" instead of calling two machines the same.
+- [ ] **Say plainly what's not part of "the same system":** user data,
+      secrets and keys are a third layer (after bunny.toml and the host
+      file), backed up and restored separately, never put in the config. A
+      Guide page on moving to a new computer: copy the config, install,
+      restore `/home` from a backup.
+- [ ] **Publish the reproducibility test**: one config installed twice
+      (two VMs), `bunny plan` on each says they match, then an update and a
+      rollback on both. The home test machine's nightly job can run it.
 
 ### Done so far
 
@@ -221,7 +242,7 @@ review before the installer adds a lot more of it.
       files, how to run the tests and the VM, and the rules from
       `CLAUDE.md` that apply to everyone. Comments on each Portage call in
       `bunny-portage.py` explaining what it asks Portage and why.
-- [~] **Independent review:** (done; fixes #47 and #48 still waiting for VM tests) a separate agent that hasn't seen the code
+- [~] **Independent review:** (done; #47's fixes passed the VM test November 24) a separate agent that hasn't seen the code
       being written reads the whole repo (Rust, the Portage helper and the
       shell scripts, especially the ones that touch disks) and files each
       finding as an issue. Real bugs get fixed before the ISO work.
@@ -499,6 +520,60 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
+- [ ] **SSH from kitty (and other new terminals) gets "cannot initialize
+      terminal type xterm-kitty"** on a Bunny system: nano and other
+      full-screen programs refuse to start. Add the terminfo of common
+      terminals to the base system (`x11-terms/kitty-terminfo`, and check
+      foot, alacritty and wezterm), so SSHing in from any of them just works.
+- [ ] **"Use the terminal instead" leaves a terminal you can't type in**
+      (real hardware, November 23; picking the terminal entry in the boot
+      menu works). The graphical installer takes over the console in
+      graphics mode and exits with `std::process::exit` without giving it
+      back. Restore the console when it leaves (the VT's text mode and
+      keyboard mode, e.g. let Slint shut down cleanly instead of exiting
+      the process, and reset with `kbd_mode`/`setfont` in
+      tools/iso/bash_profile as a fallback). Workaround until then: Ctrl+Alt+F2.
+- [ ] **Pulling the USB stick out says nothing.** The live system just stops
+      working. Notice the live image disappearing (dracut's live device, or
+      a read error) and show "The USB stick was removed. Put it back and
+      restart the computer." in the installer and on the console; during an
+      install, say the install stopped and nothing was finished.
+- [ ] **The graphical installer's "Install Bunny Linux" button is hard to
+      read on real hardware** (faint text on the white button, an Intel UHD
+      620 laptop screen). Check the button's text colour and contrast; it
+      looked fine in the VM.
+- [ ] **`bunny wifi`: join Wi-Fi without remembering iwctl** (asked for by
+      the maintainer). On the live USB and on installed systems: finds the
+      Wi-Fi device itself, scans, lists networks by signal strength with
+      numbers ("1. Home-5G ▂▄▆█ secured"), asks "Which one? [1]", asks the
+      password without showing it, connects, and says "✓ Connected to
+      Home-5G." in plain words (or why not: wrong password, out of range).
+      `bunny wifi` with no Wi-Fi device says so. iwd remembers the network.
+      On an installed system, if `iwd` isn't in the config's services it
+      offers to add it (shown like a plan, applied with a switch), so it
+      reconnects after a restart. The live USB's welcome says "Not online?
+      Plug in a cable, or run `bunny wifi`." instead of the iwctl lines,
+      and the Guide's install page uses it too. Later: the graphical
+      installer can use the same code for its Wi-Fi screen.
+- [ ] **`lspci` isn't on the live USB** ("command not found"). Add
+      `sys-apps/pciutils` and `sys-apps/usbutils` (`lsusb`): they're the
+      first thing anyone checks hardware with, and small. Make sure the
+      image-shrinking step keeps them (and the PCI ID list they read).
+- [ ] **"There's no disk Bunny Linux can be installed on" could say why.**
+      When only USB sticks are found, add the likely causes in plain words:
+      the internal disk isn't connected, or the firmware's storage mode is
+      RAID / Intel RST (set SATA Operation to AHCI), which hides it from
+      Linux on many laptops. (Tested November 23: Ventoy's stick was
+      correctly refused as the live system's own disk.)
+- [ ] **Installing over Wi-Fi leaves the new system offline.** iwd is
+      installed but not in the starter config's services (only dhcpcd, for
+      a cable), and the Wi-Fi network joined on the live USB isn't carried
+      over. When the install ran over Wi-Fi: add `iwd` to the services and
+      copy the network iwd saved (`/var/lib/iwd/<name>.psk`, say so in the
+      preview) into the new system, so it's online after the restart.
+- [ ] **Booting the USB from Ventoy**: check the live system starts that
+      way (dracut finds its image), and that the installer leaves the
+      Ventoy stick out of the disk list like it does a plain USB stick.
 
 - [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
       prebuilt package was available. Find out whether the binhost is behind
@@ -664,6 +739,22 @@ to-do list. Appearance work comes last and a little at a time.
 - [ ] greetd + Quickshell login screen
 - [ ] `[boot]` config section; `bunny boot list` / `preview`
 
+### Towards a fork of Gentoo (slowly, see DESIGN.md "Relationship to Gentoo")
+- [~] **Overrides list** (bunny-overlay#2): `OVERRIDES.md` in `bunny-overlay` with a reason for
+      every ebuild that shadows a `::gentoo` one, and a CI check that fails
+      when one is missing. Can be done any time; it's small.
+- [ ] **The Bunny tree (`bunny-tree`):** the tested baseline publishes its
+      tree snapshot as a git repo, plus an archive of ebuilds that published
+      locks still use (fixes "locked version removed from the tree").
+      Needs the tested baseline (phase 6).
+- [ ] **Bunny profiles** inheriting Gentoo's, so defaults come from the profile.
+- [ ] **Patch queue:** Bunny Linux's changes to Gentoo packages as patches a bot
+      re-applies to each weekly snapshot; upstream first.
+- [ ] **The Bunny tree is the only tree** (the actual fork): weekly bot merge
+      from Gentoo, own binaries and advisories. Needs the maintainer's
+      explicit go-ahead, and only with contributors and support to carry
+      it (decided November 23, 2026). Steps 1 to 4 are the priority.
+
 ### Long-term: Portage-free systems
 - [ ] Portage (Python, its tools) lives only inside the build container;
       installed systems get finished packages through a small Rust installer
@@ -674,6 +765,42 @@ to-do list. Appearance work comes last and a little at a time.
 ### Outside our control
 - Epic accepting Bunny Linux's signing key (anti-cheat games)
 - A Microsoft-signed shim (Secure Boot on the install USB)
+
+## A solid base, and room to leave it (after alpha)
+
+Decided November 24, 2026. The default install stays one tested path
+(dracut, GRUB, btrfs with undo, no cron by default). Anything a Gentoo user would
+choose differently should be writable in `bunny.toml`, with bunny adapting
+instead of assuming. btrfs stays required for undo.
+
+- [ ] **Initramfs choice**: `[boot] initramfs = "dracut" | "ugrd"`, behind one
+      interface (like `InitSystem`). bunny's boot features follow it: the
+      boot-menu undo step gets a ugrd version (or says plainly it's
+      dracut-only), and `bunny check` warns about combinations that won't
+      boot. Plymouth stays dracut-only until ugrd's support matures.
+      `bunny install --initramfs ugrd` and the installer's Advanced panel.
+- [ ] **Bootloader choice**: GRUB (default), systemd-boot, Limine, EFI stub,
+      the alternatives Gentoo documents. Each needs its own way to show the
+      undo entry and earlier versions, so one at a time.
+- [ ] **Cron and other "pick one" services** (cronie, dcron, fcron, bcron):
+      `[services] cron = "cronie"`, including the extra step some need
+      (`crontab /etc/crontab` for dcron, `emerge --config` for fcron).
+- [ ] **Users in bunny.toml**: `[users.you] admin = true, shell = ..., groups
+      = [...]`, created on switch; never deleted automatically (a user
+      removed from the config is reported, not removed, since that loses
+      their files). Passwords stay out of the config (set with `passwd`, or
+      a hashed password file outside the repo, the secrets layer).
+- [ ] **Mounts in bunny.toml instead of hand-editing fstab**: the installer
+      writes fstab today and nothing manages it after. `[mounts."/data"]
+      disk = "LABEL=data"` (or UUID, with `bunny disks` listing them by name,
+      size and label so nobody copies UUIDs by hand), options and btrfs
+      subvolumes; bunny writes a managed block in /etc/fstab, checks it with
+      `findmnt --verify` before switching, and keeps hand-written lines.
+      `bunny import` reads the existing fstab into it (like genfstab, once).
+- [ ] **The test machine runs the combinations**: each supported choice gets
+      a nightly VM install on the Dell, tested against the default (not
+      every combination with every other): ugrd, each bootloader, each cron,
+      encrypted and not. A choice is "supported" once it has its test.
 
 ## The maintainer's laptop
 
@@ -688,31 +815,157 @@ is tested first in a VM with the same layout.
       the laptop VM until it's boring.
 - [x] **A kernel per generation on the EFI partition**, so undo works across
       kernel updates when `/boot` isn't part of the system (encrypted disks).
-- [ ] **After an undo from the boot menu, put `/boot`'s kernel back too**
+- [x] **After an undo from the boot menu, put `/boot`'s kernel back too**
       (the startup image can't reach the EFI partition; bunny could do it on
       the first boot afterwards). Until then `bunny status` warns.
 - [ ] **The laptop itself**, after a backup of `/home`.
 
-## After 0.1: a daily-driven Nvidia laptop
+## The G16: daily use on real hardware
 
 Decided November 23, 2026. The maintainer is buying an Asus G16 (2026,
-Nvidia) and wants to daily-drive Bunny Linux on it — pushing it hard on real
-hardware, bugs and all, separate from the stability gate above. No rush; take
-the time needed.
+Nvidia) and will daily-drive Bunny Linux on it, bugs and all; this is the
+stability gate's "about a week on the maintainer's laptop". The whole disk is
+Bunny Linux (no dual boot). The maintainer daily-drove Gentoo with Nvidia
+before, so Gentoo's `x11-drivers/nvidia-drivers` is expected to work; what's
+new is doing it through bunny.
 
-- [ ] **Nvidia drivers in the starter config and install flow**: `nvidia-
-      drivers` packaging, kernel config, and a `[desktop]`-style convenience
-      so bunny.toml doesn't need it all written out by hand.
 - [ ] **Secure Boot off first.** v1 has no Secure Boot support (see "Outside
       our control" and phase 8), and most new laptops ship with it on, so
       the install guide needs a plain step: turn it off in firmware before
       booting the USB.
-- [ ] **Hyprland/Mango on Nvidia**: `nvidia_drm.modeset=1`, the right GBM
-      backend env vars, and — if the G16 has hybrid Intel/Nvidia graphics,
-      which is likely — a way to switch GPUs. New ground for the
+- [ ] **The installer on the integrated GPU** (agreed): the live USB and the
+      graphical installer use the integrated graphics; Nvidia is set up on
+      the installed system.
+- [ ] **Graphics cards in bunny.toml, before the G16 week.** The
+      maintainer's working Gentoo setup followed the Gentoo wiki
+      (NVIDIA/nvidia-drivers): `*/* VIDEO_CARDS: -* nvidia` in
+      `package.use/00video_cards`, plus CUDA. bunny.toml can't say that yet:
+      `[pkg]` is per package, and `bunny import` skips `*/*` lines (it lists
+      them as skipped). Add a small global setting, e.g.
+      `[hardware] video_cards = ["intel", "nvidia"]`, that bunny writes as
+      `package.use/00video_cards`, shown in the plan, backed up, undone.
+      `[hardware]` belongs in the **host file** (`hosts/<name>.toml`), since
+      it differs per computer (an AMD desktop and an Intel/Nvidia laptop
+      share one bunny.toml).
+      On a hybrid laptop list both GPUs (the integrated one keeps the screen
+      and power saving working); `-* nvidia` alone suits a desktop. This is a
+      slice of the `make.conf`-in-bunny.toml work, pulled forward because the
+      G16 week needs it.
+- [ ] **CPU flags (`CPU_FLAGS_X86`) in `[hardware]`**, same shape as
+      `video_cards` and the same gap today (Gentoo's Handbook writes
+      `cpuid2cpuflags` output to `package.use/00cpu-flags` as a `*/*` line).
+      Plan: `cpu_flags = "auto"` runs `cpuid2cpuflags` and writes the file;
+      off by default. Say plainly in the plan what it costs: CPU flags are
+      USE flags, so packages that use them (ffmpeg, codecs, crypto
+      libraries…) no longer match Gentoo's prebuilt packages and compile
+      from source. `-march=native` belongs to the `make.conf` work, with the
+      same warning.
+- [ ] **Touchpads: nothing to do, write it down.** On Wayland the compositor
+      uses libinput directly, and Gentoo's distribution kernel has the
+      touchpad drivers (I2C HID, hid-multitouch) as modules, which is why
+      touchpads "just work". The Gentoo wiki's Synaptics page is the old
+      Xorg driver, replaced by libinput. Tap-to-click and scrolling are
+      compositor settings (Hyprland/Mango config), not bunny.toml. Check
+      the G16's touchpad works from the live USB, and add a short Guide note.
+- [ ] **Nvidia through bunny.toml**: `x11-drivers/nvidia-drivers` with
+      `kernel-open` (the wiki recommends the open module for Turing and newer,
+      and newer drivers use it regardless; an RTX 50-series needs it) and
+      `dist-kernel` (rebuilds the module when the kernel updates), the
+      `nvidia_drm.modeset=1` kernel option, CUDA
+      (`dev-util/nvidia-cuda-toolkit`) as a normal package. Do it on the G16
+      and note anything bunny couldn't express. Later, a `[desktop]`-style
+      convenience so it's one line. When Gentoo's guides need revisiting,
+      the maintainer is fine with reading the Handbook and wiki.
+- [ ] **Hyprland/Mango on Nvidia**: the GBM backend env vars and, since the
+      G16 has hybrid graphics, which GPU drives what. New ground for the
       dynamic-island and desktop-setup work.
+- [ ] **Check the Wi-Fi chip** once the exact model is known.
+- [ ] **Dual boot, tested with Windows on an external drive** (made with
+      Rufus): does the boot menu find it (os-prober), and does bunny leave
+      it alone. Not in the installer yet.
+
+## A test machine at home (self-hosted runner)
+
+Decided November 23, 2026. A spare laptop becomes a dedicated test machine
+that runs Bunny Linux and picks up test jobs on its own, so nightly tests
+happen on real hardware without the maintainer. The maintainer's desktop
+stays out of it (a test going wrong there is what we don't want).
+
+The machine, for now: a Dell Latitude 7490 with an Intel Core i7-8650U (4 cores,
+VT-x), 16 GB RAM, a 128 GB disk and Intel UHD 620 graphics only, so it
+covers plain Intel graphics (one test VM at a time). Its worn battery
+(59% of new) charges only between 50% and 80% (BIOS, November 24), and
+"Wake on AC" turns it back on after a power cut. The first choice, a
+Dell Precision 7520 (i7-7820HQ, 32 GB, Intel HD 630 + NVIDIA Quadro M1200,
+Maxwell), stopped turning on (November 23); if it comes back, it joins for
+the older-Nvidia tests below.
+Ethernet for everyday jobs (through the access point's LAN ports or a small
+switch); Wi-Fi checked on its own now and then.
+
+- [x] **Install Bunny Linux on it** (whole disk, not encrypted so it can restart
+      unattended), developer mode on. Done November 23 with the terminal
+      installer from the USB through Ventoy, over Wi-Fi.
+- [x] **Make it a GitHub Actions self-hosted runner** for bunnyos-dev/bunnyos
+      (online November 23 as `dell-bunny`, label `bunny-hw`; the first job,
+      .github/workflows/test-box.yml, passed). Set up by hand: a `runner`
+      user with no sudo, `dev-libs/icu`, the runner in
+      /home/runner/actions-runner, and an OpenRC service
+      (`/etc/init.d/github-runner`, supervise-daemon) in the config's services;
+      fork pull requests from outside contributors need approval. Later: ship
+      that service and the setup as a script in tools/ so it can be redone.
+      It connects out to GitHub; no token from Claude sessions sits on it.
+      The repository is public, so the runner takes **only** scheduled jobs,
+      manual runs (`workflow_dispatch`) and pushes to the maintainer's own
+      branches, **never** `pull_request` jobs from forks (GitHub's own
+      warning for public repos). Its own label (e.g. `bunny-hw`), and jobs
+      that need it say so.
+- [x] **Nightly job, part 0: a read-only check** every night (9:17 UTC):
+      tools/test-box/nightly-check.sh (crashed services, network, disk
+      space, snapshots, battery health, temperatures), `bunny diff`, and `bunny status --check`, which
+      only warns, since a week-old package list or an advisory isn't
+      breakage. Changes nothing; a red run means the machine needs a look.
+- [ ] **Nightly job, part 1: a full install in a VM** (QEMU/KVM) from the
+      newest USB image built by the ISO workflow, both installers in turn,
+      checking the result (zram, `bunny status`, no compiles), and posting
+      a summary the daily session reads.
+- [ ] **Nightly job, part 2: the machine itself**: `bunny update`, `bunny
+      switch`, a reboot, `bunny status`, and now and then `bunny rollback`,
+      so updates are tried on real hardware first. Problems arrive as
+      developer-mode reports.
+- [ ] **Older Nvidia**: the Quadro M1200 is Maxwell, so it can't use
+      `kernel-open` and needs Nvidia's older driver branch (pinned
+      `nvidia-drivers`). With the G16's new card, both kinds of Nvidia get
+      tested. Check which branch Gentoo currently keeps for Maxwell.
+- [ ] **Later**: the other older laptops for more hardware (Intel graphics,
+      different Wi-Fi), the same way.
+- [ ] **On the G16 instead, by hand** (the Dell can't cover these): Nvidia,
+      an encrypted install (the password prompt at boot can't be answered
+      by a runner), Secure Boot, and the boot-screen look. Part of the
+      G16 week.
 
 ## Known issues / small fixes
+
+From the test machine (November 24):
+- [ ] Logging in on the console prints "Starting user.bunny … failed to start
+      user.bunny / ERROR: user.bunny failed to start" (OpenRC's per-user
+      services, started at login through PAM). Find why it fails on a fresh
+      install (missing XDG_RUNTIME_DIR, elogind, or the user runlevel), and
+      either make it start or don't start it, with no error shown.
+- [ ] After changing BIOS settings and restarting, the Dell didn't come back
+      online until it was restarted a second time (no screen was captured).
+      Watch for it; if it happens again, keep the console output.
+
+From the laptop VM test of #74 (November 24):
+- [ ] The boot menu's main entry still said **"Gentoo"** after a switch that
+      said it renamed it to "Bunny Linux" (theme off and BootNext gone did
+      work). Find why the rename didn't reach `grub.cfg`.
+- [ ] `bunny status` run as you on an encrypted install (where `/boot` is
+      root-only) silently skips the kernel check, so a kernel without drivers
+      went unmentioned. Say "run with doas to check the kernel too", the way
+      `bunny plan` does for the boot menu.
+- [ ] After the kernel is put back, status says "(it had 6.18.63…, 9.9.9-test
+      from …)", listing the kernel that stayed too. Name only the kernels
+      that were removed.
 
 - [x] Ctrl+C at doas's password question stopped bunny with no words of its
       own (sudo got "nothing was changed"). Now doas gets it too.

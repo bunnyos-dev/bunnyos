@@ -84,6 +84,13 @@ impl Changes {
 }
 
 fn module_installed(root: &Path) -> bool {
+    let init = crate::init::for_config(crate::config::Init::default(), root);
+    if !init.has_boot_service(
+        crate::finish_undo::SERVICE,
+        crate::finish_undo::SERVICE_SCRIPT,
+    ) {
+        return false;
+    }
     let dir = root.join(MODULE_DIR);
     std::fs::read_to_string(dir.join("module-setup.sh"))
         .ok()
@@ -619,6 +626,14 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("module-setup.sh"), MODULE_SETUP).unwrap();
         std::fs::write(dir.join("bunny-rollback.sh"), HOOK).unwrap();
+        // The start-up service that finishes an undo is part of it too.
+        assert!(!changes(&boot, root.path()).is_empty());
+        crate::init::for_config(crate::config::Init::default(), root.path())
+            .add_boot_service(
+                crate::finish_undo::SERVICE,
+                crate::finish_undo::SERVICE_SCRIPT,
+            )
+            .unwrap();
         assert!(changes(&boot, root.path()).is_empty());
     }
 
@@ -820,6 +835,23 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(t.join("@/etc/bunny/bunny.lock")).unwrap(),
             "lock as applied"
+        );
+    }
+
+    #[test]
+    fn boot_step_leaves_a_note_to_finish_the_undo() {
+        let top = fake_top();
+        let t = top.path();
+        std::fs::create_dir_all(t.join("@snapshots/bunny-20261117-091500/var/lib/bunny")).unwrap();
+        let log = run_hook("bunny-20261117-091500", t);
+        assert_eq!(
+            std::fs::read_to_string(t.join("@").join(crate::finish_undo::MARKER)).unwrap(),
+            "bunny-20261117-091500\n",
+            "{log}"
+        );
+        assert_eq!(
+            crate::finish_undo::waiting(&t.join("@")).as_deref(),
+            Some("bunny-20261117-091500")
         );
     }
 

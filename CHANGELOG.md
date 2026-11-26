@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny add` no longer stops with "emerge's plan leaves out …" for a package
+  that's already installed (like `sys-apps/dbus` after turning on `[desktop]`).
+- `bunny add mangowm` (or another package from a known repository) asks to add
+  the repository again when an earlier, stopped `bunny add` had downloaded it
+  but never put it in bunny.toml. Before, emerge said there's no such package.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

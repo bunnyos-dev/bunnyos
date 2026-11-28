@@ -961,7 +961,7 @@ fn slot_conflicts(lines: &[&str]) -> Vec<Explanation> {
         }
         let title = if skipped {
             format!(
-                "Two versions of {} are wanted at once, so emerge left it out for now.",
+                "Two versions of {} are wanted at once (emerge left it out for now).",
                 short(&package)
             )
         } else {
@@ -1009,9 +1009,10 @@ fn slot_conflicts(lines: &[&str]) -> Vec<Explanation> {
             .find(|(_, _, k)| *k == "prebuilt");
         let fix = if let Some((who, _, _)) = stale {
             format!(
-                "Gentoo's prebuilt packages were built at slightly different times, so the\n\
-                 prebuilt {} still expects the other {}. Usually `bunny update` fixes it\n\
-                 within a few days. To fix it now, compile {} instead of downloading it:\n\
+                "Gentoo's prebuilt packages were built at slightly different\n\
+                 times, so the prebuilt {} still expects the other {}.\n\
+                 Usually `bunny update` fixes it within a few days. To fix it now,\n\
+                 compile {} instead of downloading it:\n\
                  [pkg.\"{who}\"]\n\
                  prebuilt = false",
                 short(who),
@@ -1116,18 +1117,17 @@ fn portage_crash(lines: &[&str]) -> Vec<Explanation> {
         "emerge itself crashed: an error inside Portage, not in your config.",
     );
     if downloading {
-        e = e.detail(
-            "It happened while downloading packages, so it's most likely the connection\n\
-             or Gentoo's download server having a moment.",
-        );
+        e = e
+            .detail("It happened while downloading packages, so it's most likely the connection")
+            .detail("or Gentoo's download server having a moment.");
     }
     if let Some(error) = error {
         e = e.detail(format!("Portage's error: {error}"));
     }
     vec![e.fix(
-        "run the same bunny command again: it usually works the second time, and\n\
-         anything already installed stays installed. If it keeps happening, the full\n\
-         message is in the log (path below); please report it.",
+        "run the same bunny command again: it usually works the second time,\n\
+         and anything already installed stays installed. If it keeps happening,\n\
+         please report it with emerge's full message.",
     )]
 }
 
@@ -1399,6 +1399,18 @@ mod tests {
         );
         // Not a wall of Python.
         assert!(!shown.contains("File \""), "{shown}");
+        // Every line indented under the item, none past 80 columns.
+        for line in shown.lines().skip(1) {
+            assert!(line.starts_with("  "), "{shown}");
+        }
+        // Portage's own error is quoted as it is; everything bunny writes fits.
+        assert!(
+            shown
+                .lines()
+                .filter(|l| !l.contains("Portage's error"))
+                .all(|l| l.chars().count() <= 80),
+            "{shown}"
+        );
     }
 
     #[test]
@@ -1427,11 +1439,14 @@ mod tests {
             "{spirv}"
         );
         assert!(
-            spirv.contains("built at slightly different times"),
+            spirv.contains("were built at slightly different"),
             "{spirv}"
         );
         assert!(spirv.contains("prebuilt = false"), "{spirv}");
         assert!(!spirv.contains("libclc"), "{spirv}");
+        for shown in [&libclc, &spirv] {
+            assert!(shown.lines().all(|l| l.chars().count() <= 80), "{shown}");
+        }
     }
 
     #[test]

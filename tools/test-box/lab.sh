@@ -41,4 +41,18 @@ hyprland)
 	put package.accept_keywords/lab 'gui-apps/quickshell ~amd64'
 	em --pretend --verbose --autounmask=y gui-wm/hyprland gui-apps/quickshell
 	;;
+desktop)
+	# What [desktop] wayland = true writes, then a desktop on top.
+	put package.use/lab 'sys-auth/pambase elogind'
+	put package.use/lab 'sys-auth/seatd elogind'
+	put package.accept_keywords/lab 'gui-apps/quickshell ~amd64'
+	em --pretend --verbose --autounmask=y sys-auth/elogind sys-apps/dbus \
+		gui-wm/sway gui-apps/quickshell x11-terms/kitty xfce-base/thunar
+	;;
+search)
+	for p in hyprland mangowm quickshell sway; do
+		echo "== $p"; ls -d /var/db/repos/*/*/"$p" 2>/dev/null
+	done
+	echo "== tree date: $(cat /var/db/repos/gentoo/metadata/timestamp.chk 2>/dev/null)"
+	;;
 esac

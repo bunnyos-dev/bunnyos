@@ -103,6 +103,13 @@ Typo:
   Did you mean: media-video/mpv?
 ```
 
+The right name in the wrong category comes first (`tree` is in `app-text`):
+
+```
+✗ There's no package called "app-misc/tree".
+  Did you mean: app-text/tree, dev-libs/tre, app-emacs/treemacs?
+```
+
 Several packages with the same name:
 
 ```

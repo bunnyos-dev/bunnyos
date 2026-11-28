@@ -585,7 +585,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       everything else) prebuilt. Nothing in bunny's settings differs from
       the prebuilt one, so no change in bunny; the install reference says
       why it can happen.
-- [ ] **The "Note: If this change stops the system from starting…" line wraps
+- [~] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
 - [x] **A smaller live USB** (asked for by the maintainer): it was about
       1.45 GB, near its budget. Measure what takes the space and remove what

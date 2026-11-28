@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- Long notes after a switch or undo (like "If this change stops the system
+  from starting…") now wrap between words on an 80-column console, instead of
+  breaking a word in two at the screen's edge.
 - The bunny.toml a new install writes has a few commented-out examples (a
   package, a service, a package's USE flags and keywords), each pointing to
   its Guide page. Remove the # to use one.

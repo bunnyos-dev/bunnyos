@@ -520,7 +520,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
-- [~] **SSH from kitty (and other new terminals) gets "cannot initialize
+- [x] **SSH from kitty (and other new terminals) gets "cannot initialize
       terminal type xterm-kitty"** on a Bunny system: nano and other
       full-screen programs refuse to start. Add the terminfo of common
       terminals to the base system (`x11-terms/kitty-terminfo`, and check
@@ -559,13 +559,13 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `sys-apps/pciutils` and `sys-apps/usbutils` (`lsusb`): they're the
       first thing anyone checks hardware with, and small. Make sure the
       image-shrinking step keeps them (and the PCI ID list they read).
-- [~] **"There's no disk Bunny Linux can be installed on" could say why.**
+- [x] **"There's no disk Bunny Linux can be installed on" could say why.**
       When only USB sticks are found, add the likely causes in plain words:
       the internal disk isn't connected, or the firmware's storage mode is
       RAID / Intel RST (set SATA Operation to AHCI), which hides it from
       Linux on many laptops. (Tested November 23: Ventoy's stick was
       correctly refused as the live system's own disk.)
-- [~] **Installing over Wi-Fi leaves the new system offline.** iwd is
+- [x] **Installing over Wi-Fi leaves the new system offline.** iwd is
       installed but not in the starter config's services (only dhcpcd, for
       a cable), and the Wi-Fi network joined on the live USB isn't carried
       over. When the install ran over Wi-Fi: add `iwd` to the services and
@@ -778,21 +778,21 @@ The bar: a fresh install, then `[desktop]` + Mango (or Hyprland) + the
 Quickshell island in one `bunny add`, with no hand edits, from a minimal
 profile as well as a desktop one. Details: the G16 field notes.
 
-- [~] **The resolver**: when emerge needs settings changed, bunny works them
-      all out in one go (USE flags, testing versions, either/or choices,
-      matching flags on packages that pin them), shows them once and adds
-      them to bunny.toml. `prebuilt = false` for packages that must compile.
-      Proven in the lab on the test machine (`tools/test-box/lab.sh`).
-- [~] Explainer fixes from the G16: slot conflicts one by one (#9), Portage
-      crashes (#5). Keyword masks (#7) and any-of (#8) are handled by the
-      resolver: it fixes them instead of only explaining them.
-- [ ] Explainer fixes from the G16: keyword masks reported as "couldn't
-      find" (#7), any-of (#8), slot conflicts (#9), Portage crashes (#5).
-- [ ] Small ones: iwd after a Wi-Fi install (#3), udev re-trigger after
-      `[desktop]` (#4), doas.conf taking effect (#6), kitty terminfo (#11),
-      the ISO attached to a release.
-- [ ] Profiles: `profile = "minimal" | "desktop"`, the installer asks.
-- [ ] Re-test on the G16: the bar above.
+- [x] **The resolver** (#155): when emerge needs settings changed, bunny
+      works them all out in one go (USE flags, testing versions, either/or
+      choices, matching flags on packages that pin them), shows them once and
+      adds them to bunny.toml. `prebuilt = false` for packages that must
+      compile. Passed in the VM on November 28: Thunar on a minimal system,
+      6 settings in one question, 146 packages (136 prebuilt).
+- [x] Explainer fixes (#157): slot conflicts one by one (#9), Portage
+      crashes (#5). Keyword masks (#7) and any-of (#8): the resolver fixes them.
+- [x] Small ones (#156): iwd after a Wi-Fi install (#3), restart after
+      `[desktop]` (#4), kitty terminfo (#11). The ISO: the rolling Preview
+      release (#159).
+- [ ] doas.conf taking effect (#6): not reproduced; watch for it on the re-test.
+- [x] Profiles (#158): `[system] profile = "minimal" | "desktop"`.
+- [ ] The installer asks which profile (terminal installer first).
+- [ ] **Re-test on the G16**: the bar above.
 
 ## A solid base, and room to leave it (after alpha)
 
@@ -972,6 +972,33 @@ switch); Wi-Fi checked on its own now and then.
       G16 week.
 
 ## Known issues / small fixes
+
+From the Saturday test session (November 28; #149–#151 and #155–#158 passed
+and merged):
+- [ ] **A GRUB rebuild undoes the boot menu tidy-up**: reinstalling
+      sys-boot/grub (a profile change rebuilt it) puts back Gentoo's
+      `10_linux` and `31_efi_bootnext`, so the menu says "Gentoo" again (the
+      laptop's "Gentoo" entry, most likely). Re-tidy in the same switch when
+      grub was reinstalled, or keep Portage from installing those two files
+      (INSTALL_MASK for sys-boot/grub).
+- [ ] **The lock summary lists every package** (140 lines after a desktop
+      install): show a count and the path, and the list with `--verbose`.
+- [ ] **Package messages bunny already took care of**: elogind says "not
+      started from any runlevel" right after bunny started it. Leave out
+      messages about things the switch just did.
+- [ ] **The news tip shows twice** ("1 announcements", then "2
+      announcements") in one switch, and "1 announcements" should be singular.
+- [ ] **`bunny import -o /etc/bunny/bunny.toml` fails when /etc/bunny doesn't
+      exist**, though `bunny status` suggests exactly that. Create the folder.
+- [ ] **"2 changes not applied yet: + tree, tidier boot menu, console font"**:
+      the count doesn't match the list.
+- [ ] **Undoing the very first switch leaves bunny.toml as edited** (status
+      says "not applied"): there's no saved config from before the first
+      switch. Keep a copy of the config as it was before the first switch.
+- [ ] **tools/bunny-vm.sh**: `stop` logs in as `you` on every VM (the monday
+      VM's user is `test`): remember each VM's user. `put` copies only its
+      first file; take several.
+- [ ] **The Kernel line after an undo is wider than 80 columns.**
 
 From the Friday test session (November 28; #141–#148 passed and merged):
 - [ ] **"Did you mean" misses the same name in another category**: `bunny add

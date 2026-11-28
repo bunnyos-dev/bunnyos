@@ -1,0 +1,21 @@
+# Read-only Portage experiments on the home test machine. Started by hand
+# only; never on pull requests (this repository is public).
+name: Lab
+on:
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: Which experiment in tools/test-box/lab.sh
+        default: baseline
+permissions:
+  contents: read
+jobs:
+  lab:
+    runs-on: [self-hosted, bunny-hw]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Experiment
+        env:
+          EXPERIMENT: ${{ inputs.experiment }}
+        run: sh tools/test-box/lab.sh "$EXPERIMENT"

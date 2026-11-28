@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The bunny.toml a new install writes has a few commented-out examples (a
+  package, a service, a package's USE flags and keywords), each pointing to
+  its Guide page. Remove the # to use one.
 - The live USB no longer shows dracut's warning about a renamed boot option
   (`rd.overlay` replaces `rd.live.overlay.overlayfs`), or an `insmod …`
   line, when it starts. "Show start-up messages" still shows everything.

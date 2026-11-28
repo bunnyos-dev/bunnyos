@@ -31,9 +31,8 @@ export PORTAGE_CONFIGROOT="$lab"
 guru() {
 	git clone -q --depth 1 https://github.com/gentoo-mirror/guru "$lab/guru"
 	mkdir -p "$lab/etc/portage/repos.conf"
-	printf '[guru]\nlocation = %s\n' "$lab/guru" > "$lab/etc/portage/repos.conf/lab-guru.conf"
-	ls -la "$lab/etc/portage/repos.conf" "$lab/guru" | head -20
-	cat "$lab/guru/profiles/repo_name" 2>&1
+	printf '[guru]\nlocation = %s\nmasters = gentoo\nauto-sync = no\n' "$lab/guru" > "$lab/etc/portage/repos.conf/lab-guru.conf"
+	cat "$lab/guru/profiles/repo_name" "$lab/guru/metadata/layout.conf" 2>&1; emerge --info 2>&1 | grep -iE -A3 "guru|^Repositories"
 	portageq get_repos / 2>&1
 }
 em() { echo; echo "\$ emerge $*"; emerge --color=n --ask=n "$@" 2>&1; echo "(exit $?)"; }
@@ -55,7 +54,7 @@ desktop)
 	# GURU's packages are testing-only: accept them, as `bunny add` would.
 	put package.accept_keywords/lab '*/*::guru ~amd64'
 	em --pretend --verbose --autounmask=y sys-auth/elogind sys-apps/dbus \
-		gui-wm/hyprland gui-apps/quickshell x11-terms/kitty xfce-base/thunar
+		gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar
 	;;
 search)
 	guru

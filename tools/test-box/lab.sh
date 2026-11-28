@@ -102,6 +102,7 @@ helper-resolve|helper-resolve-desktop)
 		sys-auth/elogind sys-apps/dbus gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar \
 		| tail -1 | python3 -m json.tool
 	;;
+<<<<<<< HEAD
 conflict)
 	# The state the resolver reached on the minimal profile just before it
 	# matched Qt's flags, without --autounmask: emerge's own messages.
@@ -121,6 +122,8 @@ conflict)
 	em --pretend --verbose sys-auth/elogind sys-apps/dbus gui-wm/mangowm gui-apps/quickshell \
 		x11-terms/kitty xfce-base/thunar
 	;;
+=======
+>>>>>>> origin/main
 binhost)
 	# Which flags Gentoo's prebuilt packages were built with (its index).
 	curl -fsSL -o "$lab/Packages" https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages

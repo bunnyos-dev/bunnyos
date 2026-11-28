@@ -21,6 +21,7 @@ mod install;
 mod package_use;
 mod repositories;
 mod runner;
+pub mod services;
 #[cfg(test)]
 mod tests;
 
@@ -190,8 +191,10 @@ pub fn switch(
     apply_security(plan, runner, &outcome)?;
     // 6. Remove what nothing needs any more. Always asks.
     remove_unused(plan, runner, opts, &mut outcome)?;
-    // 7. Services.
-    enable_services(config, root, plan, runner, &mut outcome)?;
+    // 7. Services. OpenRC's own lines go to the services log; bunny says
+    //    what happened.
+    let mut services = services::ServiceCommands::new(opts.verbose);
+    enable_services(config, root, plan, runner, &mut services, &mut outcome)?;
     if plan
         .use_changes
         .iter()
@@ -205,9 +208,22 @@ pub fn switch(
     }
     // 7b. The console font that draws ✓ ✗ ⚠ (bunny install sets it up;
     //     existing systems get it here). Problems are notes, never a stop.
-    let font_notes =
-        crate::console_font::apply(root, &plan.console_font, &outcome.backup_dir, runner)?;
+    let font_notes = crate::console_font::apply(
+        root,
+        &plan.console_font,
+        &outcome.backup_dir,
+        runner,
+        &mut services,
+    )?;
     outcome.notes.extend(font_notes);
+    if let (Some(log), true) = (services.save(root, &opts.stamp), services.failed()) {
+        outcome.notes.push(format!(
+            "What OpenRC printed is in {}.",
+            Path::new("/")
+                .join(log.strip_prefix(root).unwrap_or(&log))
+                .display()
+        ));
+    }
     // 8. The boot menu's undo entry, pointing at this switch's snapshot.
     update_boot_menu(config, root, plan, opts, runner, &mut outcome)?;
 
@@ -377,6 +393,7 @@ fn enable_services(
     root: &Path,
     plan: &Plan,
     runner: &mut dyn Runner,
+    services: &mut services::ServiceCommands,
     outcome: &mut Outcome,
 ) -> Result<()> {
     let init = init::for_config(config.system.init, root);
@@ -389,19 +406,21 @@ fn enable_services(
             continue;
         }
         let runlevel = init::openrc_runlevel(service);
-        if !runner.run(&cmd(&["rc-update", "add", service, runlevel]))? {
+        if !services.run(runner, &cmd(&["rc-update", "add", service, runlevel]))? {
             outcome
                 .notes
                 .push(format!("Couldn't enable \"{service}\" at boot."));
             continue;
         }
         // Start it now too, so it doesn't wait for the next reboot.
-        if !runner.run(&cmd(&["rc-service", service, "start"]))? {
+        if !services.run(runner, &cmd(&["rc-service", service, "start"]))? {
             outcome.notes.push(format!(
                 "\"{service}\" will start at boot, but didn't start now. \
                  Check it with: {} rc-service {service} status",
                 crate::security::admin()
             ));
+        } else if !services.verbose && !runner.dry() {
+            println!("  ✓ Started {service}; it starts at every boot too.");
         }
     }
     Ok(())

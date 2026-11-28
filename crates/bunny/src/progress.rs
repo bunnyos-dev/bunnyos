@@ -184,6 +184,48 @@ pub fn fit(line: &str, width: usize) -> String {
     cut
 }
 
+/// The widest line bunny's own messages use: the Linux console's 80
+/// columns, so a long sentence never breaks inside a word there.
+pub const MESSAGE_WIDTH: usize = 80;
+
+/// Wraps `text` at word breaks so no line is wider than `width` columns.
+/// The first line starts with `first`, the others with `rest` (usually
+/// spaces, to line up under the first). Line breaks already in the text
+/// are kept. A single word longer than a line is left whole.
+pub fn wrap(text: &str, first: &str, rest: &str, width: usize) -> String {
+    let mut out = String::new();
+    let mut prefix = first;
+    for paragraph in text.split('\n') {
+        let mut line = String::from(prefix);
+        let mut empty = true;
+        for word in paragraph.split_whitespace() {
+            let fits = line.chars().count() + 1 + word.chars().count() <= width;
+            if !empty && !fits {
+                out.push_str(&line);
+                out.push('\n');
+                line = String::from(rest);
+                empty = true;
+            }
+            if !empty {
+                line.push(' ');
+            }
+            line.push_str(word);
+            empty = false;
+        }
+        out.push_str(line.trim_end());
+        out.push('\n');
+        prefix = rest;
+    }
+    out.pop();
+    out
+}
+
+/// A note under a command's summary: `  Note: …`, wrapped at word breaks
+/// for an 80-column console, the following lines lined up under the text.
+pub fn note(text: &str) -> String {
+    wrap(text, "  Note: ", "        ", MESSAGE_WIDTH)
+}
+
 /// The last few KB of a file (build logs can be hundreds of MB).
 fn read_tail(path: &std::path::Path) -> Option<String> {
     use std::io::{Read, Seek, SeekFrom};
@@ -218,6 +260,38 @@ pub fn build_log(root: &std::path::Path, name: &str, version: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notes_wrap_at_word_breaks_on_an_80_column_console() {
+        let text = "If this change stops the system from starting, pick \"Undo the last change\" \
+                    in the boot menu (hold Shift or Esc while starting if the menu is hidden).";
+        let wrapped = note(text);
+        for line in wrapped.lines() {
+            assert!(line.chars().count() <= 80, "too wide: {line:?}");
+        }
+        assert!(wrapped.starts_with("  Note: If this change"));
+        // Every word is still whole, in order.
+        let words: Vec<&str> = wrapped.split_whitespace().skip(1).collect();
+        assert_eq!(words, text.split_whitespace().collect::<Vec<_>>());
+        // The later lines line up under the text.
+        for line in wrapped.lines().skip(1) {
+            assert!(line.starts_with("        ") && !line.starts_with("         "));
+        }
+        assert!(wrapped.lines().count() >= 2);
+    }
+
+    #[test]
+    fn wrap_keeps_short_text_and_line_breaks_and_long_words() {
+        assert_eq!(note("Short."), "  Note: Short.");
+        assert_eq!(wrap("one\ntwo", "> ", "  ", 80), "> one\n  two");
+        let long = "x".repeat(100);
+        assert_eq!(
+            wrap(&long, "", "", 80),
+            long,
+            "a word wider than a line stays whole"
+        );
+        assert_eq!(wrap("a b c", "", "", 3), "a b\nc");
+    }
 
     #[test]
     fn composes_the_line() {

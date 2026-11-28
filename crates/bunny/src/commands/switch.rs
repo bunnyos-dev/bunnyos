@@ -166,7 +166,7 @@ fn switch_with(
         outcome.backup_dir.display()
     );
     for note in &outcome.notes {
-        println!("  Note: {note}");
+        println!("{}", crate::progress::note(note));
     }
     report_lock_change(&change);
     print_messages(&outcome);
@@ -446,7 +446,7 @@ pub(crate) fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Resul
         );
     }
     for note in &outcome.notes {
-        println!("  Note: {note}");
+        println!("{}", crate::progress::note(note));
     }
     report_lock_change(&change);
     print_messages(&outcome);

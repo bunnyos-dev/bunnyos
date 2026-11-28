@@ -235,22 +235,103 @@ pub fn record_if_on(config: &Path, in_session: bool) -> Option<ExitCode> {
         .iter()
         .find(|a| !a.starts_with('-'))
         .map(String::as_str);
-    if !recordable(subcommand)
-        || !std::io::stdin().is_terminal()
-        || !std::io::stdout().is_terminal()
-    {
+    if !recordable(subcommand) {
+        return None;
+    }
+    let terminal = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    let piped = !terminal && records_without_terminal(&args, subcommand);
+    if !terminal && !piped {
         return None;
     }
     let dev = settings_or_preview(config, Path::new(PREVIEW));
     if dev.report == ReportMode::Off {
         return None;
     }
-    match record(&args, subcommand.unwrap_or("bunny"), &dev) {
+    let recorded = if piped {
+        record_piped(&args, "install", &dev)
+    } else {
+        record(&args, subcommand.unwrap_or("bunny"), &dev)
+    };
+    match recorded {
         Ok(code) => Some(code),
         Err(err) => {
             // Recording is a convenience: never let it stop the command.
             eprintln!("(developer mode: couldn't record this command: {err:#})");
             None
+        }
+    }
+}
+
+/// Commands recorded even when bunny isn't in a terminal: only a real
+/// `bunny install`, which the graphical installer runs with its output in a
+/// pipe (and the password on standard input). Everything else run from a
+/// script or a pipe stays unrecorded, as before. `--list-disks` is left out:
+/// it's a list for the installer, asked for again and again.
+fn records_without_terminal(args: &[String], subcommand: Option<&str>) -> bool {
+    subcommand == Some("install") && !args.iter().any(|a| a == "--list-disks")
+}
+
+/// Records a command whose output goes to a pipe, not a terminal (the
+/// graphical installer's `bunny install`): runs bunny again with its output
+/// piped through this one, which passes every byte on unchanged and keeps a
+/// copy in the recording. Standard input is handed straight to the command,
+/// so a password on it never reaches the recording. `script` isn't used: it
+/// needs a terminal, and would echo the password into the recording.
+fn record_piped(args: &[String], subcommand: &str, dev: &Dev) -> Result<ExitCode> {
+    use std::process::Stdio;
+    let dir = sessions_dir();
+    std::fs::create_dir_all(&dir).with_context(|| format!("Couldn't create {}", dir.display()))?;
+    let stamp = crate::commands::timestamp();
+    let base = dir.join(format!("{stamp}-{subcommand}"));
+    let log = base.with_extension("log");
+    let file = std::fs::File::create(&log)
+        .with_context(|| format!("Couldn't create {}", log.display()))?;
+    let file = std::sync::Arc::new(std::sync::Mutex::new(file));
+    let started = std::time::Instant::now();
+    let _careful = crate::interrupt::Careful::start();
+    let mut child = Command::new(std::env::current_exe()?)
+        .args(args)
+        .env(SESSION_ENV, &log)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("Couldn't start bunny again to record it")?;
+    let out = child.stdout.take().map(|from| {
+        let file = file.clone();
+        std::thread::spawn(move || copy_to_both(from, std::io::stdout(), &file))
+    });
+    let err = child.stderr.take().map(|from| {
+        let file = file.clone();
+        std::thread::spawn(move || copy_to_both(from, std::io::stderr(), &file))
+    });
+    for handle in [out, err].into_iter().flatten() {
+        let _ = handle.join();
+    }
+    let status = child.wait().context("Couldn't wait for bunny")?;
+    finish_recording(args, dev, &stamp, &base, &log, started, status.code())
+}
+
+/// Passes `from` on to `to` as it comes, and appends it to `log`.
+fn copy_to_both(
+    mut from: impl std::io::Read,
+    mut to: impl std::io::Write,
+    log: &std::sync::Mutex<std::fs::File>,
+) {
+    use std::io::Write as _;
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = match from.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        };
+        let _ = to.write_all(&buf[..n]);
+        let _ = to.flush();
+        if let Ok(mut file) = log.lock() {
+            let _ = file.write_all(&buf[..n]);
+            let _ = file.flush();
         }
     }
 }
@@ -277,20 +358,34 @@ fn record(args: &[String], subcommand: &str, dev: &Dev) -> Result<ExitCode> {
         .env(SESSION_ENV, &log)
         .status()
         .context("Couldn't start `script` (from util-linux)")?;
+    finish_recording(args, dev, &stamp, &base, &log, started, status.code())
+}
+
+/// Writes a finished recording's notes next to it, sends it when it had a
+/// problem and `report = "auto"`, and returns the command's exit code.
+fn finish_recording(
+    args: &[String],
+    dev: &Dev,
+    stamp: &str,
+    base: &Path,
+    log: &Path,
+    started: std::time::Instant,
+    code: Option<i32>,
+) -> Result<ExitCode> {
     let meta = Meta {
         args: args.to_vec(),
         version: env!("CARGO_PKG_VERSION").into(),
-        started: stamp,
+        started: stamp.to_string(),
         seconds: started.elapsed().as_secs(),
-        exit_code: status.code(),
+        exit_code: code,
         reported: None,
     };
     write_meta(&base.with_extension("toml"), &meta)?;
 
     if dev.report == ReportMode::Auto {
-        let text = clean(&std::fs::read_to_string(&log).unwrap_or_default());
+        let text = clean(&std::fs::read_to_string(log).unwrap_or_default());
         if had_problem(&meta, &text) {
-            match send_sessions(dev, std::slice::from_ref(&base), true) {
+            match send_sessions(dev, &[base.to_path_buf()], true) {
                 Ok(url) => println!("  (developer mode) Sent a report about this: {url}"),
                 Err(err) => println!(
                     "  (developer mode) Couldn't send a report ({err:#}).\n  \
@@ -299,7 +394,7 @@ fn record(args: &[String], subcommand: &str, dev: &Dev) -> Result<ExitCode> {
             }
         }
     }
-    Ok(match status.code() {
+    Ok(match code {
         Some(0) => ExitCode::SUCCESS,
         Some(n) => ExitCode::from(u8::try_from(n).unwrap_or(1)),
         None => ExitCode::FAILURE,
@@ -892,6 +987,51 @@ fn explain_gh_failure(repo: &str, said: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn words(line: &str) -> Vec<String> {
+        line.split_whitespace().map(String::from).collect()
+    }
+
+    #[test]
+    fn only_a_real_install_is_recorded_without_a_terminal() {
+        // What the graphical installer runs (answers.rs).
+        let gui = words(
+            "install --yes --disk /dev/vda --user you --hostname laptop \
+             --timezone UTC --keymap us --recommended --password-stdin",
+        );
+        assert!(records_without_terminal(&gui, Some("install")));
+        let dry = words("install --yes --disk /dev/vda --user you --dry-run");
+        assert!(records_without_terminal(&dry, Some("install")));
+        // The disk list it asks for again and again isn't.
+        let disks = words("install --list-disks");
+        assert!(!records_without_terminal(&disks, Some("install")));
+        // Nor anything else run from a script or a pipe.
+        for other in ["switch --yes", "status", "plan"] {
+            let args = words(other);
+            assert!(!records_without_terminal(&args, Some(args[0].as_str())));
+        }
+    }
+
+    #[test]
+    fn a_piped_recording_passes_everything_on_and_keeps_a_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("install.log");
+        let file = std::sync::Mutex::new(std::fs::File::create(&log).unwrap());
+        let text = "\n==> Partitioning /dev/vda\n✓ Done\nprogress\rprogress 50%\r\n".repeat(2000);
+        let mut shown = Vec::new();
+        copy_to_both(text.as_bytes(), &mut shown, &file);
+        assert_eq!(
+            String::from_utf8(shown).unwrap(),
+            text,
+            "the installer sees it unchanged"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap(),
+            text,
+            "and the recording has it all"
+        );
+        assert!(clean(&text).contains("==> Partitioning /dev/vda"));
+    }
 
     #[test]
     fn report_mode_reads_true_false_and_auto() {

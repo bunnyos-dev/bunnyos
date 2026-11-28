@@ -18,6 +18,9 @@ pub const LSBLK: &[&str] = &[
     "NAME,PATH,SIZE,TYPE,MODEL,TRAN,RM,RO,MOUNTPOINTS,FSTYPE,LABEL",
 ];
 
+/// Where dracut mounts the USB stick the live system started from.
+pub const LIVE_MOUNT: &str = "/run/initramfs/live";
+
 /// Smallest disk worth installing on.
 pub const MIN_SIZE: u64 = 20_000_000_000;
 
@@ -53,6 +56,9 @@ pub struct Disk {
 impl Disk {
     /// Why this disk can't be used, or `None` if it can.
     pub fn unusable(&self) -> Option<String> {
+        if self.is_live_usb() {
+            return Some("it's the USB stick you started from".into());
+        }
         if self.read_only {
             return Some("it's read-only".into());
         }
@@ -82,6 +88,15 @@ impl Disk {
             return Some(format!("it's in use ({} is open on it)", p.path));
         }
         None
+    }
+
+    /// Whether this is the USB stick the live system started from (dracut
+    /// mounts it at `/run/initramfs/live`).
+    pub fn is_live_usb(&self) -> bool {
+        self.mounted
+            .iter()
+            .chain(self.parts.iter().flat_map(|p| &p.mounted))
+            .any(|m| m == LIVE_MOUNT)
     }
 
     /// One line for the list of disks: `nvme0n1  512 GB  Samsung SSD 980 (NVMe)`.
@@ -122,6 +137,26 @@ impl Disk {
             out.push("nothing (it's empty)".into());
         }
         out
+    }
+}
+
+/// What to say when none of `disks` can be installed on. When the only disk
+/// found is the USB stick the live system started from, that usually means
+/// the computer's own disk isn't seen at all, so say where to look.
+pub fn none_usable(disks: &[Disk]) -> String {
+    let others = disks.iter().filter(|d| !d.is_live_usb()).count();
+    if others == 0 {
+        "There's no disk Bunny Linux can be installed on.\n  \
+         The USB stick you started from is left out on purpose, and no other\n  \
+         disk was found. Check that the computer's disk is fitted, and that it's\n  \
+         turned on in the firmware settings (BIOS/UEFI). On many laptops an NVMe\n  \
+         disk only shows up when the storage mode (\"SATA Operation\") is AHCI,\n  \
+         not RAID or Intel RST. Then run lsblk to see which disks Linux finds."
+            .into()
+    } else {
+        "There's no disk Bunny Linux can be installed on.\n  \
+         Disks that are in use (mounted, or unlocked) can't be erased: unmount them first."
+            .into()
     }
 }
 
@@ -286,6 +321,12 @@ mod tests {
         assert_eq!(disks[0].unusable(), None);
         assert_eq!(
             disks[1].unusable().unwrap(),
+            "it's the USB stick you started from"
+        );
+        let mut small = disks[0].clone();
+        small.size = 15_376_000_000;
+        assert_eq!(
+            small.unusable().unwrap(),
             "it's too small (15 GB; at least 20 GB)"
         );
         assert_eq!(disks[2].unusable(), None);
@@ -294,7 +335,7 @@ mod tests {
         usb.size = 64_000_000_000;
         assert_eq!(
             usb.unusable().unwrap(),
-            "it's in use (mounted at /run/initramfs/live)"
+            "it's the USB stick you started from"
         );
 
         let mut opened = disks[0].clone();
@@ -310,6 +351,48 @@ mod tests {
             opened.unusable().unwrap(),
             "it's in use (/dev/mapper/root is open on it)"
         );
+    }
+
+    #[test]
+    fn no_disk_but_the_usb_says_where_to_look() {
+        let disks = parse(LSBLK_JSON).unwrap();
+        assert!(disks[1].is_live_usb());
+        assert!(!disks[0].is_live_usb() && !disks[2].is_live_usb());
+
+        // Only the USB stick it started from (zram and the DVD drive aren't
+        // disks to install on, so parse leaves them out).
+        let only_usb: Vec<Disk> = disks.iter().filter(|d| d.is_live_usb()).cloned().collect();
+        let msg = none_usable(&only_usb);
+        let flat = msg.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(msg.starts_with("There's no disk Bunny Linux can be installed on."));
+        assert!(
+            flat.contains("The USB stick you started from is left out on purpose"),
+            "{msg}"
+        );
+        assert!(flat.contains("no other disk was found"), "{msg}");
+        assert!(flat.contains("fitted"), "{msg}");
+        assert!(flat.contains("firmware"), "{msg}");
+        assert!(flat.contains("NVMe") && flat.contains("RAID"), "{msg}");
+        assert!(flat.contains("lsblk"), "{msg}");
+        assert!(!flat.contains("unmount"), "{msg}");
+        // No disks at all reads the same.
+        assert_eq!(none_usable(&[]), msg);
+        // Lines fit the 80-column console.
+        assert!(msg.lines().all(|l| l.chars().count() <= 80), "{msg}");
+
+        // Another disk that's there but in use: the old advice.
+        let mut busy = disks[0].clone();
+        busy.parts.push(Part {
+            path: "/dev/sda1".into(),
+            size: 1,
+            kind: "part".into(),
+            fstype: Some("ext4".into()),
+            label: None,
+            mounted: vec!["/mnt".into()],
+        });
+        let msg = none_usable(&[busy, disks[1].clone()]);
+        assert!(msg.contains("unmount them first"), "{msg}");
+        assert!(!msg.contains("left out on purpose"), "{msg}");
     }
 
     #[test]

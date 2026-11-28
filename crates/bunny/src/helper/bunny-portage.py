@@ -37,6 +37,27 @@ exit status 0 when Portage answered, even with "no plan"):
           `required_by`: the packages that pull it in, nearest first (may
           be empty). Kinds bunny doesn't know are ignored.
 
+    resolve [--usepkg-exclude=a,b] [atom ...]: what emerge needs changed to
+          work out a plan for `--update --deep --newuse <atoms>` (default
+          @world), found the way a Gentoo user would by hand, but in one go.
+          Works on a scratch copy of /etc/portage (PORTAGE_CONFIGROOT);
+          nothing on the system changes. Each round asks emerge (--pretend,
+          --autounmask) and applies what stops it:
+            - USE changes emerge says are needed;
+            - testing-only versions (keywords);
+            - "any-of ( a b )" REQUIRED_USE and emerge's "One of the
+              following ... (Change USE: ...)": picks one (Wayland first,
+              then flags turned on rather than off);
+            - a flag already chosen (by your config or an earlier round) is
+              never flipped back: the package that pins it the other way
+              (usually a prebuilt copy built with other flags) gets the
+              same flag instead, so a matching prebuilt flavour is used;
+              if that doesn't help, it's compiled instead (usepkg-exclude).
+          {"ok": true, "resolved": bool, "use": {cp: {flag: on}},
+           "keywords": {cp: kw}, "compile": [cp], "why": {cp: "..."},
+           "rounds": n, "stuck": "end of emerge's last message"}
+          Only changes beyond the config are listed.
+
 
     depclean: what `emerge --depclean` would remove (nothing is removed),
           with EMERGE_DEFAULT_OPTS.
@@ -57,7 +78,7 @@ import os
 import shlex
 import sys
 
-HELPER_VERSION = 3
+HELPER_VERSION = 4
 
 
 def say(obj):
@@ -89,7 +110,14 @@ def plan(atoms):
 
     # The same options a plain `emerge` run would get.
     args = shlex.split(settings.get("EMERGE_DEFAULT_OPTS", ""))
-    args += ["--pretend", "--update", "--deep", "--newuse"] + (atoms or ["@world"])
+    # Options bunny adds (like --usepkg-exclude=a,b for packages the config
+    # says to compile) come before the atoms.
+    options = []
+    for a in atoms:
+        if a.startswith("--usepkg-exclude="):
+            options.append("--usepkg-exclude=" + " ".join(a.split("=", 1)[1].split(",")))
+    atoms = [a for a in atoms if not a.startswith("--")]
+    args += ["--pretend", "--update", "--deep", "--newuse"] + options + (atoms or ["@world"])
     # emerge's own command-line parser, so options mean exactly what they
     # mean to emerge (including anything from EMERGE_DEFAULT_OPTS).
     _action, opts, files = parse_opts(args, silent=True)
@@ -422,9 +450,253 @@ def depclean():
     return {"ok": True, "removals": removals}
 
 
+# --- resolve -------------------------------------------------------------
+
+PREFERRED = ["wayland", "X", "opengl", "vulkan", "gtk", "qt6", "elogind", "dbus"]
+MAX_ROUNDS = 30
+
+
+def _cp_of(atom):
+    """`>=cat/pkg-1.2-r3:slot[flags]` -> `cat/pkg`."""
+    import re
+
+    atom = re.sub(r"^[<>=~!]+", "", atom.split("[")[0].split("::")[0])
+    atom = atom.split(":")[0]
+    m = re.match(r"([A-Za-z0-9][\w+.-]*/[\w+.-]+?)(-\d[\w.]*(?:-r\d+)?)?$", atom)
+    return m.group(1) if m else atom
+
+
+def _section(out, title):
+    """`cat/pkg flags` lines under one of emerge's autounmask headings."""
+    import re
+
+    found = []
+    if title not in out:
+        return found
+    for line in out.split(title, 1)[1].splitlines()[1:]:
+        line = line.strip()
+        if not line or line.startswith("(") or line.startswith("#"):
+            continue
+        if not re.match(r"^[<>=~]*[A-Za-z0-9][\w+.-]*/", line):
+            break
+        found.append(line)
+    return found
+
+
+def _required_by(out, line):
+    """The nearest `# required by cat/pkg` above an autounmask line."""
+    import re
+
+    m = re.search(r"# required by (\S+?)(?:::\S+)?\n(?:#.*\n)*" + re.escape(line), out)
+    return _cp_of(m.group(1)) if m else None
+
+
+def _required_use(out):
+    """[(cp, [flags])] for unmet any-of / exactly-one-of REQUIRED_USE."""
+    import re
+
+    found = []
+    for m in re.finditer(
+        r"has unmet requirements\.\n- (\S+?)::\S+ USE=\"[^\"]*\".*?\n\n"
+        r"  The following REQUIRED_USE flag constraints are unsatisfied:\n((?:    .*\n)+)",
+        out,
+    ):
+        for line in m.group(2).splitlines():
+            g = re.search(r"(?:any-of|\^\^|\|\|) \( ([^)]*) \)", line)
+            if g:
+                found.append((_cp_of(m.group(1)), g.group(1).split()))
+    return found
+
+
+def _one_of(out):
+    """emerge's "One of the following packages is required" with
+    "(Change USE: ...)" options: [(cp, [(flag, on)], parent)], the option
+    that only turns flags on first, and the package that asked."""
+    import re
+
+    found = []
+    pattern = (
+        r"!!! One of the following packages is required to complete your request:\n"
+        r"((?:- .*\n)+)\(dependency required by \"(\S+?)(?:::\S+?)?\" \[(\w+)\]\)"
+    )
+    for m in re.finditer(pattern, out):
+        options = []
+        for line in m.group(1).splitlines():
+            g = re.match(r"- (\S+?)::\S+ \(Change USE: ([^)]*)\)", line)
+            if g:
+                changes = [(f.lstrip("+-"), not f.startswith("-")) for f in g.group(2).split()]
+                options.append((_cp_of(g.group(1)), changes))
+        options.sort(key=lambda o: not all(on for _, on in o[1]))
+        if options:
+            found.append((options[0][0], options[0][1], _cp_of(m.group(2))))
+    return found
+
+
+def _read_flags(path):
+    """{cp: {flag: on}} from a package.use file bunny wrote."""
+    flags = {}
+    try:
+        text = open(path).read()
+    except OSError:
+        return flags
+    for line in text.splitlines():
+        parts = line.split("#", 1)[0].split()
+        if len(parts) < 2 or "/" not in parts[0] or parts[0].startswith("*"):
+            continue
+        cp = _cp_of(parts[0])
+        for f in parts[1:]:
+            if f.endswith(":"):
+                break  # USE_EXPAND (VIDEO_CARDS: ...) isn't a plain flag
+            flags.setdefault(cp, {})[f.lstrip("+-")] = not f.startswith("-")
+    return flags
+
+
+def resolve(args):
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+
+    sys.stdout = sys.stderr
+    exclude = set()
+    atoms = []
+    for a in args:
+        if a.startswith("--usepkg-exclude="):
+            exclude.update(x for x in a.split("=", 1)[1].split(",") if x)
+        else:
+            atoms.append(a)
+    atoms = atoms or ["@world"]
+
+    config_root = os.environ.get("PORTAGE_CONFIGROOT", "/")
+    real = os.path.join(config_root, "etc/portage")
+    scratch = tempfile.mkdtemp(prefix="bunny-resolve-")
+    try:
+        shutil.copytree(real, os.path.join(scratch, "etc/portage"), symlinks=True)
+        profile = os.path.join(scratch, "etc/portage/make.profile")
+        if os.path.islink(profile):
+            target = os.path.realpath(os.path.join(real, "make.profile"))
+            os.remove(profile)
+            os.symlink(target, profile)
+        use_dir = os.path.join(scratch, "etc/portage/package.use")
+        kw_dir = os.path.join(scratch, "etc/portage/package.accept_keywords")
+        for d in (use_dir, kw_dir):
+            if os.path.isfile(d):  # a single file instead of a folder
+                text = open(d).read()
+                os.remove(d)
+                os.makedirs(d)
+                open(os.path.join(d, "00-file"), "w").write(text)
+            os.makedirs(d, exist_ok=True)
+
+        chosen = _read_flags(os.path.join(use_dir, "zz-bunny"))  # the config's own
+        given = {cp: dict(fl) for cp, fl in chosen.items()}
+        keywords = {}
+        why = {}
+        status, out, rounds = 1, "", 0
+
+        def write():
+            with open(os.path.join(use_dir, "zzz-bunny-resolve"), "w") as f:
+                for cp, fl in sorted(chosen.items()):
+                    f.write(cp + " " + " ".join(("" if on else "-") + n for n, on in sorted(fl.items())) + "\n")
+            with open(os.path.join(kw_dir, "zzz-bunny-resolve"), "w") as f:
+                for cp, kw in sorted(keywords.items()):
+                    f.write(cp + " " + kw + "\n")
+
+        def choose(cp, name, on, reason):
+            if chosen.get(cp, {}).get(name) == on:
+                return False
+            chosen.setdefault(cp, {})[name] = on
+            why.setdefault(cp, reason)
+            return True
+
+        while rounds < MAX_ROUNDS:
+            rounds += 1
+            write()
+            cmd = ["emerge", "--color=n", "--ask=n", "--pretend", "--verbose", "--update",
+                   "--deep", "--newuse", "--autounmask=y", "--autounmask-write=n",
+                   "--autounmask-backtrack=y"]
+            if exclude:
+                cmd.append("--usepkg-exclude=" + " ".join(sorted(exclude)))
+            env = dict(os.environ, PORTAGE_CONFIGROOT=scratch)
+            p = subprocess.run(cmd + atoms, env=env, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, universal_newlines=True)
+            status, out = p.returncode, p.stdout
+            sys.stderr.write("bunny-resolve: round %d\n" % rounds)
+            sys.stderr.flush()
+            if status == 0:
+                break
+            changed = False
+            for line in _section(out, "The following USE changes are necessary to proceed:"):
+                parts = line.split()
+                cp = _cp_of(parts[0])
+                parent = _required_by(out, line)
+                for f in parts[1:]:
+                    name, on = f.lstrip("+-"), not f.startswith("-")
+                    have = chosen.get(cp, {}).get(name)
+                    if have is None:
+                        changed |= choose(cp, name, on, "needed by %s" % (parent or "what you asked for"))
+                    elif have != on and parent:
+                        # Something pins this flag the other way: give it
+                        # the same flag, or compile it if that was tried.
+                        if chosen.get(parent, {}).get(name) != have:
+                            changed |= choose(parent, name, have, "to match %s" % cp)
+                        elif parent not in exclude:
+                            exclude.add(parent)
+                            why.setdefault(parent, "its prebuilt copy pins %s" % cp)
+                            changed = True
+            for line in _section(out, "The following keyword changes are necessary to proceed:"):
+                parts = line.split()
+                cp = _cp_of(parts[0])
+                if cp not in keywords:
+                    keywords[cp] = parts[1] if len(parts) > 1 else "~" + os.environ.get("ARCH", "amd64")
+                    why.setdefault(cp, "only a testing version, needed by %s" % (_required_by(out, line) or "what you asked for"))
+                    changed = True
+            for cp, options in _required_use(out):
+                pick = next((f for f in PREFERRED if f in options), options[0])
+                if not any(chosen.get(cp, {}).get(f) for f in options):
+                    changed |= choose(cp, pick, True, "needs one of %s" % " ".join(options))
+            for cp, changes, parent in _one_of(out):
+                clash = [(n, on) for n, on in changes if chosen.get(cp, {}).get(n) not in (None, on)]
+                if clash:
+                    for n, _ in clash:
+                        want = chosen[cp][n]
+                        if chosen.get(parent, {}).get(n) != want:
+                            changed |= choose(parent, n, want, "to match %s" % cp)
+                        elif parent not in exclude:
+                            exclude.add(parent)
+                            why.setdefault(parent, "its prebuilt copy pins %s" % cp)
+                            changed = True
+                    continue
+                for n, on in changes:
+                    if chosen.get(cp, {}).get(n) is None:
+                        changed |= choose(cp, n, on, "needed by %s" % parent)
+            if not changed:
+                break
+
+        # Only what goes beyond the config itself.
+        use = {}
+        for cp, fl in sorted(chosen.items()):
+            extra = {n: on for n, on in fl.items() if given.get(cp, {}).get(n) != on}
+            if extra:
+                use[cp] = extra
+        result = {
+            "ok": True,
+            "resolved": status == 0,
+            "use": use,
+            "keywords": keywords,
+            "compile": sorted(exclude),
+            "why": why,
+            "rounds": rounds,
+        }
+        if status != 0:
+            result["stuck"] = "\n".join(out.rstrip().splitlines()[-40:])
+        return result
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def main(argv):
     if len(argv) < 2:
-        say({"ok": False, "reason": "usage: bunny-portage.py plan [atom ...] | depclean"})
+        say({"ok": False, "reason": "usage: bunny-portage.py plan [atom ...] | depclean | resolve [atom ...]"})
         return 2
     command, rest = argv[1], argv[2:]
     try:
@@ -434,6 +706,8 @@ def main(argv):
             result = plan(rest)
         elif command == "depclean":
             result = depclean()
+        elif command == "resolve":
+            result = resolve(rest)
         else:
             result = {"ok": False, "reason": "unknown command: %s" % command}
     except Exception as e:  # never crash with a traceback on stdout

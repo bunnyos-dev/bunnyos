@@ -50,6 +50,19 @@ a minor version can change how things work).
 - After the kernel is put back following an undo from the boot menu, `bunny
   status`'s "(it had … from the version you went back from)" now names only
   the kernels that were taken out, not one that stayed.
+- When emerge needs settings changed before it can install something (USE
+  flags, testing versions), bunny now works them all out in one go, the way
+  you would by hand round after round, and asks once: "Add these to
+  bunny.toml and continue?" It never flips a flag you set; it gives the
+  package that pins it the same flag instead, so a matching prebuilt copy is
+  used. This is what makes a desktop installable from a minimal system.
+- `[pkg."…"] prebuilt = false`: always compile a package instead of
+  downloading Gentoo's prebuilt copy.
+- `bunny add` no longer stops with "emerge's plan leaves out …" for a package
+  that's already installed (like `sys-apps/dbus` after turning on `[desktop]`).
+- `bunny add mangowm` (or another package from a known repository) asks to add
+  the repository again when an earlier, stopped `bunny add` had downloaded it
+  but never put it in bunny.toml. Before, emerge said there's no such package.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

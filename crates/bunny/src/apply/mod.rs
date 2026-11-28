@@ -62,9 +62,27 @@ impl std::fmt::Display for NothingChanged {
 
 impl std::error::Error for NothingChanged {}
 
+/// emerge refused, but bunny's resolver found the settings that make it
+/// work. Nothing was changed: the caller shows them, and (if the user
+/// agrees) writes them into bunny.toml and runs the switch again.
+#[derive(Debug)]
+pub struct NeedsChanges(pub crate::helper::Resolution);
+
+impl std::fmt::Display for NeedsChanges {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("emerge needs some settings changed first. Nothing was changed.")
+    }
+}
+
+impl std::error::Error for NeedsChanges {}
+
 /// Marks an error as coming from before anything was changed.
 pub fn nothing_changed(e: anyhow::Error) -> anyhow::Error {
-    if e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>() {
+    if e.is::<NothingChanged>()
+        || e.is::<Cancelled>()
+        || e.is::<Refused>()
+        || e.is::<NeedsChanges>()
+    {
         return e;
     }
     anyhow::Error::new(NothingChanged(format!("{e:#}")))
@@ -72,7 +90,7 @@ pub fn nothing_changed(e: anyhow::Error) -> anyhow::Error {
 
 /// Whether nothing on the system was changed when `e` happened.
 pub fn changed_nothing(e: &anyhow::Error) -> bool {
-    e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>()
+    e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>() || e.is::<NeedsChanges>()
 }
 
 /// emerge refused before installing anything (its dry run failed), and the

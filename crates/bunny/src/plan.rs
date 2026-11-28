@@ -55,6 +55,9 @@ pub struct Plan {
     /// Packages, services and packages' USE flags that are only in effect
     /// because of `[desktop]`, so they can be marked "from [desktop]".
     pub from_desktop: BTreeSet<String>,
+    /// Packages to compile instead of downloading (`prebuilt = false`),
+    /// passed to emerge as `--usepkg-exclude`.
+    pub compile_from_source: Vec<String>,
 }
 
 /// The note shown after something `[desktop]` adds.
@@ -527,6 +530,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
 
     Ok(Plan {
         init_name: init.name(),
+        compile_from_source: config.compile_from_source(),
         unknown_packages: if check_after_sync {
             Vec::new()
         } else {

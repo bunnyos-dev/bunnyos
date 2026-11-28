@@ -730,6 +730,75 @@ fn a_refusal_is_explained_from_the_helpers_data() {
 }
 
 #[test]
+fn a_refusal_the_resolver_can_fix_asks_for_its_settings() {
+    let root = fake_system();
+    let world = portage::world_path(root.path());
+    let world_before = std::fs::read_to_string(&world).unwrap();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Scripted {
+        replies: vec![("--pretend --update", false, fixture("keyword-testing.txt"))],
+        helper: vec![
+            (
+                "plan",
+                r#"{"ok": false, "reason": "portage couldn't work out a plan", "problems": [], "helper": 4}"#
+                    .into(),
+            ),
+            (
+                "resolve",
+                r#"{"ok": true, "resolved": true, "use": {"dev-qt/qtbase": {"wayland": true}}, "keywords": {"dev-qt/qtbase": "~amd64"}, "compile": [], "why": {}, "rounds": 2, "helper": 4}"#
+                    .into(),
+            ),
+        ],
+        ..Scripted::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap_err();
+    assert!(runner.commands.iter().any(|c| c == "(helper) resolve"));
+    let resolution = &err
+        .downcast_ref::<super::NeedsChanges>()
+        .expect("NeedsChanges")
+        .0;
+    assert!(resolution.use_flags["dev-qt/qtbase"]["wayland"]);
+    assert!(super::changed_nothing(&err));
+    // Nothing was installed, and the files were put back.
+    assert!(!runner
+        .commands
+        .iter()
+        .any(|c| c.starts_with("emerge --update") && !c.contains("--pretend")));
+    assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
+}
+
+#[test]
+fn packages_to_compile_are_never_taken_prebuilt() {
+    let root = fake_system();
+    let config = Config::parse(&format!(
+        "{CONFIG}\n[pkg.\"dev-util/shader-slang\"]\nprebuilt = false\n"
+    ))
+    .unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert_eq!(plan.compile_from_source, ["dev-util/shader-slang"]);
+    let mut runner = Scripted::default();
+    let _ = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true));
+    let c = &runner.commands;
+    assert!(
+        c.iter()
+            .any(|l| l == "(helper) plan --usepkg-exclude=dev-util/shader-slang"),
+        "{c:#?}"
+    );
+    let emerges: Vec<&String> = c
+        .iter()
+        .filter(|l| l.starts_with("emerge ") && l.contains("--update"))
+        .collect();
+    assert!(!emerges.is_empty(), "{c:#?}");
+    assert!(
+        emerges
+            .iter()
+            .all(|l| l.contains("--usepkg-exclude=dev-util/shader-slang")),
+        "{c:#?}"
+    );
+}
+
+#[test]
 fn quiet_removal_lists_and_always_asks() {
     let root = fake_system();
     let config = Config::parse("packages = []").unwrap();

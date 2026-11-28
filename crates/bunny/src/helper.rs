@@ -176,13 +176,111 @@ pub fn parse_plan_answer(json: &str) -> PlanAnswer {
     list.map_or(PlanAnswer::Unavailable, PlanAnswer::List)
 }
 
+/// `--usepkg-exclude=a,b` for the packages to compile, as the helper takes
+/// it (`None` when there are none).
+fn exclude_arg(compile: &[String]) -> Option<String> {
+    (!compile.is_empty()).then(|| format!("--usepkg-exclude={}", compile.join(",")))
+}
+
 /// What `emerge --update --deep --newuse @world` would install, from Portage
-/// itself, or why it can't.
-pub fn plan(runner: &mut dyn Runner) -> PlanAnswer {
-    match runner.output(&command(&["plan"])) {
+/// itself, or why it can't. `compile`: packages never to take prebuilt.
+pub fn plan(runner: &mut dyn Runner, compile: &[String]) -> PlanAnswer {
+    let mut args = vec!["plan".to_string()];
+    args.extend(exclude_arg(compile));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    match runner.output(&command(&args)) {
         Ok(Some(out)) => parse_plan_answer(&out),
         _ => PlanAnswer::Unavailable,
     }
+}
+
+/// What has to change for Portage to work out a plan, found by the
+/// helper's `resolve` (the way a Gentoo user would, round after round, but
+/// in one go). Only what goes beyond the config is listed.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Resolution {
+    /// Whether Portage has a plan once these are applied.
+    pub resolved: bool,
+    /// USE flags per package: flag → on.
+    #[serde(default, rename = "use")]
+    pub use_flags: std::collections::BTreeMap<String, std::collections::BTreeMap<String, bool>>,
+    /// Testing keyword per package (`~amd64`).
+    #[serde(default)]
+    pub keywords: std::collections::BTreeMap<String, String>,
+    /// Packages to compile instead of taking a prebuilt copy.
+    #[serde(default)]
+    pub compile: Vec<String>,
+    /// Why each package is in the list, in a few words.
+    #[serde(default)]
+    pub why: std::collections::BTreeMap<String, String>,
+    /// The end of emerge's last message, when it still has no plan.
+    #[serde(default)]
+    pub stuck: Option<String>,
+}
+
+impl Resolution {
+    /// Whether there's anything to change.
+    pub fn is_empty(&self) -> bool {
+        self.use_flags.is_empty() && self.keywords.is_empty() && self.compile.is_empty()
+    }
+
+    /// Whether every name is a plain package name and every flag a plain
+    /// flag, so nothing odd ends up in bunny.toml.
+    fn sane(&self) -> bool {
+        let flag = |f: &str| {
+            !f.is_empty()
+                && f.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '@'))
+        };
+        self.use_flags
+            .iter()
+            .all(|(p, flags)| crate::config::is_package_name(p) && flags.keys().all(|f| flag(f)))
+            && self.keywords.iter().all(|(p, k)| {
+                crate::config::is_package_name(p)
+                    && (k == "**" || (k.starts_with('~') && flag(&k[1..])))
+            })
+            && self
+                .compile
+                .iter()
+                .all(|p| crate::config::is_package_name(p))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ResolveReply {
+    ok: bool,
+    #[serde(flatten)]
+    resolution: Resolution,
+}
+
+/// Parses the helper's answer to `resolve` (its last line; progress lines
+/// come before it). `None` if it didn't answer, or answered oddly.
+pub fn parse_resolve(out: &str) -> Option<Resolution> {
+    let reply: ResolveReply = out
+        .lines()
+        .rev()
+        .find(|l| l.starts_with('{'))
+        .and_then(|l| serde_json::from_str(l).ok())?;
+    (reply.ok && reply.resolution.sane()).then_some(reply.resolution)
+}
+
+/// Asks the helper what has to change for `emerge --update --deep --newuse
+/// @world` (plus `names`, which emerge would otherwise skip quietly) to
+/// work. `None` when it can't say (no python3, an old helper).
+pub fn resolve(
+    runner: &mut dyn Runner,
+    compile: &[String],
+    names: &[String],
+) -> Option<Resolution> {
+    let mut args = vec!["resolve".to_string()];
+    args.extend(exclude_arg(compile));
+    if !names.is_empty() {
+        args.extend(names.iter().cloned());
+        args.push("@world".into());
+    }
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let out = runner.output(&command(&args)).ok()??;
+    parse_resolve(&out)
 }
 
 /// A package `emerge --depclean` would remove.
@@ -237,6 +335,33 @@ pub fn depclean(runner: &mut dyn Runner) -> Option<Vec<Removal>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_a_resolution() {
+        let out = r#"{"ok": true, "resolved": true, "use": {"dev-qt/qtbase": {"opengl": true, "wayland": true}, "xfce-base/libxfce4ui": {"wayland": true}}, "keywords": {"dev-cpp/cpptrace": "~amd64"}, "compile": ["dev-util/shader-slang"], "why": {"xfce-base/libxfce4ui": "needs one of wayland X"}, "rounds": 4, "helper": 4}"#;
+        let r = parse_resolve(&format!("bunny-resolve: round 1\n{out}\n")).unwrap();
+        assert!(r.resolved);
+        assert!(r.use_flags["dev-qt/qtbase"]["opengl"]);
+        assert_eq!(r.keywords["dev-cpp/cpptrace"], "~amd64");
+        assert_eq!(r.compile, ["dev-util/shader-slang"]);
+        assert_eq!(r.why["xfce-base/libxfce4ui"], "needs one of wayland X");
+        assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn odd_resolutions_are_not_trusted() {
+        // A flag with a space or a made-up package name must never reach
+        // bunny.toml.
+        for bad in [
+            r#"{"ok": true, "resolved": true, "use": {"dev-qt/qtbase": {"open gl": true}}}"#,
+            r#"{"ok": true, "resolved": true, "use": {"not a package": {"x": true}}}"#,
+            r#"{"ok": true, "resolved": true, "keywords": {"dev-cpp/cpptrace": "amd64; rm"}}"#,
+            r#"{"ok": false, "reason": "no"}"#,
+            "not json",
+        ] {
+            assert_eq!(parse_resolve(bad), None, "{bad}");
+        }
+    }
 
     #[test]
     fn reads_a_plan() {

@@ -332,7 +332,7 @@ pub(crate) fn rollback_cmd(
         }
     }
     if let Some(note) = &outcome.kernel_note {
-        println!("  Note: {note}");
+        println!("{}", crate::progress::note(note));
     }
     if outcome.undo_entry_dropped {
         println!(

@@ -344,6 +344,7 @@ fn needs_emerge(plan: &Plan, opts: &Options) -> bool {
     opts.update_all
         || !plan.add_packages.is_empty()
         || !plan.use_changes.is_empty()
+        || !plan.hardware_changes.is_empty()
         || !plan.keyword_changes.is_empty()
         || matches!(plan.profile, crate::profile::Wanted::Change(_))
 }
@@ -391,8 +392,10 @@ fn remove_unused(
     opts: &Options,
     outcome: &mut Outcome,
 ) -> Result<()> {
-    let cleanup =
-        !plan.remove_packages.is_empty() || !plan.use_changes.is_empty() || opts.update_all;
+    let cleanup = !plan.remove_packages.is_empty()
+        || !plan.use_changes.is_empty()
+        || !plan.hardware_changes.is_empty()
+        || opts.update_all;
     if cleanup {
         let removed = if opts.verbose || runner.dry() {
             runner.run(&cmd(&["emerge", "--depclean", "--ask"]))?

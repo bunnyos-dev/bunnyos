@@ -118,9 +118,11 @@ pub fn render_world(config: &Config, root: &Path) -> String {
     out
 }
 
-/// The contents bunny's package.use file should have.
+/// The contents bunny's package.use file should have. `[hardware]`'s `*/*`
+/// lines come first, so a package's own flags still win over them.
 pub fn render_package_use(config: &Config) -> String {
     let mut out = String::from("# Managed by bunny. Edit bunny.toml instead of this file.\n");
+    out.push_str(&config.hardware.render());
     for (atom, flags) in config.use_flags() {
         out.push_str(&format!("{atom} {}\n", flags.join(" ")));
     }

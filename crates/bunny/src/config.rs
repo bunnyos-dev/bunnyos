@@ -38,6 +38,10 @@ pub struct Config {
     /// What a graphical desktop needs from the base system.
     #[serde(default)]
     pub desktop: crate::desktop::Desktop,
+    /// This computer's graphics cards and CPU features. Usually set in the
+    /// host file, whose settings win.
+    #[serde(default)]
+    pub hardware: crate::hardware::Hardware,
     /// The host file read on top of this config, if there was one.
     #[serde(skip)]
     pub host: Option<HostLayer>,
@@ -51,8 +55,9 @@ pub struct Config {
 /// `hosts/<host name>.toml` next to the config: what belongs to one
 /// computer only, so the main config works on any machine. Its packages,
 /// services and `[pkg]` settings are added to the main config's (its `[pkg]`
-/// wins for the same package). `[machine]` records how `bunny install` set
-/// up this computer's disk; bunny reads it but never changes disks from it.
+/// wins for the same package, and so do its `[hardware]` settings).
+/// `[machine]` records how `bunny install` set up this computer's disk;
+/// bunny reads it but never changes disks from it.
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Host {
@@ -64,6 +69,8 @@ pub struct Host {
     pub pkg: BTreeMap<String, PkgSettings>,
     #[serde(default)]
     pub machine: Option<Machine>,
+    #[serde(default)]
+    pub hardware: crate::hardware::Hardware,
 }
 
 /// How this computer was set up (written by `bunny install`).
@@ -377,6 +384,7 @@ impl Config {
         for (atom, settings) in host.pkg {
             self.pkg.insert(atom, settings);
         }
+        self.hardware.add_host(host.hardware);
         self.host = Some(HostLayer {
             name: name.to_string(),
             path,
@@ -470,6 +478,7 @@ impl Config {
             }
         }
         check_duplicates(&self.repositories, "repositories", &mut problems);
+        problems.extend(self.hardware.problems());
 
         problems
     }
@@ -621,6 +630,7 @@ mod tests {
             dir.path().join("hosts/laptop.toml"),
             "packages = [\"sys-fs/btrfs-progs\", \"sys-fs/cryptsetup\"]\nservices = [\"tlp\"]\n\
              [pkg.\"app-misc/tmux\"]\nuse = [\"-vim-syntax\"]\n\
+             [hardware]\nvideo_cards = [\"intel\", \"nvidia\"]\n\
              [machine]\ndisk = \"/dev/vda\"\nencrypted = true\ntimezone = \"UTC\"\n",
         )
         .unwrap();
@@ -632,6 +642,10 @@ mod tests {
         );
         assert_eq!(c.services, ["sshd", "tlp"]);
         assert_eq!(c.pkg["app-misc/tmux"].use_flags, ["-vim-syntax"]);
+        assert_eq!(
+            c.hardware.video_cards.as_deref(),
+            Some(&["intel".to_string(), "nvidia".to_string()][..])
+        );
         let host = c.host.as_ref().unwrap();
         assert_eq!(host.name, "laptop");
         assert!(host.machine.as_ref().unwrap().encrypted);

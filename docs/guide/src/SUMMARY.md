@@ -18,6 +18,7 @@
 - [Install a program](tasks/install.md)
 - [Remove a program](tasks/remove.md)
 - [Finding and using USE flags](tasks/use-flags.md)
+- [Graphics cards and CPU features](tasks/hardware.md)
 - [Update your system](tasks/update.md)
 - [Undo a change](tasks/undo.md)
 - [When something goes wrong](tasks/when-things-go-wrong.md)

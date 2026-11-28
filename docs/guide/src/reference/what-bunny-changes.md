@@ -5,8 +5,8 @@ Everything bunny writes, so nothing is a mystery.
 | File | What it is |
 |---|---|
 | `/var/lib/portage/world` | Gentoo's list of wanted packages. bunny writes it from `packages`, plus the `[security]` tool and bunny's own package. |
-| `/etc/portage/package.use/zz-bunny` | USE flags from your config. Named so Portage reads it **last**, so it wins. |
-| `/etc/portage/package.use/00-bunny-kept` | package.use lines bunny can't manage yet (version ranges like `<pkg-2`, wildcards), copied word for word. |
+| `/etc/portage/package.use/zz-bunny` | USE flags from your config, with `[hardware]`'s `*/* VIDEO_CARDS:` and `*/* CPU_FLAGS_X86:` lines first. Named so Portage reads it **last**, so it wins. |
+| `/etc/portage/package.use/00-bunny-kept` | package.use lines bunny can't manage yet (version ranges like `<pkg-2`, wildcards, and graphics-card or CPU-feature lines that `[hardware]` doesn't set), copied word for word. |
 | `/etc/portage/package.accept_keywords/zz-bunny` | Testing versions allowed by `[pkg] keywords`. Only when your config has some. Other files in the folder are left alone; a single-file `package.accept_keywords` is moved into the folder as `00-yours`. |
 | `/etc/portage/repos.conf/bunny-<name>.conf` | One per repository in [`repositories`](config.md#repositories), with its git address from Gentoo's list. Removed when the repository leaves your config. A single-file `repos.conf` is moved into the folder as `00-yours.conf`. |
 | `/var/db/repos/<name>` | The repositories' files, downloaded with `emaint sync`. |

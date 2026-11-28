@@ -864,7 +864,8 @@ new is doing it through bunny.
 - [ ] **The installer on the integrated GPU** (agreed): the live USB and the
       graphical installer use the integrated graphics; Nvidia is set up on
       the installed system.
-- [ ] **Graphics cards in bunny.toml, before the G16 week.** The
+- [~] **Graphics cards in bunny.toml, before the G16 week.** (`[hardware]`,
+      written into `zz-bunny` rather than a separate `00video_cards`.) The
       maintainer's working Gentoo setup followed the Gentoo wiki
       (NVIDIA/nvidia-drivers): `*/* VIDEO_CARDS: -* nvidia` in
       `package.use/00video_cards`, plus CUDA. bunny.toml can't say that yet:
@@ -879,7 +880,8 @@ new is doing it through bunny.
       and power saving working); `-* nvidia` alone suits a desktop. This is a
       slice of the `make.conf`-in-bunny.toml work, pulled forward because the
       G16 week needs it.
-- [ ] **CPU flags (`CPU_FLAGS_X86`) in `[hardware]`**, same shape as
+- [~] **CPU flags (`CPU_FLAGS_X86`) in `[hardware]`** (an explicit list for
+      now, suggested by `bunny hardware`; `"auto"` later), same shape as
       `video_cards` and the same gap today (Gentoo's Handbook writes
       `cpuid2cpuflags` output to `package.use/00cpu-flags` as a `*/*` line).
       Plan: `cpu_flags = "auto"` runs `cpuid2cpuflags` and writes the file;

@@ -23,6 +23,8 @@ pub struct Plan {
     pub use_changes: Vec<UseChange>,
     /// Packages whose accepted keywords (testing versions) would change.
     pub keyword_changes: Vec<UseChange>,
+    /// Graphics cards and CPU features (`[hardware]`) that would change.
+    pub hardware_changes: Vec<crate::hardware::Change>,
     /// Repositories to add (in the config, not set up yet).
     pub add_repositories: Vec<String>,
     /// Repositories bunny set up that the config no longer lists.
@@ -93,6 +95,7 @@ impl Plan {
             && self.remove_packages.is_empty()
             && self.use_changes.is_empty()
             && self.keyword_changes.is_empty()
+            && self.hardware_changes.is_empty()
             && self.add_repositories.is_empty()
             && self.remove_repositories.is_empty()
             && !self.check_after_sync
@@ -128,6 +131,11 @@ impl Plan {
             let names: Vec<_> = self.use_changes.iter().map(|c| short(&c.atom)).collect();
             parts.push(format!("USE flags for {}", names.join(", ")));
         }
+        parts.extend(
+            self.hardware_changes
+                .iter()
+                .map(|c| c.group.plain().to_string()),
+        );
         if !self.keyword_changes.is_empty() {
             let names: Vec<_> = self
                 .keyword_changes
@@ -290,6 +298,25 @@ impl Plan {
                 );
             }
             out.push('\n');
+        }
+
+        if !self.hardware_changes.is_empty() {
+            out.push_str("Graphics cards and CPU features ([hardware]):\n");
+            for change in &self.hardware_changes {
+                let _ = writeln!(
+                    out,
+                    "  ~ {} ({}): {} → {}",
+                    change.group.plain(),
+                    change.group.portage(),
+                    crate::hardware::show(&change.from),
+                    change.render_to()
+                );
+            }
+            out.push_str(
+                "    Packages that use them (Mesa, video codecs, crypto libraries…) are rebuilt\n    \
+                 to match. Settings that differ from Gentoo's prebuilt packages mean those\n    \
+                 packages compile on this computer instead of downloading.\n\n",
+            );
         }
 
         if !self.keyword_changes.is_empty() {
@@ -567,6 +594,10 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
             unknown_packages(root, &to_add)
         },
         keyword_changes: keyword_changes(config, root),
+        hardware_changes: {
+            let (all, bunnys) = import::read_package_use(root)?.hardware_groups();
+            crate::hardware::changes(&config.hardware, &all, &bunnys)
+        },
         add_repositories: wanted_repos
             .iter()
             .filter(|r| !configured.contains_key(*r))

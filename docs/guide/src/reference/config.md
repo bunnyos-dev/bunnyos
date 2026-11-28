@@ -211,6 +211,46 @@ profile also turns on about 70 other flags, like `pulseaudio`, `cups` and
 have an `elogind` flag of their own; if one needs it, turn it on in that
 program's `[pkg]` entry.
 
+## `[hardware]`
+
+This computer's graphics cards and CPU features: Gentoo's `VIDEO_CARDS` and
+`CPU_FLAGS_X86`. Usually in the [host file](#host-files); `bunny hardware`
+suggests both. A task-by-task walk-through is in
+[Graphics cards and CPU features](../tasks/hardware.md).
+
+```toml
+[hardware]
+video_cards = ["intel", "nvidia"]
+cpu_flags = ["aes", "avx", "avx2", "sse4_2"]
+```
+
+| Setting | Default | What it does |
+|---|---|---|
+| `video_cards` | not managed | Gentoo's `VIDEO_CARDS` values (`intel`, `nvidia`, `amdgpu`, `radeonsi`, `nouveau`, `virgl`…), the **whole list**: bunny writes `*/* VIDEO_CARDS: -* intel nvidia`, so Gentoo's defaults don't apply. `[]` means no graphics drivers (`-*` alone). |
+| `cpu_flags` | not managed | Gentoo's `CPU_FLAGS_X86` values, as `cpuid2cpuflags` prints them, **added to** Gentoo's defaults: `*/* CPU_FLAGS_X86: aes avx …`. `[]` writes nothing. |
+
+- Values are lowercase letters, digits and `_`; `bunny check` finds typos in
+  that shape and names listed twice, not values Gentoo doesn't know.
+- The lines go first in bunny's package.use file
+  (`/etc/portage/package.use/zz-bunny`), so a package's own `[pkg]` flags
+  (`video_cards_nvidia`, say) still win. make.conf isn't changed.
+- A setting that's left out isn't managed: bunny writes no line for it, and
+  lines of your own in package.use keep working (they're kept word for word
+  in `00-bunny-kept`). Once `[hardware]` sets it, your line moves to the
+  backup and bunny's replaces it. Taking a setting out of `[hardware]` again
+  removes bunny's line, so Gentoo's defaults apply.
+- In the host file, each setting wins over the main config's on its own:
+  a host file with only `video_cards` keeps the main config's `cpu_flags`.
+- `bunny plan` shows a change as
+  `~ graphics cards (VIDEO_CARDS): nvidia → intel nvidia`; a list that adds
+  to Gentoo's defaults reads `Gentoo's defaults + …`. `bunny diff` and
+  `bunny status` count it too. The switch rebuilds what uses them
+  (`emerge --newuse`), which can mean compiling packages that would otherwise
+  be downloaded prebuilt.
+- `bunny import` reads `*/* VIDEO_CARDS:` and `*/* CPU_FLAGS_X86:` lines into
+  `[hardware]`, and suggests make.conf's `VIDEO_CARDS="…"` and
+  `CPU_FLAGS_X86="…"` as comments.
+
 ## `[dev]`
 
 Developer mode, for people testing Bunny Linux: records every command and sends
@@ -321,6 +361,7 @@ A host file can have:
 | `packages` | Added to the main list. A package in both is fine. |
 | `services` | Added to the main list. |
 | `[pkg."category/name"]` | USE flags for this computer. For a package in both files, the host file's entry wins. |
+| `[hardware]` | Graphics cards and CPU features (see [`[hardware]`](#hardware)). Each setting here wins over the main config's. |
 | `[machine]` | A record of how `bunny install` set up the disk: `disk`, `encrypted`, `efi_uuid`, `root_uuid`, `luks_uuid`, `home_disk`, `swap`, `hibernate`, `timezone`, `keymap`. bunny reads it but never changes disks from it. |
 
 `bunny install` writes one with what the computer needs to start (the kernel,

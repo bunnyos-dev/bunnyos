@@ -15,6 +15,7 @@ mod emerge;
 mod explain;
 mod finish_undo;
 mod glsa;
+mod hardware;
 mod helper;
 mod import;
 mod init;
@@ -101,6 +102,12 @@ enum Command {
         #[arg(default_value = "/etc/bunny/bunny.toml")]
         config: PathBuf,
         /// System root to compare against (for testing against another system)
+        #[arg(long, default_value = "/")]
+        root: PathBuf,
+    },
+    /// Suggest a [hardware] block (graphics cards, CPU features) for this computer (changes nothing)
+    Hardware {
+        /// System root to look at (for testing against another system)
         #[arg(long, default_value = "/")]
         root: PathBuf,
     },
@@ -422,6 +429,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             })
         }
         Command::Diff { config, root } => diff_cmd(&config, &root),
+        Command::Hardware { root } => commands::hardware_cmd(&root),
         Command::Helper { args } => {
             let args: Vec<&str> = args.iter().map(String::as_str).collect();
             let cmd = helper::command(&args);

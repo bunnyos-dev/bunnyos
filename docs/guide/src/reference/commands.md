@@ -15,6 +15,7 @@ That's useful for testing.
 | `bunny diff [config]` | Your config and your system side by side, and how to fix each difference either way. Exits 1 if they differ. |
 | `bunny check [config]` | Finds mistakes in the config and says how to fix each. |
 | `bunny plan [config]` | Shows what a switch would change: packages, USE flags, services, packages that don't exist, and differences from `bunny.lock`. Needs no admin rights, but where `/boot` can only be read as root (encrypted installs, whose `/boot` is the EFI partition), the boot menu isn't checked and it says so: run `sudo bunny plan` to include it. |
+| `bunny hardware` | Looks at the graphics chips (`lspci -nn`, or `/sys/class/drm`) and the processor (`cpuid2cpuflags`, if installed) and prints a [`[hardware]`](config.md#hardware) block to paste into this computer's host file, with notes for NVIDIA and for CPU features. |
 | `bunny search <words>` | Searches package names and descriptions. Marks installed ones. |
 | `bunny rollback list` / `bunny generations` | Lists saved generations, numbered, with what each was saved before. |
 | `bunny explain [file]` | Explains an emerge message. Without a file, paste it and press Ctrl+D. |

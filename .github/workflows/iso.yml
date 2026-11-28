@@ -96,13 +96,21 @@ jobs:
           timeout 600 qemu-system-x86_64 $accel -m 2048 -nographic -no-reboot \
             -cdrom "dist/${{ steps.name.outputs.iso }}" \
             -kernel "$RUNNER_TEMP/vmlinuz" -initrd "$RUNNER_TEMP/initramfs.img" \
-            -append "root=live:CDLABEL=BUNNY rd.live.image rd.live.overlay.overlayfs=1 console=ttyS0" \
+            -append "root=live:CDLABEL=BUNNY rd.live.image rd.overlay console=ttyS0" \
             > boot.log 2>&1 &
           qemu=$!
           for _ in $(seq 1 120); do
             # "Starting local" is the last service of the default runlevel.
             if grep -qE "Starting (local|DHCP Client Daemon)" boot.log; then
               echo "✓ The live system started (OpenRC is starting services)."
+              # A boot option dracut has renamed still works, but warns on
+              # every start; catch it here instead of on someone's screen.
+              if grep -q "is deprecated" boot.log; then
+                echo "✗ The startup image warned about a deprecated boot option:"
+                grep "is deprecated" boot.log
+                kill "$qemu" 2>/dev/null || true
+                exit 1
+              fi
               if [ "${{ steps.name.outputs.preview }}" = 1 ]; then
                 sudo test -f "$WORK/root/etc/bunny-preview.toml" \
                   || { echo "✗ A preview image without /etc/bunny-preview.toml"; exit 1; }

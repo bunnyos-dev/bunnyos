@@ -58,20 +58,23 @@ desktop)
 	;;
 binhost)
 	# Which flags Gentoo's prebuilt packages were built with (its index).
-	emerge --pretend --getbinpkg app-misc/tmux >/dev/null 2>&1
-	idx=$(find "$lab/binhost" -name Packages | head -1)
-	echo "index: $idx ($(grep -c '^CPV:' "$idx") packages)"
-	grep -E '^(PROFILE|USE|ARCH|CHOST|CFLAGS):' "$idx" | head -8
-	for p in xfce-base/libxfce4ui x11-libs/gtk+ gui-libs/gtk dev-qt/qtbase dev-qt/qtdeclarative \
-		media-libs/mesa x11-libs/cairo media-libs/freetype media-libs/libglvnd \
-		gui-libs/wlroots x11-libs/libxkbcommon net-wireless/wpa_supplicant; do
-		echo "== $p"
-		awk -v p="$p" 'BEGIN{RS=""} $0 ~ "\nCPV: "p"-[0-9]" {
-			for (i=1;i<=NF;i++) if ($i=="CPV:"||$i=="USE:") {}
-			match($0, /CPV: [^\n]*/); c=substr($0,RSTART,RLENGTH)
-			match($0, /\nUSE: [^\n]*/); u=substr($0,RSTART+1,RLENGTH-1)
-			print "  " c; print "    " u }' "$idx" | head -12
-	done
+	curl -fsSL -o "$lab/Packages" https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages
+	python3 - "$lab/Packages" <<'PY'
+import re, sys
+text = open(sys.argv[1]).read()
+blocks = text.split("\n\n")
+print("header:", "; ".join(l for l in blocks[0].splitlines() if l.split(":")[0] in ("PROFILE","USE","ARCH","PACKAGES","TIMESTAMP")))
+want = ["xfce-base/libxfce4ui","x11-libs/gtk+","gui-libs/gtk","dev-qt/qtbase","dev-qt/qtdeclarative",
+        "media-libs/mesa","x11-libs/cairo","media-libs/freetype","gui-libs/wlroots",
+        "x11-libs/libxkbcommon","net-wireless/wpa_supplicant","media-video/ffmpeg","dev-qt/qtwayland"]
+for w in want:
+    print("==", w)
+    for b in blocks[1:]:
+        f = dict(l.split(": ",1) for l in b.splitlines() if ": " in l)
+        cpv = f.get("CPV","")
+        if re.match(re.escape(w)+r"-\d", cpv):
+            print("  ", cpv, "| USE:", f.get("USE",""))
+PY
 	;;
 search)
 	guru

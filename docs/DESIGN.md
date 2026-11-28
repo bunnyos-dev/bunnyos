@@ -402,6 +402,11 @@ when nothing is set and both are installed).
 7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
    said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
+   OpenRC's own output (`rc-update`, `rc-service`, also for the console
+   font) goes to `/var/log/bunny/<time>-services.log` instead of the screen
+   (`apply::services`); bunny prints `✓ Started <name>; it starts at every
+   boot too.`, and a failure's note points to the log. `--verbose` shows it
+   live.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
 commands are only printed.

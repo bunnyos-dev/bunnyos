@@ -26,6 +26,7 @@ mod notes;
 mod overlays;
 mod plan;
 mod portage;
+mod profile;
 mod progress;
 mod repo;
 mod rollback;

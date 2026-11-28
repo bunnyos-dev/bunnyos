@@ -180,6 +180,12 @@ pub fn switch(
         let _ = drop_snapshot(runner, &mut outcome);
         return Err(err);
     }
+    // 2. The Gentoo profile (`[system] profile`), before the package files,
+    //    so emerge plans with the new defaults. The old link is kept in the
+    //    backup, so a cancelled switch puts it back.
+    if let crate::profile::Wanted::Change(change) = &plan.profile {
+        crate::profile::apply(root, change, &outcome.backup_dir)?;
+    }
     // 2–3. package.use, package.accept_keywords and the world file, each
     //      backed up first.
     write_package_files(config, root, &outcome)?;

@@ -76,6 +76,9 @@ a minor version can change how things work).
   base system).
 - After turning on `[desktop]`, bunny says to restart once (logging out
   wasn't enough for a desktop to take over the screen and keyboard).
+- `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
+  and desktop profiles from bunny.toml. New installs say `"minimal"`;
+  `bunny import` records which one a system uses.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

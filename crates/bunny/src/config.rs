@@ -184,6 +184,10 @@ pub struct System {
     pub init: Init,
     #[serde(default = "default_true")]
     pub multilib: bool,
+    /// Gentoo's plain profile ("minimal") or its desktop one ("desktop").
+    /// Not set: bunny leaves the profile as it is.
+    #[serde(default)]
+    pub profile: Option<crate::profile::Profile>,
 }
 
 impl Default for System {
@@ -191,6 +195,7 @@ impl Default for System {
         Self {
             init: Init::default(),
             multilib: true,
+            profile: None,
         }
     }
 }

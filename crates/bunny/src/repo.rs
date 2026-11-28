@@ -152,16 +152,25 @@ pub fn resolve(packages: &[Package], input: &str) -> Resolved {
     }
 }
 
-/// Names that start with, or contain, what was typed (the 3 closest).
+/// The 3 closest names: the same name in any category first (`app-misc/tree`
+/// → `app-text/tree`), then names that start with, or contain, what was
+/// typed.
 fn similar(packages: &[Package], name: &str) -> Vec<String> {
     let name = name.to_lowercase();
+    let mut found: Vec<String> = packages
+        .iter()
+        .filter(|p| p.short().to_lowercase() == name)
+        .map(|p| p.name.clone())
+        .collect();
+    found.sort();
     let stem: String = name.chars().take(name.chars().count().max(4) - 1).collect();
-    search(packages, &stem)
-        .into_iter()
-        .filter(|p| p.short().contains(&stem))
-        .take(3)
-        .map(|p| p.name)
-        .collect()
+    for p in search(packages, &stem) {
+        if p.short().contains(&stem) && !found.contains(&p.name) {
+            found.push(p.name);
+        }
+    }
+    found.truncate(3);
+    found
 }
 
 #[cfg(test)]
@@ -188,6 +197,13 @@ pub mod tests {
                 "The PyPA recommended tool for installing Python packages",
             ),
             ("app-admin/pip-1.0", "Something else called pip"),
+            ("app-text/tree-2.2.1", "Lists directories recursively"),
+            ("dev-libs/tre-0.9.0", "Lightweight regex library"),
+            ("app-emacs/treepy-0.1.2", "Generic tree traversal for Emacs"),
+            (
+                "app-emacs/treemacs-3.1",
+                "A tree layout file explorer for Emacs",
+            ),
         ] {
             let path = cache.join(pf);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -214,15 +230,19 @@ pub mod tests {
             [
                 "app-admin/pip",
                 "app-editors/neovim",
+                "app-emacs/treemacs",
+                "app-emacs/treepy",
                 "app-misc/tmux",
+                "app-text/tree",
+                "dev-libs/tre",
                 "dev-python/pip",
                 "gui-apps/quickshell",
                 "www-client/firefox",
                 "www-client/firefox-bin"
             ]
         );
-        assert_eq!(all[2].description.as_deref(), Some("Terminal multiplexer"));
-        assert_eq!(all[4].description, None);
+        assert_eq!(all[4].description.as_deref(), Some("Terminal multiplexer"));
+        assert_eq!(all[8].description, None);
     }
 
     #[test]
@@ -269,5 +289,13 @@ pub mod tests {
             resolve(&all, "app-misc/tmuxx"),
             Resolved::NotFound(vec!["app-misc/tmux".into()])
         );
+        // From the Friday test: the same name in another category first.
+        match resolve(&all, "app-misc/tree") {
+            Resolved::NotFound(names) => {
+                assert_eq!(names[0], "app-text/tree", "{names:?}");
+                assert_eq!(names.len(), 3, "{names:?}");
+            }
+            other => panic!("{other:?}"),
+        }
     }
 }

@@ -1001,7 +1001,7 @@ and merged):
 - [ ] **The Kernel line after an undo is wider than 80 columns.**
 
 From the Friday test session (November 28; #141–#148 passed and merged):
-- [ ] **"Did you mean" misses the same name in another category**: `bunny add
+- [~] **"Did you mean" misses the same name in another category**: `bunny add
       app-misc/tree` suggested tre and two emacs packages, not app-text/tree.
       An exact name match in any category should come first.
 - [ ] **Developer mode's "couldn't send a report" line wraps mid-word**

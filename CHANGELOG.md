@@ -10,6 +10,8 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- "Did you mean" puts the same name in another category first:
+  `bunny add app-misc/tree` suggests app-text/tree.
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

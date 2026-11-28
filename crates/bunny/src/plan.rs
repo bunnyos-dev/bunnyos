@@ -58,6 +58,8 @@ pub struct Plan {
     /// Packages to compile instead of downloading (`prebuilt = false`),
     /// passed to emerge as `--usepkg-exclude`.
     pub compile_from_source: Vec<String>,
+    /// A change of Gentoo profile (`[system] profile`), or why not.
+    pub profile: crate::profile::Wanted,
 }
 
 /// The note shown after something `[desktop]` adds.
@@ -98,6 +100,7 @@ impl Plan {
             && self.security.is_empty()
             && self.boot.is_empty()
             && self.console_font.is_empty()
+            && !matches!(self.profile, crate::profile::Wanted::Change(_))
     }
 
     /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
@@ -107,6 +110,9 @@ impl Plan {
             name.rsplit('/').next().unwrap_or(name).to_string()
         };
         let mut parts: Vec<String> = Vec::new();
+        if let crate::profile::Wanted::Change(c) = &self.profile {
+            parts.push(format!("{} profile", c.to.name()));
+        }
         parts.extend(
             self.add_repositories
                 .iter()
@@ -166,6 +172,29 @@ impl Plan {
         let mut out = String::new();
         if self.is_empty() {
             out.push_str("✓ This system already matches your config. Nothing to do.\n");
+        }
+
+        match &self.profile {
+            crate::profile::Wanted::Change(c) => {
+                let _ = writeln!(out, "Profile: {} → {}", c.from.name(), c.to.name());
+                out.push_str(match c.to {
+                    crate::profile::Profile::Desktop => {
+                        "  Gentoo's desktop profile: the features most desktops need (Wayland, X,\n  \
+                         sound, D-Bus, …) are on by default. Packages whose features change are\n  \
+                         downloaded again (Gentoo prebuilds for this profile) or rebuilt.\n\n"
+                    }
+                    crate::profile::Profile::Minimal => {
+                        "  Gentoo's plain profile: only what a system needs is on by default.\n  \
+                         Packages whose features change are downloaded again or rebuilt;\n  \
+                         a desktop still works, with more settings in bunny.toml.\n\n"
+                    }
+                });
+            }
+            // A note, not ⚠: nothing is wrong with the system.
+            crate::profile::Wanted::Unsupported(why) => {
+                let _ = writeln!(out, "· Profile: {why}\n");
+            }
+            crate::profile::Wanted::Nothing => {}
         }
 
         if !self.add_repositories.is_empty() {
@@ -531,6 +560,7 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
     Ok(Plan {
         init_name: init.name(),
         compile_from_source: config.compile_from_source(),
+        profile: crate::profile::wanted(root, config.system.profile),
         unknown_packages: if check_after_sync {
             Vec::new()
         } else {

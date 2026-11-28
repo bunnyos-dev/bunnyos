@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
+  and desktop profiles from bunny.toml. New installs say `"minimal"`;
+  `bunny import` records which one a system uses.
 - An install over Wi-Fi comes up online: iwd starts at boot on computers that
   have Wi-Fi (from the host file, so a shared config still works on a
   desktop), and the network you joined on the USB is copied over.

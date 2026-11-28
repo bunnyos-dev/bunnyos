@@ -739,6 +739,82 @@ fn a_refusal_is_explained_from_the_helpers_data() {
 }
 
 #[test]
+fn the_profile_changes_before_emerge_and_comes_back_when_cancelled() {
+    const PLAIN: &str = "../../var/db/repos/gentoo/profiles/default/linux/amd64/23.0";
+    let link = |root: &std::path::Path| {
+        std::fs::read_link(root.join(crate::profile::LINK))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    };
+    let config = Config::parse(&format!("{CONFIG}\n[system]\nprofile = \"desktop\"\n")).unwrap();
+
+    // Said no at emerge's list: the profile goes back.
+    let root = fake_system();
+    std::os::unix::fs::symlink(PLAIN, root.path().join(crate::profile::LINK)).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert!(
+        plan.render().contains("Profile: minimal → desktop"),
+        "{}",
+        plan.render()
+    );
+    assert!(
+        plan.summary().contains("desktop profile"),
+        "{}",
+        plan.summary()
+    );
+    // A new profile changes features, so emerge rebuilds more than the plan
+    // listed: that's what makes it ask.
+    let list = "[binary  N    ] app-shells/zsh-5.9::gentoo\n\
+                [binary   R    ] dev-libs/glib-2.86.3::gentoo  USE=\"dbus*\"\n";
+    let mut runner = Scripted {
+        replies: vec![("--pretend", true, list.into())],
+        ..Scripted::default()
+    };
+    let result = switch(
+        &config,
+        root.path(),
+        &plan,
+        &mut runner,
+        &quiet(false, false),
+    );
+    assert!(result.unwrap_err().is::<super::Cancelled>());
+    assert_eq!(link(root.path()), PLAIN);
+
+    // Said yes: emerge plans with the desktop profile already in place.
+    let root = fake_system();
+    std::os::unix::fs::symlink(PLAIN, root.path().join(crate::profile::LINK)).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Scripted {
+        replies: vec![("--pretend", true, list.into())],
+        ..Scripted::default()
+    };
+    switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap();
+    assert_eq!(link(root.path()), format!("{PLAIN}/desktop"));
+    // Nothing left to do for it afterwards.
+    assert!(matches!(
+        plan::make(&config, root.path()).unwrap().profile,
+        crate::profile::Wanted::Nothing
+    ));
+}
+
+#[test]
+fn a_new_profile_alone_runs_emerge() {
+    // Nothing else changes, but the profile's defaults do: emerge has to
+    // bring the packages in line, or the system only says "desktop".
+    let plan = Plan {
+        profile: crate::profile::Wanted::Change(crate::profile::Change {
+            from: crate::profile::Profile::Minimal,
+            to: crate::profile::Profile::Desktop,
+            target: "../../var/db/repos/gentoo/profiles/default/linux/amd64/23.0/desktop".into(),
+        }),
+        ..Plan::default()
+    };
+    assert!(super::needs_emerge(&plan, &opts()));
+    assert!(!super::needs_emerge(&Plan::default(), &opts()));
+}
+
+#[test]
 fn a_refusal_the_resolver_can_fix_asks_for_its_settings() {
     let root = fake_system();
     let world = portage::world_path(root.path());

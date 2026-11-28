@@ -180,6 +180,12 @@ pub fn switch(
         let _ = drop_snapshot(runner, &mut outcome);
         return Err(err);
     }
+    // 2. The Gentoo profile (`[system] profile`), before the package files,
+    //    so emerge plans with the new defaults. The old link is kept in the
+    //    backup, so a cancelled switch puts it back.
+    if let crate::profile::Wanted::Change(change) = &plan.profile {
+        crate::profile::apply(root, change, &outcome.backup_dir)?;
+    }
     // 2–3. package.use, package.accept_keywords and the world file, each
     //      backed up first.
     write_package_files(config, root, &outcome)?;
@@ -331,6 +337,17 @@ fn write_package_files(config: &Config, root: &Path, outcome: &Outcome) -> Resul
     Ok(())
 }
 
+/// Whether the switch has to run emerge: something to install, other
+/// features or versions, or a new profile (its defaults change features,
+/// so packages are downloaded again or rebuilt to match).
+fn needs_emerge(plan: &Plan, opts: &Options) -> bool {
+    opts.update_all
+        || !plan.add_packages.is_empty()
+        || !plan.use_changes.is_empty()
+        || !plan.keyword_changes.is_empty()
+        || matches!(plan.profile, crate::profile::Wanted::Change(_))
+}
+
 /// Step 4: emerge installs and updates, quietly (bunny's summary and
 /// progress line) or, with `--verbose` or a test root, with its own output.
 fn install_and_update(
@@ -340,10 +357,7 @@ fn install_and_update(
     opts: &Options,
     outcome: &mut Outcome,
 ) -> Result<()> {
-    let needs_emerge = opts.update_all
-        || !plan.add_packages.is_empty()
-        || !plan.use_changes.is_empty()
-        || !plan.keyword_changes.is_empty();
+    let needs_emerge = needs_emerge(plan, opts);
     if needs_emerge && !opts.verbose && !runner.dry() {
         install_quietly(root, plan, runner, opts, outcome)?;
     } else if needs_emerge {

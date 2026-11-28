@@ -63,9 +63,10 @@ Paste the message, then press **Ctrl+D**. Or save it to a file and run
 | keyword changes with `~amd64` | It's only available as a **testing** version. |
 | keyword changes with `9999` or `**` | ⚠ emerge wants **unreleased development code**. Don't accept it; bunny tells you how to find the real problem. |
 | "have been masked" | Gentoo **blocked it on purpose**; bunny shows Gentoo's reason. |
-| "slot conflict" | Two programs need **different versions** of the same thing. |
+| "slot conflict" / "skipped due to a dependency conflict" | Two programs need **different versions** of the same thing. Each conflict is shown on its own, with which version each program wants. When it's a prebuilt package wanting an older version, that's Gentoo's prebuilt packages being built at different times: `bunny update` usually fixes it within days, or compile that one package (`prebuilt = false`). |
 | `[blocks B]` | Two programs **can't be installed together**. |
 | "Fetch failed" | A **download failed**: check your connection, try later. |
+| `Traceback (most recent call last)` | **emerge itself crashed** (an error inside Portage, not your config), usually while downloading. Run the same command again; bunny shows Portage's one-line error, not the whole Python trace. |
 | "no ebuilds to satisfy" / "don't exist" | **No package by that name**, usually a typo. |
 
 If bunny doesn't recognise a message, it says so instead of guessing. Please

@@ -50,6 +50,12 @@ a minor version can change how things work).
 - After the kernel is put back following an undo from the boot menu, `bunny
   status`'s "(it had … from the version you went back from)" now names only
   the kernels that were taken out, not one that stayed.
+- When emerge crashes (a Python error inside Portage), bunny says so in plain
+  words and shows Portage's one-line error, instead of the last 20 lines of
+  the trace.
+- Slot conflicts are explained one by one, with which version each program
+  wants and whether it's prebuilt; a prebuilt package built against an older
+  version gets the right advice (update, or `prebuilt = false`).
 - When emerge needs settings changed before it can install something (USE
   flags, testing versions), bunny now works them all out in one go, the way
   you would by hand round after round, and asks once: "Add these to

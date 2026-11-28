@@ -102,6 +102,25 @@ helper-resolve|helper-resolve-desktop)
 		sys-auth/elogind sys-apps/dbus gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar \
 		| tail -1 | python3 -m json.tool
 	;;
+conflict)
+	# The state the resolver reached on the minimal profile just before it
+	# matched Qt's flags, without --autounmask: emerge's own messages.
+	guru
+	put package.use/lab 'sys-auth/pambase elogind'
+	put package.use/lab 'sys-auth/seatd elogind'
+	put package.accept_keywords/lab '*/*::guru ~amd64'
+	for line in 'xfce-base/libxfce4ui wayland' 'xfce-base/xfce4-panel wayland' 'x11-libs/gtk+ wayland' \
+		'xfce-base/libxfce4windowing wayland' 'dev-libs/libdbusmenu gtk3' 'media-libs/mesa wayland' \
+		'dev-qt/qtbase opengl vulkan wayland' 'dev-cpp/cpptrace unwind' 'x11-libs/cairo X' \
+		'media-libs/libglvnd X' 'media-libs/freetype harfbuzz' 'x11-libs/libxkbcommon X' \
+		'net-wireless/wpa_supplicant dbus'; do
+		put package.use/lab "$line"
+	done
+	put package.accept_keywords/lab 'dev-cpp/cpptrace ~amd64'
+	put package.accept_keywords/lab 'dev-libs/libdwarf ~amd64'
+	em --pretend --verbose sys-auth/elogind sys-apps/dbus gui-wm/mangowm gui-apps/quickshell \
+		x11-terms/kitty xfce-base/thunar
+	;;
 binhost)
 	# Which flags Gentoo's prebuilt packages were built with (its index).
 	curl -fsSL -o "$lab/Packages" https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages

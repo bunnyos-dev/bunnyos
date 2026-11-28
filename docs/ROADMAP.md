@@ -783,8 +783,9 @@ profile as well as a desktop one. Details: the G16 field notes.
       matching flags on packages that pin them), shows them once and adds
       them to bunny.toml. `prebuilt = false` for packages that must compile.
       Proven in the lab on the test machine (`tools/test-box/lab.sh`).
-- [ ] Explainer fixes from the G16: keyword masks reported as "couldn't
-      find" (#7), any-of (#8), slot conflicts (#9), Portage crashes (#5).
+- [~] Explainer fixes from the G16: slot conflicts one by one (#9), Portage
+      crashes (#5). Keyword masks (#7) and any-of (#8) are handled by the
+      resolver: it fixes them instead of only explaining them.
 - [ ] Small ones: iwd after a Wi-Fi install (#3), udev re-trigger after
       `[desktop]` (#4), doas.conf taking effect (#6), kitty terminfo (#11),
       the ISO attached to a release.

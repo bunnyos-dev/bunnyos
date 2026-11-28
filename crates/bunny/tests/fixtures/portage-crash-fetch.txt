@@ -1,0 +1,24 @@
+>>> Emerging binary (3 of 41) media-libs/freetype-2.14.1::gentoo
+>>> Fetching media-libs/freetype-2.14.1-1.gpkg.tar
+Exception in callback AsynchronousTask._exit_listener_cb()
+handle: <Handle AsynchronousTask._exit_listener_cb()>
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/asyncio/events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+  File "/usr/lib/python3.13/site-packages/_emerge/AsynchronousTask.py", line 230, in _exit_listener_cb
+    listener(self)
+  File "/usr/lib/python3.13/site-packages/_emerge/BinpkgFetcher.py", line 176, in _fetcher_exit
+    self._unlock_pkg()
+  File "/usr/lib/python3.13/site-packages/_emerge/BinpkgFetcher.py", line 251, in _unlock_pkg
+    self._lock_obj.unlock()
+  File "/usr/lib/python3.13/site-packages/portage/locks.py", line 398, in unlock
+    raise AssertionError("not locked")
+AssertionError: not locked
+Traceback (most recent call last):
+  File "/usr/lib/python-exec/python3.13/emerge", line 59, in <module>
+    retval = emerge_main()
+  File "/usr/lib/python3.13/site-packages/_emerge/main.py", line 1294, in emerge_main
+    return run_action(emerge_config)
+  File "/usr/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+urllib.error.URLError: <urlopen error [Errno -3] Temporary failure in name resolution>

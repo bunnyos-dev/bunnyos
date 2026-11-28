@@ -15,9 +15,12 @@ minimal system. It runs from a live USB.
   encrypted (LUKS2) with btrfs subvolumes for the system, your files, logs,
   caches, build space and generations.
 - A minimal system: OpenRC, Gentoo's prebuilt kernel (`gentoo-kernel-bin`)
-  and firmware, GRUB, networking (`dhcpcd` for Ethernet, `iwd` installed for
-  Wi-Fi), a system log, `sudo`, `git`, and bunny itself in
-  `/usr/local/bin/bunny`.
+  and firmware, GRUB, networking (`dhcpcd` for Ethernet; `iwd` for Wi-Fi,
+  started at boot on a computer that has Wi-Fi, from its host file), a
+  system log, `sudo`, `git`, kitty's terminal type (so SSH from kitty
+  works), and bunny itself in `/usr/local/bin/bunny`.
+- The Wi-Fi networks you joined on the USB, copied into the new system's
+  `/var/lib/iwd` (readable by root only), so it's online at its first start.
 - Your account, in the `wheel` group, with admin rights through sudo. The
   `root` account has no password (use sudo).
 - Your time zone and keyboard layout. The language is US English for now.

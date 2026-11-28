@@ -140,9 +140,11 @@ system has none.)
 It may say a font is no longer needed (the one something else pulled in
 before DejaVu); that's fine to remove.
 
-**Log out and back in** (`exit`), so your login goes through elogind (bunny
-reminds you at the end). `echo $XDG_RUNTIME_DIR` should now print
-`/run/user/1000`. Then, at the computer itself (not over SSH, which has no
+**Restart the computer once** (`sudo reboot`; bunny reminds you at the
+end), so your login goes through elogind and the desktop can take over the
+screen and keyboard. Logging out isn't enough the first time: started before
+a restart, Mango says "Could not take device". After it, `echo
+$XDG_RUNTIME_DIR` should print `/run/user/1000`. Then, at the computer itself (not over SSH, which has no
 screen), copy Mango's starting settings so you can change them, and start it:
 
 ```sh

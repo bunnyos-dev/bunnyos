@@ -13,6 +13,18 @@ a minor version can change how things work).
 - The live USB no longer shows dracut's warning about a renamed boot option
   (`rd.overlay` replaces `rd.live.overlay.overlayfs`), or an `insmod …`
   line, when it starts. "Show start-up messages" still shows everything.
+- New Guide page, "Finding and using USE flags" (Everyday tasks): how to read a
+  package's flags on packages.gentoo.org and the Gentoo wiki, check them with
+  emerge or equery, write them in bunny.toml and see what they change, with
+  Firefox as the example.
+- `bunny status` says "Updates: package list from 18 hours ago" instead of
+  "last checked 18 hours ago": it counts from when Gentoo made the list, which
+  read oddly on a system installed minutes before.
+- A switch that turns on services or the console font no longer shows OpenRC's
+  raw lines ("service consolefont added to runlevel boot", "WARNING: you are
+  stopping a boot service"). bunny says what it did in a line, and keeps
+  OpenRC's output in /var/log/bunny/<time>-services.log. `--verbose` still
+  shows it.
 - On a preview USB, an install from the graphical installer is now recorded
   and its recording kept in the new system, like an install from the
   terminal ("Keeping the recording of this install"), so `bunny report`

@@ -402,6 +402,11 @@ when nothing is set and both are installed).
 7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
    said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
+   OpenRC's own output (`rc-update`, `rc-service`, also for the console
+   font) goes to `/var/log/bunny/<time>-services.log` instead of the screen
+   (`apply::services`); bunny prints `✓ Started <name>; it starts at every
+   boot too.`, and a failure's note points to the log. `--verbose` shows it
+   live.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
 commands are only printed.
@@ -442,8 +447,12 @@ commands are only printed.
     `202501-03 [N] Title ( cat/pkg )`; `[A]`/`[U]` are skipped. Not
     installed: a neutral suggestion to add gentoolkit. Only on the real
     system.
-  - **Updates:** when the Gentoo tree was last synced (newest of
-    `metadata/timestamp.chk` and `.git/FETCH_HEAD`); older than 7 days is a ⚠.
+  - **Updates:** how old the Gentoo tree is (newest of
+    `metadata/timestamp.chk` and `.git/FETCH_HEAD`), shown as "package list
+    from 18 hours ago"; older than 7 days is a ⚠. Worded as the list's age,
+    not "last checked": emerge-webrsync keeps the snapshot's date on
+    `timestamp.chk`, so a brand-new install's list is already hours old, and
+    that age (not the download time) is what matters for security fixes.
     It doesn't run emerge to count pending updates, to stay instant.
 
 ### Config files (`/etc`)

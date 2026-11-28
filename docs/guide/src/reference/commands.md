@@ -18,7 +18,7 @@ That's useful for testing.
 | `bunny search <words>` | Searches package names and descriptions. Marks installed ones. |
 | `bunny rollback list` / `bunny generations` | Lists saved generations, numbered, with what each was saved before. |
 | `bunny explain [file]` | Explains an emerge message. Without a file, paste it and press Ctrl+D. |
-| `bunny import -o <file>` | Writes a config describing the system as it is now. Add `--force` to overwrite. |
+| `bunny import -o <file>` | Writes a config describing the system as it is now, creating the file's folder if it doesn't exist yet. It never overwrites a file unless you add `--force`. |
 
 ## Changing (show the plan and ask first)
 

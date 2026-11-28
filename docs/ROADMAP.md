@@ -988,7 +988,7 @@ and merged):
       messages about things the switch just did.
 - [ ] **The news tip shows twice** ("1 announcements", then "2
       announcements") in one switch, and "1 announcements" should be singular.
-- [ ] **`bunny import -o /etc/bunny/bunny.toml` fails when /etc/bunny doesn't
+- [~] **`bunny import -o /etc/bunny/bunny.toml` fails when /etc/bunny doesn't
       exist**, though `bunny status` suggests exactly that. Create the folder.
 - [ ] **"2 changes not applied yet: + tree, tidier boot menu, console font"**:
       the count doesn't match the list.

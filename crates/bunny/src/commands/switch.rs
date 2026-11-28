@@ -168,7 +168,7 @@ fn switch_with(
     for note in &outcome.notes {
         println!("{}", crate::progress::note(note));
     }
-    report_lock_change(&change);
+    report_lock_change(&change, false);
     print_messages(&outcome);
     print_tips(root, &outcome.tips);
     keep_applied(root, config);
@@ -370,32 +370,63 @@ pub(crate) fn fresh_tips(root: &Path, tips: &[String]) -> Vec<String> {
     out
 }
 
-pub(crate) fn report_lock_change(change: &lock::LockChange) {
+/// Prints what changed in bunny.lock: every package when `list` (after an
+/// update) or with `--verbose`, otherwise a count.
+pub(crate) fn report_lock_change(change: &lock::LockChange, list: bool) {
+    let verbose = VERBOSE.load(std::sync::atomic::Ordering::Relaxed);
+    print!("{}", lock_change_text(change, list || verbose));
+}
+
+/// What changed in bunny.lock: a one-line count, or (`list`) every
+/// package. A desktop install adds well over a hundred, and they're all in
+/// the lock file anyway.
+pub(crate) fn lock_change_text(change: &lock::LockChange, list: bool) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let path = change.path.display();
     if change.created {
-        println!(
-            "  Created {}: the exact versions installed now.",
-            change.path.display()
-        );
-        return;
+        let _ = writeln!(out, "  Created {path}: the exact versions installed now.");
+        return out;
     }
     let d = &change.drift;
     if d.is_empty() {
-        println!("  {} is unchanged.", change.path.display());
-        return;
+        let _ = writeln!(out, "  {path} is unchanged.");
+        return out;
     }
-    println!("  Updated {}:", change.path.display());
+    if !list {
+        let mut parts = Vec::new();
+        if !d.extra.is_empty() {
+            let n = d.extra.len();
+            parts.push(format!("+ {n} package{}", if n == 1 { "" } else { "s" }));
+        }
+        if !d.missing.is_empty() {
+            parts.push(format!("- {}", d.missing.len()));
+        }
+        if !d.changed.is_empty() {
+            parts.push(format!("~ {} updated", d.changed.len()));
+        }
+        if !d.repos.is_empty() {
+            let names: Vec<&str> = d.repos.iter().map(|(r, _, _)| r.as_str()).collect();
+            parts.push(format!("newer package tree ({})", names.join(", ")));
+        }
+        let _ = writeln!(out, "  Updated {path}: {}", parts.join(", "));
+        out.push_str("    The list is in the lock file; add --verbose to see it here.\n");
+        return out;
+    }
+    let _ = writeln!(out, "  Updated {path}:");
     for (name, old, new) in &d.changed {
-        println!("    ~ {name}: {old} → {new}");
+        let _ = writeln!(out, "    ~ {name}: {old} → {new}");
     }
     for (name, v) in &d.extra {
-        println!("    + {name} {v}");
+        let _ = writeln!(out, "    + {name} {v}");
     }
     for (name, v) in &d.missing {
-        println!("    - {name} {v}");
+        let _ = writeln!(out, "    - {name} {v}");
     }
     for (repo, old, new) in &d.repos {
-        println!("    ~ {repo} package tree: {old} → {new}");
+        let _ = writeln!(out, "    ~ {repo} package tree: {old} → {new}");
     }
+    out
 }
 
 pub(crate) fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Result<ExitCode> {
@@ -460,7 +491,8 @@ pub(crate) fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Resul
     for note in &outcome.notes {
         println!("{}", crate::progress::note(note));
     }
-    report_lock_change(&change);
+    // An update's point is the new versions, so it lists them.
+    report_lock_change(&change, true);
     print_messages(&outcome);
     print_tips(root, &outcome.tips);
     keep_applied(root, config);
@@ -469,7 +501,41 @@ pub(crate) fn update_cmd(config: &Path, yes: bool, root: &Path) -> anyhow::Resul
 
 #[cfg(test)]
 mod tests {
-    use super::fresh_tips;
+    use super::{fresh_tips, lock_change_text};
+    use crate::lock;
+
+    #[test]
+    fn the_lock_summary_counts_unless_verbose() {
+        let pkg = |n: usize| (format!("app-misc/p{n}"), "1.0".to_string());
+        let change = lock::LockChange {
+            path: "/etc/bunny/bunny.lock".into(),
+            created: false,
+            drift: lock::Drift {
+                extra: (0..140).map(pkg).collect(),
+                missing: vec![pkg(900), pkg(901)],
+                changed: vec![("app-misc/tmux".into(), "3.4".into(), "3.5".into())],
+                repos: vec![],
+            },
+        };
+        let short = lock_change_text(&change, false);
+        assert_eq!(
+            short,
+            "  Updated /etc/bunny/bunny.lock: + 140 packages, - 2, ~ 1 updated\n    \
+             The list is in the lock file; add --verbose to see it here.\n"
+        );
+        let long = lock_change_text(&change, true);
+        assert_eq!(long.lines().count(), 1 + 140 + 2 + 1, "{long}");
+        assert!(long.contains("    ~ app-misc/tmux: 3.4 → 3.5\n"));
+
+        let one = lock::LockChange {
+            drift: lock::Drift {
+                extra: vec![pkg(1)],
+                ..Default::default()
+            },
+            ..change
+        };
+        assert!(lock_change_text(&one, false).contains(": + 1 package\n"));
+    }
 
     #[test]
     fn unread_news_tip_shows_when_the_count_changes() {

@@ -21,6 +21,9 @@ a minor version can change how things work).
   (it said "2 changes" next to three).
 - The unread-news tip shows once per switch, with the latest count, and says
   "1 announcement" (not "1 announcements").
+- After a switch, bunny says how many packages went into or out of bunny.lock
+  (`+ 140 packages, - 2`) instead of listing every one; `--verbose` lists
+  them, and `bunny update` still shows each new version.
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

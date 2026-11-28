@@ -997,7 +997,7 @@ and merged):
 - [ ] **Undoing the very first switch leaves bunny.toml as edited** (status
       says "not applied"): there's no saved config from before the first
       switch. Keep a copy of the config as it was before the first switch.
-- [ ] **tools/bunny-vm.sh**: `stop` logs in as `you` on every VM (the monday
+- [~] **tools/bunny-vm.sh**: `stop` logs in as `you` on every VM (the monday
       VM's user is `test`): remember each VM's user. `put` copies only its
       first file; take several.
 - [ ] **The Kernel line after an undo is wider than 80 columns.**

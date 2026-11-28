@@ -531,6 +531,29 @@ impl Imported {
     }
 }
 
+/// Writes the imported config to `path`, creating its folder (usually
+/// /etc/bunny, which a Gentoo system doesn't have yet) if needed. Returns
+/// the folder when it was created. Refuses to overwrite unless `force`.
+pub fn save(path: &Path, text: &str, force: bool) -> Result<Option<PathBuf>> {
+    if path.exists() && !force {
+        anyhow::bail!(
+            "{} already exists, so it wasn't overwritten.\n  \
+             Pick another name, or add --force to replace it.",
+            path.display()
+        );
+    }
+    let folder = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty() && !p.exists())
+        .map(Path::to_path_buf);
+    if let Some(folder) = &folder {
+        std::fs::create_dir_all(folder)
+            .with_context(|| format!("Couldn't create the folder {}", folder.display()))?;
+    }
+    std::fs::write(path, text).with_context(|| format!("Couldn't write {}", path.display()))?;
+    Ok(folder)
+}
+
 fn list(out: &mut String, key: &str, items: &[String]) {
     let _ = writeln!(out, "{key} = [");
     for item in items {
@@ -647,6 +670,21 @@ mod tests {
             !text.contains("#   /etc/portage/package.use/00video_cards"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn saving_creates_the_folder_and_never_overwrites_by_accident() {
+        let root = tempfile::tempdir().unwrap();
+        // A Gentoo system has no /etc/bunny yet.
+        let path = root.path().join("etc/bunny/bunny.toml");
+        let created = save(&path, "packages = []\n", false).unwrap();
+        assert_eq!(created, Some(root.path().join("etc/bunny")));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "packages = []\n");
+
+        let err = save(&path, "x", false).unwrap_err().to_string();
+        assert!(err.contains("already exists"), "{err}");
+        assert_eq!(save(&path, "services = []\n", true).unwrap(), None);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "services = []\n");
     }
 
     #[test]

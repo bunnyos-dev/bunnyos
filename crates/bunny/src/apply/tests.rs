@@ -790,6 +790,22 @@ fn the_profile_changes_before_emerge_and_comes_back_when_cancelled() {
 }
 
 #[test]
+fn a_new_profile_alone_runs_emerge() {
+    // Nothing else changes, but the profile's defaults do: emerge has to
+    // bring the packages in line, or the system only says "desktop".
+    let plan = Plan {
+        profile: crate::profile::Wanted::Change(crate::profile::Change {
+            from: crate::profile::Profile::Minimal,
+            to: crate::profile::Profile::Desktop,
+            target: "../../var/db/repos/gentoo/profiles/default/linux/amd64/23.0/desktop".into(),
+        }),
+        ..Plan::default()
+    };
+    assert!(super::needs_emerge(&plan, &opts()));
+    assert!(!super::needs_emerge(&Plan::default(), &opts()));
+}
+
+#[test]
 fn quiet_removal_lists_and_always_asks() {
     let root = fake_system();
     let config = Config::parse("packages = []").unwrap();

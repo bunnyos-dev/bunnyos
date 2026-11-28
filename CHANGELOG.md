@@ -10,6 +10,8 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The unread-news tip shows once per switch, with the latest count, and says
+  "1 announcement" (not "1 announcements").
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

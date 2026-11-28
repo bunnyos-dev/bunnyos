@@ -986,7 +986,7 @@ and merged):
 - [ ] **Package messages bunny already took care of**: elogind says "not
       started from any runlevel" right after bunny started it. Leave out
       messages about things the switch just did.
-- [ ] **The news tip shows twice** ("1 announcements", then "2
+- [~] **The news tip shows twice** ("1 announcements", then "2
       announcements") in one switch, and "1 announcements" should be singular.
 - [ ] **`bunny import -o /etc/bunny/bunny.toml` fails when /etc/bunny doesn't
       exist**, though `bunny status` suggests exactly that. Create the folder.

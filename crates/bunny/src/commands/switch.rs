@@ -337,23 +337,35 @@ pub(crate) fn print_tips(root: &Path, tips: &[String]) {
 }
 
 /// The unread-news tip repeats on every switch until the news is read. Show
-/// it when the number of unread items changes, not every time.
+/// it when the number of unread items changes, not every time, and once per
+/// switch: emerge says it at the start and the end of each run (and a switch
+/// can run emerge more than once), so only the last count is kept. Other
+/// tips said twice are shown once too.
 pub(crate) fn fresh_tips(root: &Path, tips: &[String]) -> Vec<String> {
+    let is_news = |tip: &String| {
+        let first = tip.lines().next().unwrap_or("");
+        first.contains("announcements you haven't read")
+            || first.contains("announcement you haven't read")
+    };
+    let last_news = tips.iter().rposition(is_news);
     let seen_file = root.join("var/lib/bunny/news-seen");
     let seen = std::fs::read_to_string(&seen_file).unwrap_or_default();
-    let mut out = Vec::new();
-    for tip in tips {
-        let first = tip.lines().next().unwrap_or("");
-        if first.contains("announcements you haven't read")
-            || first.contains("announcement you haven't read")
-        {
+    let mut out: Vec<String> = Vec::new();
+    for (i, tip) in tips.iter().enumerate() {
+        if is_news(tip) {
+            if Some(i) != last_news {
+                continue;
+            }
+            let first = tip.lines().next().unwrap_or("");
             if seen.trim() == first.trim() {
                 continue;
             }
             let _ = std::fs::create_dir_all(root.join("var/lib/bunny"));
             let _ = std::fs::write(&seen_file, format!("{}\n", first.trim()));
         }
-        out.push(tip.clone());
+        if !out.contains(tip) {
+            out.push(tip.clone());
+        }
     }
     out
 }
@@ -470,5 +482,23 @@ mod tests {
         assert_eq!(fresh_tips(root.path(), &tips), vec![other.clone()]);
         // A new item arrived: shown again.
         assert_eq!(fresh_tips(root.path(), &[news(27)]).len(), 1);
+    }
+
+    #[test]
+    fn unread_news_tip_shows_once_per_switch() {
+        // From the Saturday test: "1 announcements", then "2 announcements"
+        // (emerge says it before and after, and the sync brought one more).
+        let root = tempfile::tempdir().unwrap();
+        let one = "ℹ Gentoo has 1 announcement you haven't read.\n  Tip: …".to_string();
+        let two = "ℹ Gentoo has 2 announcements you haven't read.\n  Tip: …".to_string();
+        let other = "ℹ Something else".to_string();
+        let tips = vec![one.clone(), other.clone(), two.clone(), other.clone()];
+        assert_eq!(fresh_tips(root.path(), &tips), vec![other.clone(), two]);
+        // The same count said twice in one run: once.
+        let root = tempfile::tempdir().unwrap();
+        assert_eq!(
+            fresh_tips(root.path(), &[one.clone(), one.clone()]),
+            vec![one]
+        );
     }
 }

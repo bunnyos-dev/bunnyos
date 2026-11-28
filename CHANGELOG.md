@@ -13,6 +13,10 @@ a minor version can change how things work).
 - `bunny status` says "Updates: package list from 18 hours ago" instead of
   "last checked 18 hours ago": it counts from when Gentoo made the list, which
   read oddly on a system installed minutes before.
+- On a preview USB, an install from the graphical installer is now recorded
+  and its recording kept in the new system, like an install from the
+  terminal ("Keeping the recording of this install"), so `bunny report`
+  can send it after restarting.
 - A rolling **Preview** pre-release on GitHub with the newest live USB image,
   rebuilt whenever a change on main touches it. The Guide points there until
   the first release.

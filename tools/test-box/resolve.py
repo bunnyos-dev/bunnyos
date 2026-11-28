@@ -79,6 +79,24 @@ def required_use_choices(out):
     return found
 
 
+def one_of_use(out):
+    """emerge's "One of the following packages is required" with
+    "(Change USE: +X)" options: [(cp, flag, on)] for the option chosen.
+    Prefers turning a flag on (keeps features working)."""
+    found = []
+    for m in re.finditer(r"!!! One of the following packages is required to complete your request:\n((?:- .*\n)+)", out):
+        options = []
+        for line in m.group(1).splitlines():
+            g = re.match(r"- (\S+?)::\S+ \(Change USE: ([^)]*)\)", line)
+            if g:
+                for f in g.group(2).split():
+                    options.append((cp_of(g.group(1)), f.lstrip("+-"), not f.startswith("-")))
+        on = [o for o in options if o[2]]
+        if on or options:
+            found.append((on or options)[0])
+    return found
+
+
 def slot_conflicts(out):
     """Parents that pin an older version of a package, both binaries.
 
@@ -168,6 +186,10 @@ def main():
             if flags.get(cp, {}).get(pick) is not True:
                 flags.setdefault(cp, {})[pick] = True
                 changed.append("%s %s (one of %s)" % (cp, pick, " ".join(options)))
+        for cp, name, on in one_of_use(out):
+            if flags.get(cp, {}).get(name) is None:
+                flags.setdefault(cp, {})[name] = on
+                changed.append("%s %s%s (emerge offered a choice)" % (cp, "" if on else "-", name))
         for parent in slot_conflicts(out):
             if parent not in exclude:
                 exclude.add(parent)

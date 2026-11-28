@@ -103,8 +103,9 @@ impl Plan {
             && !matches!(self.profile, crate::profile::Wanted::Change(_))
     }
 
-    /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
-    pub fn summary(&self) -> String {
+    /// The changes, each as a short phrase: "+ tmux", "start cronie",
+    /// "USE flags for firefox, mpv" (one phrase for all USE changes).
+    pub fn summary_parts(&self) -> Vec<String> {
         let short = |atom: &String| {
             let name = atom.split(':').next().unwrap_or(atom);
             name.rsplit('/').next().unwrap_or(name).to_string()
@@ -156,7 +157,21 @@ impl Plan {
         if !self.console_font.is_empty() {
             parts.push("console font".into());
         }
+        if self.boot.remove_entry {
+            parts.push("- boot menu undo".into());
+        }
+        parts
+    }
 
+    /// How many changes [`Plan::summary`] lists (before it shortens the
+    /// list), so a count next to it always matches.
+    pub fn change_count(&self) -> usize {
+        self.summary_parts().len()
+    }
+
+    /// A one-line summary, e.g. "+ tmux, + cronie, start cronie".
+    pub fn summary(&self) -> String {
+        let mut parts = self.summary_parts();
         const MAX: usize = 6;
         let extra = parts.len().saturating_sub(MAX);
         parts.truncate(MAX);
@@ -624,6 +639,35 @@ pub fn make(config: &Config, root: &Path) -> Result<Plan> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_change_count_matches_the_summary() {
+        // From the Saturday test: "2 changes not applied yet: + tree,
+        // tidier boot menu, console font" (three things listed).
+        let p = Plan {
+            add_packages: vec!["app-text/tree".into()],
+            boot: crate::boot::Changes {
+                install_module: Some(vec!["6.12.58".into()]),
+                ..Default::default()
+            },
+            console_font: vec![
+                crate::console_font::Step::Font,
+                crate::console_font::Step::Setting,
+            ],
+            ..Plan::default()
+        };
+        assert_eq!(p.summary(), "+ tree, boot menu undo, console font");
+        assert_eq!(p.change_count(), 3);
+
+        // Shortened summaries still count everything.
+        let many = Plan {
+            add_packages: (1..=9).map(|n| format!("app-misc/p{n}")).collect(),
+            ..Plan::default()
+        };
+        assert!(many.summary().ends_with("and 3 more"), "{}", many.summary());
+        assert_eq!(many.change_count(), 9);
+    }
+
     use super::*;
 
     #[test]

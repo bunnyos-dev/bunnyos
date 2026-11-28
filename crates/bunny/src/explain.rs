@@ -110,6 +110,7 @@ fn recognise(output: &str) -> Vec<(Kind, Explanation)> {
     add(Kind::Other, slot_conflicts(&lines));
     add(Kind::Other, blockers(&lines));
     add(Kind::Other, fetch_failures(&lines));
+    add(Kind::Other, portage_crash(&lines));
     add(Kind::Other, config_updates(&lines));
     add(Kind::Other, notices(&lines));
     found
@@ -825,48 +826,211 @@ fn skipped_world_entries(lines: &[&str]) -> Vec<Explanation> {
     .fix("check the name at https://packages.gentoo.org and fix it in your bunny.toml.")]
 }
 
+/// One package in a slot conflict: a version emerge has in mind, what kind
+/// it is, and who wants it.
+struct Contender {
+    version: String,
+    kind: &'static str,
+    wanted_by: Vec<(String, String, &'static str)>,
+}
+
+/// `(cat/pkg-1.0-1:0/0::gentoo, binary scheduled for merge)` → the
+/// package, its version (without a prebuilt package's build number) and
+/// what kind it is.
+fn read_entry(text: &str) -> Option<(String, String, &'static str)> {
+    let inside = text.trim().trim_start_matches('(');
+    let (cpv, rest) = inside.split_once(", ")?;
+    let kind = if rest.starts_with("binary") {
+        "prebuilt"
+    } else if rest.starts_with("installed") {
+        "installed"
+    } else {
+        "to compile"
+    };
+    let cpv = cpv.split("::").next().unwrap_or(cpv);
+    let cpv = cpv.split(':').next().unwrap_or(cpv);
+    // A prebuilt package's build number: `-1` after the version.
+    let cpv = if kind == "prebuilt" {
+        match cpv.rsplit_once('-') {
+            Some((head, n)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => head,
+            _ => cpv,
+        }
+    } else {
+        cpv
+    };
+    let name = base_name(cpv);
+    let version = cpv
+        .strip_prefix(&name)
+        .map(|v| v.trim_start_matches('-'))
+        .filter(|v| !v.is_empty())
+        .unwrap_or(cpv)
+        .to_string();
+    Some((name, version, kind))
+}
+
+/// Slot conflicts: emerge wants two versions of one package at once
+/// ("Multiple package instances within a single package slot", or a
+/// "skipped due to a dependency conflict" warning). Each package's block
+/// is its own explanation: which versions, of what kind, and who wants
+/// each. When a prebuilt package wants an older version than another
+/// prebuilt one brings, that's Gentoo's prebuilt packages being built at
+/// different times, and it says so.
 fn slot_conflicts(lines: &[&str]) -> Vec<Explanation> {
     let mut found = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
-        if !line.contains("Multiple package instances within a single package slot") {
+    let Some(start) = lines.iter().position(|l| {
+        l.contains("Multiple package instances within a single package slot")
+            || l.contains("have been skipped due to a dependency conflict")
+    }) else {
+        return found;
+    };
+    let skipped = lines[start].contains("skipped");
+    // Blocks: `cat/pkg:slot` at the start of a line, then its entries.
+    let mut i = start + 1;
+    while i < lines.len() {
+        let line = lines[i];
+        if line.starts_with("!!!") && i > start + 2
+            || line.starts_with("It may be possible")
+            || line.starts_with("NOTE:")
+        {
+            break;
+        }
+        let is_block = !line.starts_with(' ')
+            && line.contains('/')
+            && line.contains(':')
+            && !line.contains(' ');
+        if !is_block {
+            i += 1;
             continue;
         }
-        let following = &lines[i + 1..];
-        let package = following
-            .iter()
-            .map(|l| l.trim())
-            .find(|l| l.contains('/') && !l.starts_with("!!!") && !l.starts_with('('))
-            .map(base_name)
-            .unwrap_or_else(|| "a package".into());
-        let mut e = Explanation::new(
-            Severity::Problem,
+        let package = base_name(line);
+        let mut contenders: Vec<Contender> = Vec::new();
+        // "pulled in by": the lines below want this version. "conflicts
+        // with": they want another one.
+        let mut against = false;
+        i += 1;
+        while i < lines.len() && (lines[i].is_empty() || lines[i].starts_with(' ')) {
+            let l = lines[i].trim();
+            if l.starts_with('(') {
+                against = l.ends_with("conflicts with");
+                if let Some((_, version, kind)) = read_entry(l) {
+                    contenders.push(Contender {
+                        version,
+                        kind,
+                        wanted_by: Vec::new(),
+                    });
+                }
+            } else if let Some((wanted, rest)) = l.split_once(" required by (") {
+                if let Some((who, version, kind)) = read_entry(rest) {
+                    // `conflicts with` lists who wants another version than
+                    // the one above: that's a contender of its own.
+                    let asked = wanted
+                        .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
+                        .split('[')
+                        .next()
+                        .unwrap_or(wanted);
+                    let asked = asked
+                        .split(':')
+                        .next()
+                        .unwrap_or(asked)
+                        .strip_prefix(&package)
+                        .map(|v| v.trim_start_matches('-').trim_end_matches('*').to_string())
+                        .unwrap_or_default();
+                    let pinned = against
+                        && !matches!(contenders.last(),
+                            Some(c) if asked.is_empty() || c.version.starts_with(&asked));
+                    if pinned {
+                        contenders.push(Contender {
+                            version: if asked.is_empty() {
+                                "another version".into()
+                            } else {
+                                asked
+                            },
+                            kind: "",
+                            wanted_by: Vec::new(),
+                        });
+                    }
+                    if let Some(c) = contenders.last_mut() {
+                        c.wanted_by.push((who, version, kind));
+                    }
+                }
+            }
+            i += 1;
+        }
+        if contenders.len() < 2 {
+            continue;
+        }
+        let title = if skipped {
+            format!(
+                "Two versions of {} are wanted at once, so emerge left it out for now.",
+                short(&package)
+            )
+        } else {
             format!(
                 "Two packages need different, incompatible versions of {}.",
                 short(&package)
-            ),
+            )
+        };
+        let mut e = Explanation::new(
+            if skipped {
+                Severity::Warning
+            } else {
+                Severity::Problem
+            },
+            title,
         );
-        let mut requesters = Vec::new();
-        for l in following.iter().take(40) {
-            let Some((wanted, rest)) = l.trim().split_once(" required by (") else {
-                continue;
+        for c in &contenders {
+            let kind = if c.kind.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", c.kind)
             };
-            let who = base_name(rest.split_whitespace().next().unwrap_or(rest));
-            let version = wanted
-                .trim_start_matches(|c: char| {
-                    !c.is_ascii_alphanumeric() && c != '<' && c != '>' && c != '='
-                })
-                .split(':')
-                .next()
-                .unwrap_or(wanted);
-            e = e.detail(format!("• {} needs {version}", short(&who)));
-            requesters.push(short(&who).to_string());
+            let who: Vec<String> = c
+                .wanted_by
+                .iter()
+                .map(|(w, v, k)| format!("{} {v} ({k})", short(w)))
+                .collect();
+            if who.is_empty() {
+                e = e.detail(format!("• {} {}{kind}", short(&package), c.version));
+            } else {
+                e = e.detail(format!(
+                    "• {} {}{kind}, wanted by {}",
+                    short(&package),
+                    c.version,
+                    who.join(", ")
+                ));
+            }
         }
-        let fix = match requesters.as_slice() {
-            [a, b, ..] => format!(
-                "one of them is usually outdated. Update or remove {b} (or {a}),\n\
-                 then run `bunny switch` again."
-            ),
-            _ => "update or remove whichever of them is outdated, then try again.".into(),
+        // A prebuilt package pinned to an older version: Gentoo's prebuilt
+        // packages were built at different times.
+        let stale: Option<&(String, String, &str)> = contenders
+            .iter()
+            .skip(1)
+            .flat_map(|c| &c.wanted_by)
+            .find(|(_, _, k)| *k == "prebuilt");
+        let fix = if let Some((who, _, _)) = stale {
+            format!(
+                "Gentoo's prebuilt packages were built at slightly different times, so the\n\
+                 prebuilt {} still expects the other {}. Usually `bunny update` fixes it\n\
+                 within a few days. To fix it now, compile {} instead of downloading it:\n\
+                 [pkg.\"{who}\"]\n\
+                 prebuilt = false",
+                short(who),
+                short(&package),
+                short(who),
+            )
+        } else {
+            let names: Vec<String> = contenders
+                .iter()
+                .flat_map(|c| &c.wanted_by)
+                .map(|(w, _, _)| short(w).to_string())
+                .collect();
+            match names.as_slice() {
+                [a, b, ..] => format!(
+                    "one of them is usually outdated. Update or remove {b} (or {a}),\n\
+                     then run `bunny switch` again."
+                ),
+                _ => "update or remove whichever of them is outdated, then try again.".into(),
+            }
         };
         found.push(e.fix(fix));
     }
@@ -920,6 +1084,51 @@ fn fetch_failures(lines: &[&str]) -> Vec<Explanation> {
             .fix("check your connection and run the command again. If it keeps failing,\nthe server may be down; try again later.")
         })
         .collect()
+}
+
+/// emerge (Portage, which is written in Python) crashed with a Python
+/// error: a "Traceback" and an error line. That's a problem inside
+/// Portage, not in the config, and usually goes away when run again
+/// (most often a download that went wrong). The error line that matters
+/// is the last one, after the last traceback.
+fn portage_crash(lines: &[&str]) -> Vec<Explanation> {
+    let Some(last_tb) = lines
+        .iter()
+        .rposition(|l| l.starts_with("Traceback (most recent call last):"))
+    else {
+        return Vec::new();
+    };
+    // The error: the first line after the traceback that isn't part of it
+    // (its lines are indented: `  File "…"` and the code below each).
+    let error = lines[last_tb + 1..]
+        .iter()
+        .find(|l| !l.is_empty() && !l.starts_with(' '))
+        .map(|l| l.trim().to_string());
+    let downloading = lines.iter().any(|l| {
+        l.contains("Fetching ")
+            || l.contains("BinpkgFetcher")
+            || l.contains("urlopen")
+            || l.contains("URLError")
+            || l.contains("Connection")
+    });
+    let mut e = Explanation::new(
+        Severity::Problem,
+        "emerge itself crashed: an error inside Portage, not in your config.",
+    );
+    if downloading {
+        e = e.detail(
+            "It happened while downloading packages, so it's most likely the connection\n\
+             or Gentoo's download server having a moment.",
+        );
+    }
+    if let Some(error) = error {
+        e = e.detail(format!("Portage's error: {error}"));
+    }
+    vec![e.fix(
+        "run the same bunny command again: it usually works the second time, and\n\
+         anything already installed stays installed. If it keeps happening, the full\n\
+         message is in the log (path below); please report it.",
+    )]
 }
 
 fn config_updates(lines: &[&str]) -> Vec<Explanation> {
@@ -1153,8 +1362,8 @@ mod tests {
         assert_eq!(
             e.details,
             [
-                "• curl needs >=dev-libs/openssl-3.0",
-                "• old-app needs =dev-libs/openssl-1.1*"
+                "• openssl 3.3.2 (to compile), wanted by curl 8.10.1 (installed)",
+                "• openssl 1.1.1w (installed), wanted by old-app 2.0 (installed)"
             ]
         );
         assert!(e.fix.as_deref().unwrap().contains("old-app"));
@@ -1168,6 +1377,61 @@ mod tests {
             found[0].title,
             "fish and fishfetch can't be installed at the same time."
         );
+    }
+
+    #[test]
+    fn portage_crash_is_said_plainly() {
+        let found = explain(&fixture("portage-crash-fetch.txt"));
+        assert_eq!(found.len(), 1, "{found:#?}");
+        let shown = found[0].render();
+        assert!(shown.contains("emerge itself crashed"), "{shown}");
+        assert!(shown.contains("not in your config"), "{shown}");
+        assert!(shown.contains("while downloading packages"), "{shown}");
+        // The error that matters: after the last traceback, not the first.
+        assert!(
+            shown.contains("Portage's error: urllib.error.URLError"),
+            "{shown}"
+        );
+        assert!(!shown.contains("AssertionError"), "{shown}");
+        assert!(
+            shown.contains("run the same bunny command again"),
+            "{shown}"
+        );
+        // Not a wall of Python.
+        assert!(!shown.contains("File \""), "{shown}");
+    }
+
+    #[test]
+    fn each_slot_conflict_is_its_own_explanation() {
+        // Captured on the test machine: two separate conflicts, both from
+        // prebuilt packages built at different times. They used to be
+        // mixed into one list.
+        let found = explain(&fixture("slot-conflict-prebuilt.txt"));
+        assert_eq!(found.len(), 2, "{found:#?}");
+        let libclc = found[0].render();
+        assert!(libclc.contains("Two versions of libclc"), "{libclc}");
+        assert!(libclc.contains("libclc 23.1.6 (to compile)"), "{libclc}");
+        assert!(
+            libclc.contains("libclc 22, wanted by mesa_clc 26.2.7 (prebuilt)"),
+            "{libclc}"
+        );
+        assert!(libclc.contains("[pkg.\"dev-util/mesa_clc\"]"), "{libclc}");
+        let spirv = found[1].render();
+        assert!(spirv.contains("Two versions of spirv-tools"), "{spirv}");
+        assert!(
+            spirv.contains("spirv-tools 1.4.363.0 (prebuilt)"),
+            "{spirv}"
+        );
+        assert!(
+            spirv.contains("spirv-tools 1.4.357.0, wanted by glslang 1.4.357.0 (prebuilt)"),
+            "{spirv}"
+        );
+        assert!(
+            spirv.contains("built at slightly different times"),
+            "{spirv}"
+        );
+        assert!(spirv.contains("prebuilt = false"), "{spirv}");
+        assert!(!spirv.contains("libclc"), "{spirv}");
     }
 
     #[test]

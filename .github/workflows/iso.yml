@@ -2,12 +2,21 @@ name: ISO
 
 # Builds the Bunny Linux live USB image (tools/build-iso.sh) and checks that
 # it starts. Pushing a tag like v0.2.0 attaches the ISO and its SHA256 to
-# that GitHub Release. On pull requests that change the image, and when run
-# by hand, the ISO is kept as a download on the run's page instead.
+# that GitHub Release. A change on main that touches the image replaces the
+# rolling "Preview" pre-release (tag `preview`) with the new image, for
+# testers. On pull requests that change the image, and when run by hand, the
+# ISO is kept as a download on the run's page instead.
 
 on:
   push:
     tags: ["v*"]
+    branches: [main]
+    paths:
+      - ".github/workflows/iso.yml"
+      - "tools/build-iso.sh"
+      - "tools/iso/**"
+      - "crates/**"
+      - "Cargo.lock"
   pull_request:
     paths:
       - ".github/workflows/iso.yml"
@@ -18,6 +27,11 @@ on:
 
 permissions:
   contents: write
+
+# One preview at a time; a newer push to main replaces an older one in progress.
+concurrency:
+  group: iso-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
   iso:
@@ -82,13 +96,21 @@ jobs:
           timeout 600 qemu-system-x86_64 $accel -m 2048 -nographic -no-reboot \
             -cdrom "dist/${{ steps.name.outputs.iso }}" \
             -kernel "$RUNNER_TEMP/vmlinuz" -initrd "$RUNNER_TEMP/initramfs.img" \
-            -append "root=live:CDLABEL=BUNNY rd.live.image rd.live.overlay.overlayfs=1 console=ttyS0" \
+            -append "root=live:CDLABEL=BUNNY rd.live.image rd.overlay console=ttyS0" \
             > boot.log 2>&1 &
           qemu=$!
           for _ in $(seq 1 120); do
             # "Starting local" is the last service of the default runlevel.
             if grep -qE "Starting (local|DHCP Client Daemon)" boot.log; then
               echo "✓ The live system started (OpenRC is starting services)."
+              # A boot option dracut has renamed still works, but warns on
+              # every start; catch it here instead of on someone's screen.
+              if grep -q "is deprecated" boot.log; then
+                echo "✗ The startup image warned about a deprecated boot option:"
+                grep "is deprecated" boot.log
+                kill "$qemu" 2>/dev/null || true
+                exit 1
+              fi
               if [ "${{ steps.name.outputs.preview }}" = 1 ]; then
                 sudo test -f "$WORK/root/etc/bunny-preview.toml" \
                   || { echo "✗ A preview image without /etc/bunny-preview.toml"; exit 1; }
@@ -119,6 +141,30 @@ jobs:
           name: bunny-linux-live-preview
           path: dist/
           retention-days: 7
+      - name: Publish the preview (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISO: ${{ steps.name.outputs.iso }}
+        run: |
+          cat > preview-notes.md <<EOF
+          **Pre-alpha preview: for testing, not for everyday use yet.**
+
+          The newest live USB image, rebuilt from \`main\` ($(git rev-parse --short HEAD), $(date -u +%Y-%m-%d)) whenever a change touches it. It replaces the previous preview.
+
+          - Try it in a virtual machine first: [Testing Bunny Linux in a virtual machine](https://bunnyos-dev.github.io/bunnyos/reference/testing-in-a-vm.html).
+          - Installing: [Install Bunny Linux](https://bunnyos-dev.github.io/bunnyos/start/installing.html).
+          - Preview images turn on developer mode in the system they install: bunny keeps a recording of its own commands on that computer, and sends nothing unless you run \`bunny report\`. See [Developer mode](https://bunnyos-dev.github.io/bunnyos/reference/developer-mode.html).
+          - Check the download: \`sha256sum -c ${ISO}.sha256\`
+
+          What's changed since the last release: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md), under Unreleased.
+          EOF
+          # Delete and make again, so the tag moves to this commit.
+          gh release delete preview --cleanup-tag --yes 2>/dev/null || true
+          gh release create preview --prerelease --target "$GITHUB_SHA" \
+            --title "Preview (pre-alpha), $(date -u +%Y-%m-%d)" \
+            --notes-file preview-notes.md \
+            "dist/$ISO" "dist/$ISO.sha256"
       - name: Attach to the release
         if: github.ref_type == 'tag'
         env:

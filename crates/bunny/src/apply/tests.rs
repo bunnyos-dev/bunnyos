@@ -739,6 +739,75 @@ fn a_refusal_is_explained_from_the_helpers_data() {
 }
 
 #[test]
+fn a_refusal_the_resolver_can_fix_asks_for_its_settings() {
+    let root = fake_system();
+    let world = portage::world_path(root.path());
+    let world_before = std::fs::read_to_string(&world).unwrap();
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    let mut runner = Scripted {
+        replies: vec![("--pretend --update", false, fixture("keyword-testing.txt"))],
+        helper: vec![
+            (
+                "plan",
+                r#"{"ok": false, "reason": "portage couldn't work out a plan", "problems": [], "helper": 4}"#
+                    .into(),
+            ),
+            (
+                "resolve",
+                r#"{"ok": true, "resolved": true, "use": {"dev-qt/qtbase": {"wayland": true}}, "keywords": {"dev-qt/qtbase": "~amd64"}, "compile": [], "why": {}, "rounds": 2, "helper": 4}"#
+                    .into(),
+            ),
+        ],
+        ..Scripted::default()
+    };
+    let err = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true)).unwrap_err();
+    assert!(runner.commands.iter().any(|c| c == "(helper) resolve"));
+    let resolution = &err
+        .downcast_ref::<super::NeedsChanges>()
+        .expect("NeedsChanges")
+        .0;
+    assert!(resolution.use_flags["dev-qt/qtbase"]["wayland"]);
+    assert!(super::changed_nothing(&err));
+    // Nothing was installed, and the files were put back.
+    assert!(!runner
+        .commands
+        .iter()
+        .any(|c| c.starts_with("emerge --update") && !c.contains("--pretend")));
+    assert_eq!(std::fs::read_to_string(&world).unwrap(), world_before);
+}
+
+#[test]
+fn packages_to_compile_are_never_taken_prebuilt() {
+    let root = fake_system();
+    let config = Config::parse(&format!(
+        "{CONFIG}\n[pkg.\"dev-util/shader-slang\"]\nprebuilt = false\n"
+    ))
+    .unwrap();
+    let plan = plan::make(&config, root.path()).unwrap();
+    assert_eq!(plan.compile_from_source, ["dev-util/shader-slang"]);
+    let mut runner = Scripted::default();
+    let _ = switch(&config, root.path(), &plan, &mut runner, &quiet(true, true));
+    let c = &runner.commands;
+    assert!(
+        c.iter()
+            .any(|l| l == "(helper) plan --usepkg-exclude=dev-util/shader-slang"),
+        "{c:#?}"
+    );
+    let emerges: Vec<&String> = c
+        .iter()
+        .filter(|l| l.starts_with("emerge ") && l.contains("--update"))
+        .collect();
+    assert!(!emerges.is_empty(), "{c:#?}");
+    assert!(
+        emerges
+            .iter()
+            .all(|l| l.contains("--usepkg-exclude=dev-util/shader-slang")),
+        "{c:#?}"
+    );
+}
+
+#[test]
 fn quiet_removal_lists_and_always_asks() {
     let root = fake_system();
     let config = Config::parse("packages = []").unwrap();
@@ -1663,4 +1732,64 @@ fn a_failed_snapshot_counts_as_nothing_changed() {
     };
     let err = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap_err();
     assert!(changed_nothing(&err), "{err:#}");
+}
+
+#[test]
+fn a_quiet_switch_keeps_openrcs_lines_in_the_services_log() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/share/consolefonts/eurlatgr.psfu.gz", "font");
+    write(r, "etc/init.d/consolefont", "");
+    write(r, "etc/conf.d/consolefont", "consolefont=\"default8x16\"\n");
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = Scripted {
+        replies: vec![
+            ("--pretend --update", true, PRETEND.into()),
+            ("--quiet-build=y", true, INSTALL.into()),
+            (
+                "rc-update add",
+                true,
+                " * service sshd added to runlevel default\n".into(),
+            ),
+            (
+                "rc-service consolefont",
+                true,
+                " * WARNING: you are stopping a boot service\n \
+                 * Caching service dependencies ... [ ok ]\n"
+                    .into(),
+            ),
+            // sshd doesn't start: its note points to the log.
+            (
+                "rc-service sshd",
+                false,
+                " * ERROR: sshd failed to start\n".into(),
+            ),
+        ],
+        ..Scripted::default()
+    };
+    let outcome = switch(&config, r, &plan, &mut runner, &quiet(true, true)).unwrap();
+    let c = &runner.commands;
+    for wanted in [
+        "rc-update add sshd default",
+        "rc-service sshd start",
+        "rc-update add consolefont boot",
+        "rc-service consolefont restart",
+    ] {
+        assert!(c.iter().any(|l| l == wanted), "{wanted}: {c:#?}");
+    }
+    let log = r.join("var/log/bunny/20261116-120000-services.log");
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(text.contains("$ rc-update add sshd default\n * service sshd added"));
+    assert!(text.contains("WARNING: you are stopping a boot service"));
+    assert!(text.contains("$ rc-service sshd start\n * ERROR: sshd failed to start\n(failed)"));
+    let notes = outcome.notes.join("\n");
+    assert!(
+        notes.contains("\"sshd\" will start at boot, but didn't start now"),
+        "{notes}"
+    );
+    assert!(
+        notes.contains("What OpenRC printed is in /var/log/bunny/20261116-120000-services.log."),
+        "{notes}"
+    );
 }

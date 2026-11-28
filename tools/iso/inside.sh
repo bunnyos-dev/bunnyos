@@ -75,6 +75,30 @@ if grep -q ':/sbin/openrc ' /etc/inittab || ! grep -q ':/usr/local/sbin/bunny-op
     echo "Couldn't make OpenRC's start-up quiet." >&2; exit 1
 fi
 [ -x /usr/local/sbin/bunny-openrc ] || { echo "bunny-openrc is missing." >&2; exit 1; }
+# One line still showed on a quiet start: OpenRC's modules service loads
+# what /usr/lib/modules-load.d lists (iwd's pkcs8_key_parser) with
+# `modprobe --verbose`, which prints "insmod /lib/modules/…" itself, not
+# through OpenRC's quiet messages. The service reads /etc/conf.d/modules
+# first, so a modprobe there that leaves out --verbose when OpenRC is quiet
+# hides that line; errors still show, and "show start-up messages" is as
+# before. (Package files are left as they are.)
+cat >> /etc/conf.d/modules <<'MODULES'
+
+# Added for the Bunny Linux live USB: no "insmod …" lines on a quiet start
+# (EINFO_QUIET, set by bunny-openrc when the kernel line says quiet).
+modprobe() {
+	if [ "${EINFO_QUIET:-NO}" = "YES" ]; then
+		_bunny_n=$#
+		while [ "$_bunny_n" -gt 0 ]; do
+			[ "$1" = "--verbose" ] || set -- "$@" "$1"
+			shift
+			_bunny_n=$((_bunny_n - 1))
+		done
+	fi
+	command modprobe "$@"
+}
+MODULES
+grep -q '^modprobe()' /etc/conf.d/modules || { echo "Couldn't quiet the modules service." >&2; exit 1; }
 
 say "A console font that can draw ✓ ✗ ⚠"
 # The console's usual font has no ✓ or ✗ (bunny's ✓ showed as "v"). kbd's

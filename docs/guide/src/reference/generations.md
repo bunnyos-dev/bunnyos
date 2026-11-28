@@ -198,7 +198,9 @@ might not have. bunny makes up for that:
                   (it had 6.12.60-gentoo-dist from the version you went back from)
   ```
 
-  That line shows until your next change. If it couldn't be done, the note
+  The second line names only the kernels that were taken out of `/boot`; a
+  kernel both versions had isn't listed, and when nothing was taken out
+  there's no second line. That line shows until your next change. If it couldn't be done, the note
   stays, bunny tries again at the next start, and `bunny status` shows a
   **Kernel** warning with the reason; `sudo bunny finish-undo` tries again
   straight away. A note is only acted on while that undo is still the last
@@ -206,7 +208,17 @@ might not have. bunny makes up for that:
   dropped). Generations saved before bunny kept kernels, or before it had
   this service, leave `/boot` as it is; then `bunny status` warns if `/boot`'s
   kernel has no drivers in the restored system, and you can pick the older
-  kernel under "Advanced options" in the boot menu.
+  kernel under "Advanced options" in the boot menu. That check reads
+  `/boot`, which on an encrypted install only root can read: run as
+  yourself, `bunny status` says so instead of skipping it quietly:
+
+  ```
+  · Kernel        not checked, because /boot can only be read as root
+                  To check it too, run with sudo: sudo bunny status
+  ```
+
+  (under a Kernel line that's already there, it's the two indented lines
+  "Its drivers weren't checked…" instead).
 - **`bunny clean`** removes the lists of generations it deletes, and any
   copies no remaining generation uses.
 

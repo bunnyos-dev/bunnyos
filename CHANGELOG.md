@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny status` says "Updates: package list from 18 hours ago" instead of
+  "last checked 18 hours ago": it counts from when Gentoo made the list, which
+  read oddly on a system installed minutes before.
 - A switch that turns on services or the console font no longer shows OpenRC's
   raw lines ("service consolefont added to runlevel boot", "WARNING: you are
   stopping a boot service"). bunny says what it did in a line, and keeps

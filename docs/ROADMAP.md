@@ -600,7 +600,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       starts (so #106's quiet start doesn't cover them). Find what prints
       them (dracut's module loading, the kernel's log level) and quiet them
       on the normal entries only; "show start-up messages" keeps them.
-- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+- [~] **`bunny status` on a brand-new install says "Updates: last checked
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.

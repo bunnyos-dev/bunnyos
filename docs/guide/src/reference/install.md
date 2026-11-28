@@ -143,6 +143,16 @@ first `bunny switch` would show them as "(rebuild)". The install updates
 them from Gentoo's prebuilt packages instead, so the first switch has
 nothing to rebuild.
 
+**When something compiles anyway.** Everything the install itself puts in
+comes prebuilt from Gentoo's binary host; only Bunny Linux's own packages
+(`bunny-release`) are built on your computer, during the first switch. The
+exception is a package Gentoo marked stable in the last few hours: Gentoo
+builds the prebuilt copy after the package list already has the new
+version, so an install in that window compiles that one package (zlib 1.4's
+prebuilt copies appeared on November 23, 2026, the same day an install
+compiled it). Nothing is wrong when this happens, it only takes longer; an
+install a day later gets the prebuilt one.
+
 If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run
 `bunny install` again and it starts over from the beginning.

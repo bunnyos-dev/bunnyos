@@ -13,6 +13,43 @@ a minor version can change how things work).
 - After the kernel is put back following an undo from the boot menu, `bunny
   status`'s "(it had … from the version you went back from)" now names only
   the kernels that were taken out, not one that stayed.
+- `bunny status` run as yourself on an encrypted install (where only root can
+  read `/boot`) no longer skips the kernel check without a word: it says the
+  kernel wasn't checked and to run it with sudo or doas.
+- When the USB stick is the only disk `bunny install` finds, it now says the
+  stick is left out on purpose and no other disk was found, and what to
+  check: that the disk is fitted and turned on in the firmware (the NVMe/RAID
+  storage mode on many laptops), then `lsblk` to look.
+  The disk list also calls the stick "the USB stick you started from"
+  instead of "in use (mounted at /run/initramfs/live)".
+- Long notes after a switch or undo (like "If this change stops the system
+  from starting…") now wrap between words on an 80-column console, instead of
+  breaking a word in two at the screen's edge.
+- The bunny.toml a new install writes has a few commented-out examples (a
+  package, a service, a package's USE flags and keywords), each pointing to
+  its Guide page. Remove the # to use one.
+- The live USB no longer shows dracut's warning about a renamed boot option
+  (`rd.overlay` replaces `rd.live.overlay.overlayfs`), or an `insmod …`
+  line, when it starts. "Show start-up messages" still shows everything.
+- New Guide page, "Finding and using USE flags" (Everyday tasks): how to read a
+  package's flags on packages.gentoo.org and the Gentoo wiki, check them with
+  emerge or equery, write them in bunny.toml and see what they change, with
+  Firefox as the example.
+- `bunny status` says "Updates: package list from 18 hours ago" instead of
+  "last checked 18 hours ago": it counts from when Gentoo made the list, which
+  read oddly on a system installed minutes before.
+- A switch that turns on services or the console font no longer shows OpenRC's
+  raw lines ("service consolefont added to runlevel boot", "WARNING: you are
+  stopping a boot service"). bunny says what it did in a line, and keeps
+  OpenRC's output in /var/log/bunny/<time>-services.log. `--verbose` still
+  shows it.
+- On a preview USB, an install from the graphical installer is now recorded
+  and its recording kept in the new system, like an install from the
+  terminal ("Keeping the recording of this install"), so `bunny report`
+  can send it after restarting.
+- A rolling **Preview** pre-release on GitHub with the newest live USB image,
+  rebuilt whenever a change on main touches it. The Guide points there until
+  the first release.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

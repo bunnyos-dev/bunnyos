@@ -61,6 +61,9 @@ pub struct Status {
     /// Kernels in a separate /boot that this system has no modules (drivers)
     /// for, e.g. after undoing a kernel update from the boot menu.
     pub kernels_without_drivers: Vec<String>,
+    /// The kernel check above was skipped: /boot is separate and can only be
+    /// read as root (an encrypted install), and this isn't root.
+    pub kernels_unchecked: bool,
     /// What bunny did at start-up after the last undo from the boot menu
     /// (only while that undo is the last thing that happened).
     pub boot_undo: Option<crate::finish_undo::Record>,
@@ -162,6 +165,9 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
             })
     });
 
+    let (kernels_without_drivers, kernels_unchecked) =
+        kernel_check(root, separate_boot, crate::boot::boot_needs_root(root));
+
     let reboot_pending = root == Path::new("/")
         && std::fs::read_to_string("/proc/self/mountinfo")
             .ok()
@@ -181,19 +187,34 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
         tree_synced: tree_synced(root),
         // glsa-check reads the real system only.
         security: (root == Path::new("/")).then(crate::glsa::check),
-        kernels_without_drivers: if separate_boot {
-            crate::kernels::missing_modules(root, root)
-        } else {
-            Vec::new()
-        },
+        kernels_without_drivers,
+        kernels_unchecked,
         boot_undo,
         boot_undo_waiting,
         now,
     }
 }
 
-/// When the Gentoo package tree was last synced: the newest of the files a
-/// sync touches (rsync/webrsync write `timestamp.chk`, git updates `FETCH_HEAD`).
+/// The kernels in a separate /boot that have no drivers, and whether that
+/// check had to be skipped because /boot can only be read as root
+/// (`needs_root`, passed in so tests, which run as root, can check it).
+fn kernel_check(root: &Path, separate_boot: bool, needs_root: bool) -> (Vec<String>, bool) {
+    if !separate_boot {
+        (Vec::new(), false)
+    } else if needs_root {
+        (Vec::new(), true)
+    } else {
+        (crate::kernels::missing_modules(root, root), false)
+    }
+}
+
+/// How old the Gentoo package tree is: the newest of the files a sync
+/// touches (rsync/webrsync write `timestamp.chk`, git updates `FETCH_HEAD`).
+/// emerge-webrsync (what `bunny install` uses) keeps the snapshot's own date
+/// on `timestamp.chk`, so on a new install this is when Gentoo made the
+/// list, often the day before, not when it was downloaded. That's the age
+/// that matters for security fixes, so `status` shows it as the package
+/// list's age ("package list from 18 hours ago"), not as a last check.
 fn tree_synced(root: &Path) -> Option<i64> {
     let repo = root.join("var/db/repos/gentoo");
     ["metadata/timestamp.chk", ".git/FETCH_HEAD", ".git/HEAD"]
@@ -425,6 +446,7 @@ impl Status {
                     .as_ref()
                     .map(|_| "/boot may still have the newer kernel".to_string())
             });
+        let kernel_line = unfinished.is_some() || self.boot_undo.is_some();
         if let Some(problem) = unfinished {
             line(
                 &mut out,
@@ -476,6 +498,31 @@ impl Status {
                 }
             }
         }
+        if self.kernels_unchecked && self.boot_undo_waiting.is_none() {
+            let admin = crate::security::admin();
+            if kernel_line {
+                // Under the Kernel line that's already there.
+                more(
+                    &mut out,
+                    "Its drivers weren't checked: /boot can only be read as root.",
+                );
+                more(
+                    &mut out,
+                    &format!("To check them too, run with {admin}: {admin} bunny status"),
+                );
+            } else {
+                line(
+                    &mut out,
+                    "·",
+                    "Kernel",
+                    "not checked, because /boot can only be read as root",
+                );
+                more(
+                    &mut out,
+                    &format!("To check it too, run with {admin}: {admin} bunny status"),
+                );
+            }
+        }
         if !self.kernels_without_drivers.is_empty() && self.boot_undo_waiting.is_none() {
             line(
                 &mut out,
@@ -514,11 +561,16 @@ impl Status {
                         &mut out,
                         "⚠",
                         "Updates",
-                        &format!("last checked {ago}; there may be security fixes waiting"),
+                        &format!("package list from {ago}; there may be security fixes waiting"),
                     );
                     more(&mut out, "Run `bunny update`.");
                 } else {
-                    line(&mut out, "✓", "Updates", &format!("last checked {ago}"));
+                    line(
+                        &mut out,
+                        "✓",
+                        "Updates",
+                        &format!("package list from {ago}"),
+                    );
                 }
             }
         }
@@ -682,6 +734,7 @@ mod tests {
             tree_synced: Some(NOW - 2 * 86_400),
             security: Some(crate::glsa::Check::Done(vec![])),
             kernels_without_drivers: vec![],
+            kernels_unchecked: false,
             boot_undo: None,
             boot_undo_waiting: None,
             now: NOW,
@@ -720,7 +773,7 @@ mod tests {
         );
         assert!(!text.contains("UTC"), "{text}");
         assert!(text.contains("1 generation saved"));
-        assert!(text.contains("last checked 2 days ago"));
+        assert!(text.contains("package list from 2 days ago"));
         assert!(text.ends_with("Everything is in order.\n"));
     }
 
@@ -753,7 +806,7 @@ mod tests {
         let mut s = good();
         s.tree_synced = Some(NOW - 12 * 86_400);
         let text = s.render();
-        assert!(text.contains("last checked 12 days ago; there may be security fixes waiting"));
+        assert!(text.contains("package list from 12 days ago; there may be security fixes waiting"));
         assert!(text.contains("Run `bunny update`."));
         assert!(!s.all_good());
     }
@@ -844,6 +897,68 @@ mod tests {
         assert!(s.render().contains("bunny add app-portage/gentoolkit"));
         s.security = None;
         assert!(!s.render().contains("Security"));
+    }
+
+    #[test]
+    fn says_when_the_kernel_wasnt_checked() {
+        let mut s = good();
+        s.kernels_unchecked = true;
+        let text = s.render();
+        let admin = crate::security::admin();
+        assert!(
+            text.contains("· Kernel        not checked, because /boot can only be read as root"),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "To check it too, run with {admin}: {admin} bunny status"
+            )),
+            "{text}"
+        );
+        // Not a problem in itself, like a security check that couldn't run.
+        assert!(s.all_good());
+
+        // Under a Kernel line that's already there, not a second one.
+        s.boot_undo = Some(crate::finish_undo::Record {
+            to: "bunny-20261117-091500".into(),
+            at: "20261118-080000".into(),
+            kernels_before: vec!["6.12.60-gentoo-dist".into()],
+            kernels_after: vec!["6.12.58-gentoo-dist".into()],
+            problem: None,
+        });
+        let text = s.render();
+        assert_eq!(text.matches("Kernel").count(), 1, "{text}");
+        assert!(text.contains("Its drivers weren't checked"), "{text}");
+        assert!(text.contains(&format!("{admin} bunny status")), "{text}");
+
+        // An unfinished undo already says what to do; nothing more.
+        s.boot_undo = None;
+        s.boot_undo_waiting = Some("bunny-20261117-091500".into());
+        let text = s.render();
+        assert!(
+            !text.contains("not checked") && !text.contains("weren't checked"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn the_kernel_check_is_skipped_only_when_boot_is_root_only() {
+        let root = tempfile::tempdir().unwrap();
+        for f in [
+            "boot/vmlinuz-6.18.63-gentoo-dist-bin",
+            "boot/initramfs-6.18.63-gentoo-dist-bin.img",
+        ] {
+            std::fs::create_dir_all(root.path().join(f).parent().unwrap()).unwrap();
+            std::fs::write(root.path().join(f), "").unwrap();
+        }
+        // No /lib/modules for it: a kernel without drivers.
+        assert_eq!(
+            kernel_check(root.path(), true, false),
+            (vec!["6.18.63-gentoo-dist-bin".to_string()], false)
+        );
+        assert_eq!(kernel_check(root.path(), true, true), (vec![], true));
+        // /boot on the root filesystem: nothing to check, nothing skipped.
+        assert_eq!(kernel_check(root.path(), false, true), (vec![], false));
     }
 
     #[test]

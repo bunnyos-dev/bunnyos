@@ -402,6 +402,11 @@ when nothing is set and both are installed).
 7. Runs `emerge --depclean` if packages were removed. **Asks**, unless you
    said yes to a plan that showed exactly those packages.
 8. Enables services with `rc-update` and starts them, checking again after install.
+   OpenRC's own output (`rc-update`, `rc-service`, also for the console
+   font) goes to `/var/log/bunny/<time>-services.log` instead of the screen
+   (`apply::services`); bunny prints `✓ Started <name>; it starts at every
+   boot too.`, and a failure's note points to the log. `--verbose` shows it
+   live.
 
 With `--root` pointing anywhere but `/`, files are written to that root and
 commands are only printed.
@@ -442,8 +447,12 @@ commands are only printed.
     `202501-03 [N] Title ( cat/pkg )`; `[A]`/`[U]` are skipped. Not
     installed: a neutral suggestion to add gentoolkit. Only on the real
     system.
-  - **Updates:** when the Gentoo tree was last synced (newest of
-    `metadata/timestamp.chk` and `.git/FETCH_HEAD`); older than 7 days is a ⚠.
+  - **Updates:** how old the Gentoo tree is (newest of
+    `metadata/timestamp.chk` and `.git/FETCH_HEAD`), shown as "package list
+    from 18 hours ago"; older than 7 days is a ⚠. Worded as the list's age,
+    not "last checked": emerge-webrsync keeps the snapshot's date on
+    `timestamp.chk`, so a brand-new install's list is already hours old, and
+    that age (not the download time) is what matters for security fixes.
     It doesn't run emerge to count pending updates, to stay instant.
 
 ### Config files (`/etc`)
@@ -823,7 +832,11 @@ GPT
      subvolumes: offers to add them). Allowed and checked, not every layout
      tested.
 - **The config is written for you, but it's yours.** Every mode writes a
-  starter `bunny.toml` (like `nixos-generate-config`). `--edit` stops to edit
+  starter `bunny.toml` (like `nixos-generate-config`), with commented-out
+  examples of how each thing is written (a package, a service with its
+  package, a `[pkg]` entry with USE flags and keywords), each pointing to
+  its Guide page; only structural examples, so they don't go stale, and a
+  test uncomments them and runs the config check. `--edit` stops to edit
   it before installing; `--config <file or repo>` installs from your own.
   Disk details go in the host file (`hosts/<host>.toml`), like NixOS's
   `hardware-configuration.nix`, so the main config works on any machine.
@@ -937,7 +950,9 @@ Needs the Baseline image (phases 6 and 7).
   builds it from Gentoo's stage3 with prebuilt packages: gentoo-kernel-bin,
   linux-firmware, the disk tools, dhcpcd + iwd, chrony, git and bunny.
   dracut's `dmsquash-live` boots a squashfs root (`root=live:CDLABEL=BUNNY`,
-  overlayfs for changes); `grub-mkrescue` makes a hybrid ISO that's also a
+  overlayfs for changes, `rd.overlay`: dracut 110 renamed
+  `rd.live.overlay.overlayfs=1`, and the CI boot check fails on a
+  deprecated option); `grub-mkrescue` makes a hybrid ISO that's also a
   USB image. It logs in as root on tty1 and shows a welcome (`welcome`).
   **Quiet start-up:** the normal menu entries have `quiet` on the kernel
   line; `/etc/inittab` runs every runlevel through
@@ -948,7 +963,16 @@ Needs the Baseline image (phases 6 and 7).
   `rc_verbose` (it only adds detail), over sending OpenRC's output to a
   log (errors would disappear too) and over a different inittab per entry
   (one squashfs serves every entry). The CI boot check boots without
-  `quiet`, so it still sees "Starting local".
+  `quiet`, so it still sees "Starting local". One line got past
+  `EINFO_QUIET`: OpenRC's `modules` service loads what
+  `/usr/lib/modules-load.d` lists (iwd's `pkcs8_key_parser`) with `modprobe
+  --verbose`, which prints `insmod …` itself. The USB's
+  `/etc/conf.d/modules` (read by the service first) defines a `modprobe`
+  function that drops `--verbose` when `EINFO_QUIET=YES`; chosen over
+  editing the package's init script and over sending OpenRC's whole output
+  to a log (the console font and keymap services write to the console).
+  sysvinit's own `INIT: version … booting` and `INIT: Entering runlevel`
+  lines still show (later, with the boot screen).
   **Console font** (also set by `bunny install`, and by a switch on
   systems that don't have it yet: `console_font.rs`, shown in the plan,
   `/etc/conf.d/consolefont` backed up, the rest in `/` so undo removes it;

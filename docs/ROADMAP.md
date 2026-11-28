@@ -74,12 +74,12 @@ means no more prebuilt packages for what it affects.
 23, 2026).** Teach people to read Gentoo's own information instead of
 copying flags that change:
 
-- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+- [~] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
       read a package's flags on packages.gentoo.org and the Gentoo wiki,
       what `+`/`-` and defaults mean, and how to write what you found in
       `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
       worked example, but teach the method, not a fixed list of flags.
-- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+- [~] **Starter `bunny.toml`: a few commented-out examples** showing how
       each thing is written (a package with USE flags, a testing keyword, a
       service), each pointing to its Guide page. Only stable, structural
       examples; a test uncomments them and runs `bunny check`.
@@ -591,16 +591,16 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       1.45 GB, near its budget. Measure what takes the space and remove what
       the USB never needs, keeping network and graphics drivers and
       firmware. Now 826 MB; installed from it in the VM on November 23.
-- [ ] **The live USB's boot line uses a renamed dracut option**: "Kernel
+- [~] **The live USB's boot line uses a renamed dracut option**: "Kernel
       command line option 'rd.live.overlay.overlayfs' is deprecated, use
       'rd.overlay' instead." Update tools/iso/grub.cfg (every entry) and
       check dracut's docs for the new spelling.
-- [ ] **Early-boot lines still show on the quiet entries**: `insmod
+- [~] **Early-boot lines still show on the quiet entries**: `insmod
       /lib/modules/…/asymmetric_keys/pkc…` and a few more, before OpenRC
       starts (so #106's quiet start doesn't cover them). Find what prints
       them (dracut's module loading, the kernel's log level) and quiet them
       on the normal entries only; "show start-up messages" keeps them.
-- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+- [~] **`bunny status` on a brand-new install says "Updates: last checked
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.
@@ -608,7 +608,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       terminal install keeps it on ("Keeping the recording of this install").
       Make them behave the same (check how the terminal path decides, and
       what `bunny install --yes` from the graphical installer misses).
-- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+- [~] **Switching on the console font prints OpenRC's raw lines** ("service
       consolefont added to runlevel boot", "WARNING: you are stopping a boot
       service", "Caching service dependencies … [ ok ]"). Run rc-update and
       the service quietly and say it in bunny's own words, keeping the

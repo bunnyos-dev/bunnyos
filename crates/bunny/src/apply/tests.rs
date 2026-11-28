@@ -1655,3 +1655,63 @@ fn a_failed_snapshot_counts_as_nothing_changed() {
     let err = switch(&config, root.path(), &plan, &mut runner, &opts()).unwrap_err();
     assert!(changed_nothing(&err), "{err:#}");
 }
+
+#[test]
+fn a_quiet_switch_keeps_openrcs_lines_in_the_services_log() {
+    let root = fake_system();
+    let r = root.path();
+    write(r, "usr/share/consolefonts/eurlatgr.psfu.gz", "font");
+    write(r, "etc/init.d/consolefont", "");
+    write(r, "etc/conf.d/consolefont", "consolefont=\"default8x16\"\n");
+    let config = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&config, r).unwrap();
+    let mut runner = Scripted {
+        replies: vec![
+            ("--pretend --update", true, PRETEND.into()),
+            ("--quiet-build=y", true, INSTALL.into()),
+            (
+                "rc-update add",
+                true,
+                " * service sshd added to runlevel default\n".into(),
+            ),
+            (
+                "rc-service consolefont",
+                true,
+                " * WARNING: you are stopping a boot service\n \
+                 * Caching service dependencies ... [ ok ]\n"
+                    .into(),
+            ),
+            // sshd doesn't start: its note points to the log.
+            (
+                "rc-service sshd",
+                false,
+                " * ERROR: sshd failed to start\n".into(),
+            ),
+        ],
+        ..Scripted::default()
+    };
+    let outcome = switch(&config, r, &plan, &mut runner, &quiet(true, true)).unwrap();
+    let c = &runner.commands;
+    for wanted in [
+        "rc-update add sshd default",
+        "rc-service sshd start",
+        "rc-update add consolefont boot",
+        "rc-service consolefont restart",
+    ] {
+        assert!(c.iter().any(|l| l == wanted), "{wanted}: {c:#?}");
+    }
+    let log = r.join("var/log/bunny/20261116-120000-services.log");
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(text.contains("$ rc-update add sshd default\n * service sshd added"));
+    assert!(text.contains("WARNING: you are stopping a boot service"));
+    assert!(text.contains("$ rc-service sshd start\n * ERROR: sshd failed to start\n(failed)"));
+    let notes = outcome.notes.join("\n");
+    assert!(
+        notes.contains("\"sshd\" will start at boot, but didn't start now"),
+        "{notes}"
+    );
+    assert!(
+        notes.contains("What OpenRC printed is in /var/log/bunny/20261116-120000-services.log."),
+        "{notes}"
+    );
+}

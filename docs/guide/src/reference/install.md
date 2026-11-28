@@ -199,8 +199,11 @@ computer:
   one lists the minimal system's networking, log, sudo and git, plus
   `sys-apps/bunny-release` from Bunny Linux's own repository
   (`repositories = ["bunny"]`), which makes the system say Bunny Linux
-  instead of Gentoo. It has comments pointing to this Guide. Put it in git and use it on every
-  computer.
+  instead of Gentoo. It has comments pointing to this Guide, and a few
+  commented-out examples (`app-misc/tmux` and `net-misc/chrony` in
+  `packages`, `chronyd` in `services`, and a `[pkg."app-misc/tmux"]` entry
+  with `use` and `keywords`): remove the `#` to use one. Put it in git and
+  use it on every computer.
 - **`/etc/bunny/hosts/<computer name>.toml`** is what this computer needs to
   start (the kernel, firmware, GRUB, the filesystem tools, and `cryptsetup`
   when the disk is encrypted), plus a `[machine]` record of how its disk was

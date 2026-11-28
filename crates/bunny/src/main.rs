@@ -512,15 +512,9 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             let text = imported.render();
             match output {
                 Some(path) => {
-                    if path.exists() && !force {
-                        anyhow::bail!(
-                            "{} already exists, so it wasn't overwritten.\n  \
-                             Pick another name, or add --force to replace it.",
-                            path.display()
-                        );
+                    if let Some(folder) = import::save(&path, &text, force)? {
+                        eprintln!("✓ Created {}.", folder.display());
                     }
-                    std::fs::write(&path, text)
-                        .with_context(|| format!("Couldn't write {}", path.display()))?;
                     eprintln!("✓ Saved to {}.", path.display());
                     eprintln!("{}", imported.summary());
                     eprintln!(

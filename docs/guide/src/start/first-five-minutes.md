@@ -6,12 +6,12 @@ bunny manages, **without changing anything** until the last step.
 ## 1. Write down your current system
 
 ```sh
-sudo mkdir -p /etc/bunny
 sudo bunny import -o /etc/bunny/bunny.toml
 ```
 
 bunny looks at what's installed, which services start at boot and your USE
-flags, and writes them into `/etc/bunny/bunny.toml`. `/etc/bunny/bunny.toml` is
+flags, and writes them into `/etc/bunny/bunny.toml` (creating the
+`/etc/bunny` folder first, and saying so). `/etc/bunny/bunny.toml` is
 where every bunny command looks by default, so you won't need to type the path.
 
 It tells you if it found anything it couldn't bring over (they're listed at

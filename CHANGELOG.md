@@ -10,6 +10,8 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny import -o /etc/bunny/bunny.toml` works on a system without
+  `/etc/bunny` yet (it creates the folder), as `bunny status` suggests.
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

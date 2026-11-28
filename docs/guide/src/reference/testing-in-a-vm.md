@@ -82,16 +82,18 @@ tools/bunny-vm.sh snap clean-install
 | Command | What it does |
 |---|---|
 | `tools/bunny-vm.sh run` | Start the VM |
-| `tools/bunny-vm.sh stop` | Shut the VM down (asks for your password in the VM) |
+| `tools/bunny-vm.sh stop` | Shut the VM down (asks for the VM user's password). If it can't log in over SSH, it asks you to run `sudo poweroff` in the VM window and waits. |
 | `tools/bunny-vm.sh ssh` | Log in from your terminal (copy and paste work here) |
-| `tools/bunny-vm.sh put <file>` | Copy a file into the VM's home folder |
+| `tools/bunny-vm.sh put <file>…` | Copy files into the VM's home folder, one after another, saying each one it copied |
 | `tools/bunny-vm.sh restore clean-install` | Go back to the clean install (VM off) |
 | `tools/bunny-vm.sh snap <name>` / `snaps` | Save / list VM snapshots (VM off) |
 | `tools/bunny-vm.sh reset-keys` | Wipe the VM's Secure Boot keys |
 | `tools/bunny-vm.sh forget-key` | Forget the VM's SSH key, after you reinstall it |
 
-The VM's user is `you` unless you say otherwise: `VM_USER=bunny tools/bunny-vm.sh ssh`
-(also for `put` and `stop`).
+The VM's user is `you` unless you say otherwise: `VM_USER=test tools/bunny-vm.sh ssh`
+(also for `put` and `stop`). Each VM remembers the user it was given (in its
+folder, as `user`), so after `VM=monday VM_USER=test tools/bunny-vm.sh put …`
+once, `VM=monday tools/bunny-vm.sh ssh` and `stop` log in as `test` too.
 
 To test `/home` on a second disk, start the VM with `HOME_DISK=24G` (any
 size of 20 GB or more): it attaches a second disk, made the first time and

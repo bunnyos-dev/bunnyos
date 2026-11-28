@@ -4,13 +4,16 @@
 # Usage:
 #   ./bunny-vm.sh run [file.iso]   start the VM (boots the ISO if given;
 #                                  ISO=file.iso does the same)
-#   ./bunny-vm.sh stop             shut the running VM down (asks for its password)
+#   ./bunny-vm.sh stop             shut the running VM down (asks for its password;
+#                                  if it can't log in, asks you to power off
+#                                  from the VM window)
 #   ./bunny-vm.sh snap <name>      save a snapshot (VM must be off)
 #   ./bunny-vm.sh restore <name>   go back to a snapshot (VM must be off)
 #   ./bunny-vm.sh snaps            list snapshots
 #   ./bunny-vm.sh reset-keys       wipe Secure Boot keys (back to Setup Mode)
-#   ./bunny-vm.sh ssh [user]       SSH into the running VM (default user "you")
-#   ./bunny-vm.sh put <file>...    Copy files into the running VM (to the user's home)
+#   ./bunny-vm.sh ssh [user]       SSH into the running VM (default: the VM's user)
+#   ./bunny-vm.sh put <file>...    Copy files into the running VM (to the user's
+#                                  home), one after another
 #   ./bunny-vm.sh forget-key       forget the VM's SSH key (after reinstalling it)
 #   ./bunny-vm.sh port             show the VM's SSH port
 #
@@ -20,7 +23,9 @@
 #               port), for testing with the laptop's disk layout:
 #               VM=laptop ./bunny-vm.sh run
 #   PORT=2230   use this SSH port instead (just this once)
-#   VM_USER=bunny   the VM's user for ssh, put and stop (default "you")
+#   VM_USER=test    the VM's user for ssh, put and stop. Remembered for this
+#                   VM (in $VM_DIR/user) once given, so later commands
+#                   don't need it. Without one: "you".
 #   HOME_DISK=20G   also attach a second disk of this size (made once, kept
 #                   in the VM's folder), for testing /home on another disk
 #
@@ -49,7 +54,7 @@ MEM="${MEM:-8G}"
 CPUS="${CPUS:-4}"
 DISK_SIZE="${DISK_SIZE:-60G}"
 GL="${GL:-1}"
-VM_USER="${VM_USER:-you}"
+USER_FILE="$VM_DIR/user"
 KNOWN_HOSTS="$VM_DIR/known_hosts"
 HOME_DISK_FILE="$VM_DIR/home.qcow2"
 
@@ -89,6 +94,32 @@ named_vm_port() {
     fi
     echo "$candidate"
 }
+
+# The VM's user: VM_USER if given (and remembered in $VM_DIR/user for next
+# time), else the remembered one, else "you".
+if [ -n "${VM_USER:-}" ]; then
+    case "$VM_USER" in
+        *[!a-z0-9_-]*|-*) echo "✗ VM_USER should be a plain user name, like test"; exit 1 ;;
+    esac
+    saved_user=""
+    if [ -f "$USER_FILE" ]; then
+        read -r saved_user < "$USER_FILE" || true
+    fi
+    if [ "$saved_user" != "$VM_USER" ]; then
+        mkdir -p "$VM_DIR"
+        echo "$VM_USER" > "$USER_FILE"
+        echo "→ Remembering $VM_USER as the ${VM:-main} VM's user (in $USER_FILE)"
+    fi
+else
+    VM_USER=you
+    if [ -f "$USER_FILE" ]; then
+        read -r saved_user < "$USER_FILE" || true
+        case "${saved_user:-}" in
+            ''|*[!a-z0-9_-]*|-*) ;;
+            *) VM_USER="$saved_user" ;;
+        esac
+    fi
+fi
 
 PORT_GIVEN="${PORT:+yes}"
 if [ -n "$VM" ]; then
@@ -227,24 +258,55 @@ forget_key() {
     echo "✓ Forgot the ${VM:-main} VM's SSH key. The next ssh saves the new one."
 }
 
+# Whether this VM is running.
+vm_running() {
+    pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null
+}
+
+# Waits up to $1 seconds for the VM to be off. Returns 1 if it's still on.
+wait_off() {
+    i=0
+    while vm_running; do
+        i=$((i + 1))
+        [ "$i" -le "$1" ] || return 1
+        sleep 1
+    done
+}
+
 stop() {
-    if ! pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; then
+    if ! vm_running; then
         echo "✓ The VM is already off."
         return 0
     fi
-    echo "→ Shutting the VM down (it may ask for your password in the VM)"
-    TERM=xterm-256color vm_ssh -t "$VM_USER@localhost" \
+    echo "→ Shutting the VM down as $VM_USER (it may ask for $VM_USER's password in the VM)"
+    TERM=xterm-256color vm_ssh -o ConnectTimeout=5 -t "$VM_USER@localhost" \
         'if command -v doas >/dev/null; then doas poweroff; else sudo poweroff; fi' || true
-    i=0
-    while pgrep -f "qemu-system-x86_64 -name $NAME " >/dev/null; do
-        i=$((i + 1))
-        if [ "$i" -gt 60 ]; then
-            echo "✗ The VM is still running after a minute. Close its window, or shut it down from inside."
+    # ssh's exit status can't tell "logged in and powered off" (the
+    # connection drops) from "couldn't log in", so look at the VM instead.
+    if ! wait_off 15; then
+        echo "  Couldn't shut it down over SSH (is sshd running in the VM, and is"
+        echo "  $VM_USER its user? VM_USER=<name> sets it). In the VM window, run:"
+        echo "  sudo poweroff     (or doas poweroff)"
+        echo "→ Waiting for the VM to turn off…"
+        if ! wait_off 180; then
+            echo "✗ The VM is still running. Close its window, or shut it down from inside."
             exit 1
         fi
-        sleep 1
-    done
+    fi
     echo "✓ The VM is off."
+}
+
+# Copies each file into the VM's home folder, one scp at a time, saying
+# which went over. Stops at the first that fails.
+put() {
+    [ $# -gt 0 ] || { echo "✗ Name at least one file to copy."; exit 1; }
+    for file in "$@"; do
+        [ -e "$file" ] || { echo "✗ $file doesn't exist, so nothing was copied."; exit 1; }
+    done
+    for file in "$@"; do
+        with_key_hint vm_scp "$file" "$VM_USER@localhost:" || exit $?
+        echo "✓ Copied $file to $VM_USER's home folder in the ${VM:-main} VM."
+    done
 }
 
 case "${1:-run}" in
@@ -254,11 +316,10 @@ case "${1:-run}" in
     restore)    check_off; qemu-img snapshot -a "${2:?name needed}" "$DISK"; echo "✓ Restored: $2" ;;
     snaps)      qemu-img snapshot -l "$DISK" ;;
     reset-keys) check_off; find_firmware; cp "$VARS_TEMPLATE" "$VARS"; echo "✓ Secure Boot keys wiped (Setup Mode)" ;;
-    put)        shift; [ $# -gt 0 ] || { echo "✗ Name at least one file to copy."; exit 1; }
-                with_key_hint vm_scp "$@" "$VM_USER@localhost:" ;;
+    put)        shift; put "$@" ;;
     # TERM: the VM may not know your terminal (e.g. kitty), so use a common one
     ssh)        TERM=xterm-256color with_key_hint vm_ssh "${2:-$VM_USER}@localhost" ;;
     forget-key) forget_key ;;
     port)       echo "$PORT" ;;
-    *)          sed -n '2,30p' "$0" ;;
+    *)          sed -n '2,36p' "$0" ;;
 esac

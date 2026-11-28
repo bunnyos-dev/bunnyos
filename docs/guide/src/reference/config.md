@@ -131,6 +131,7 @@ Settings for one package.
 |---|---|---|
 | `use` | `["pgo", "-telemetry"]` | USE flags: turn features on (`pgo`) or off (`-telemetry`). |
 | `keywords` | `["~amd64"]` | Versions to accept beyond stable ones. `"~amd64"` allows testing versions (most work fine; Gentoo just hasn't declared them stable yet). `"**"` allows any version, including unreleased ones from git: avoid it unless you mean it. |
+| `prebuilt` | `false` | Always compile this package instead of downloading Gentoo's prebuilt copy. Leave it out normally: bunny downloads a prebuilt copy whenever one was built with your flags. bunny sets it itself only when every prebuilt copy gets in the way (see [When emerge needs settings changed](../tasks/install.md#when-emerge-needs-settings-changed)). |
 
 Group flags (Gentoo's `PYTHON_TARGETS: python3_12` style) are written as one
 word: `python_targets_python3_12`.

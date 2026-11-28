@@ -216,6 +216,13 @@ pub struct PkgSettings {
     /// versions (Portage's package.accept_keywords).
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// `false`: always compile this package instead of downloading Gentoo's
+    /// prebuilt copy (emerge's `--usepkg-exclude`). For a package whose
+    /// prebuilt copies were all built with flags that don't fit (bunny's
+    /// fixer sets this when that's the only way). Unset: prebuilt when a
+    /// matching one exists, like everything else.
+    #[serde(default)]
+    pub prebuilt: Option<bool>,
 }
 
 /// Something wrong with the config, explained for humans.
@@ -286,6 +293,15 @@ impl Config {
         let flags = self.desktop.use_flags().iter().any(|(a, _)| *a == name)
             && !self.pkg.contains_key(name);
         package || service || flags
+    }
+
+    /// Packages the config says to always compile (`prebuilt = false`).
+    pub fn compile_from_source(&self) -> Vec<String> {
+        self.pkg
+            .iter()
+            .filter(|(_, s)| s.prebuilt == Some(false))
+            .map(|(atom, _)| atom.clone())
+            .collect()
     }
 
     /// Accepted keywords per package, from `[pkg] keywords`.

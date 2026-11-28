@@ -97,7 +97,21 @@ pub(crate) fn resolve_all(
     let mut resolved = Resolved::default();
     let mut ok = true;
     for name in names {
-        match repo::resolve(&packages, name) {
+        let mut found = repo::resolve(&packages, name);
+        // A known package from another repository can be on disk without
+        // that repository being in the config (left by an earlier `bunny
+        // add` that stopped): treat it as not found, so the config gets the
+        // repository (and its testing versions) instead of a plan that
+        // removes the repository the package comes from.
+        if let repo::Resolved::Found(full) = &found {
+            if crate::overlays::known_home(name).is_some_and(|h| {
+                h.package == full.split(':').next().unwrap_or(full)
+                    && !repositories.iter().any(|r| r == h.repository)
+            }) {
+                found = repo::Resolved::NotFound(Vec::new());
+            }
+        }
+        match found {
             repo::Resolved::Found(full) => resolved.names.push(full),
             repo::Resolved::Ambiguous(options) => {
                 ok = false;
@@ -338,5 +352,28 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(found.names, ["gui-wm/mangowm"]);
+    }
+
+    #[test]
+    fn a_downloaded_repository_not_in_the_config_is_still_offered() {
+        // An earlier `bunny add mangowm` downloaded GURU, then stopped, so
+        // bunny.toml has no `repositories = ["guru"]` (found on the G16).
+        let root = fake_repo();
+        let cache = root
+            .path()
+            .join("var/db/repos/guru/metadata/md5-cache/gui-wm");
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::write(cache.join("mangowm-0.18.6"), "DESCRIPTION=Mango\n").unwrap();
+        let mut asked = Vec::new();
+        let mut yes = |q: &str| {
+            asked.push(q.to_string());
+            Ok(true)
+        };
+        let found = resolve_all(root.path(), &["mangowm".into()], &[], &mut yes)
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.names, ["gui-wm/mangowm"]);
+        assert_eq!(found.homes[0].repository, "guru");
+        assert!(asked[0].contains("Add the guru repository"), "{asked:?}");
     }
 }

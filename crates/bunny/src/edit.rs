@@ -110,6 +110,83 @@ pub fn set_keywords(text: &str, atom: &str, keywords: &[&str]) -> Result<String>
     Ok(doc.to_string())
 }
 
+/// The `[pkg."category/name"]` section, made if it isn't there.
+fn pkg_entry<'a>(doc: &'a mut DocumentMut, atom: &str) -> Result<&'a mut dyn toml_edit::TableLike> {
+    if !doc.contains_key("pkg") {
+        let mut table = toml_edit::Table::new();
+        table.set_implicit(true);
+        doc.insert("pkg", Item::Table(table));
+    }
+    let Some(pkg) = doc["pkg"].as_table_mut() else {
+        bail!("`pkg` in bunny.toml should be a section, like [pkg.\"app-misc/tmux\"].");
+    };
+    if !pkg.contains_key(atom) {
+        pkg.insert(atom, Item::Table(toml_edit::Table::new()));
+    }
+    match pkg[atom].as_table_like_mut() {
+        Some(entry) => Ok(entry),
+        None => bail!("[pkg.\"{atom}\"] in bunny.toml should be a section."),
+    }
+}
+
+/// Writes what bunny's resolver found into the config: USE flags merged
+/// into each package's existing `use` list (a flag already there is turned
+/// the new way, not listed twice), testing keywords added, and `prebuilt =
+/// false` for packages to compile. Each package keeps its one `[pkg]`
+/// section, comments and other settings.
+pub fn apply_resolution(text: &str, r: &crate::helper::Resolution) -> Result<String> {
+    let mut doc = parse(text)?;
+    let mut atoms: std::collections::BTreeSet<&String> = r.use_flags.keys().collect();
+    atoms.extend(r.keywords.keys());
+    atoms.extend(r.compile.iter());
+    for atom in atoms {
+        let entry = pkg_entry(&mut doc, atom)?;
+        if let Some(flags) = r.use_flags.get(atom) {
+            if !entry.contains_key("use") {
+                entry.insert("use", Item::Value(Value::Array(Array::new())));
+            }
+            let Some(list) = entry.get_mut("use").and_then(Item::as_array_mut) else {
+                bail!("`use` for {atom} in bunny.toml should be a list, like use = [\"wayland\"].");
+            };
+            for (flag, on) in flags {
+                let written = if *on {
+                    flag.clone()
+                } else {
+                    format!("-{flag}")
+                };
+                let same = |v: &Value| {
+                    v.as_str()
+                        .is_some_and(|s| s.trim_start_matches(['-', '+']) == flag)
+                };
+                let found = list.iter().position(same);
+                match found {
+                    Some(i) => {
+                        list.replace(i, written.as_str());
+                    }
+                    None => {
+                        list.push(written.as_str());
+                    }
+                }
+            }
+        }
+        if let Some(keyword) = r.keywords.get(atom) {
+            if !entry.contains_key("keywords") {
+                entry.insert("keywords", Item::Value(Value::Array(Array::new())));
+            }
+            let Some(list) = entry.get_mut("keywords").and_then(Item::as_array_mut) else {
+                bail!("`keywords` for {atom} in bunny.toml should be a list, like keywords = [\"~amd64\"].");
+            };
+            if !list.iter().any(|v| v.as_str() == Some(keyword.as_str())) {
+                list.push(keyword.as_str());
+            }
+        }
+        if r.compile.contains(atom) {
+            entry.insert("prebuilt", toml_edit::value(false));
+        }
+    }
+    Ok(doc.to_string())
+}
+
 /// Adds packages to `packages`, in alphabetical position.
 ///
 /// In TOML, a comment after an item is stored at the start of the *next*
@@ -228,6 +305,42 @@ pub fn remove_packages(text: &str, names: &[String]) -> Result<Edited> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_the_resolvers_fixes_into_existing_sections() {
+        let text = "packages = [\"gui-apps/quickshell\"]\n\n\
+                    # Qt for the island\n\
+                    [pkg.\"dev-qt/qtbase\"]\n\
+                    use = [\"-opengl\", \"widgets\"]\n";
+        let mut r = crate::helper::Resolution::default();
+        r.use_flags.insert(
+            "dev-qt/qtbase".into(),
+            [("opengl".to_string(), true), ("wayland".to_string(), true)].into(),
+        );
+        r.use_flags.insert(
+            "xfce-base/libxfce4ui".into(),
+            [("wayland".to_string(), true)].into(),
+        );
+        r.keywords
+            .insert("dev-cpp/cpptrace".into(), "~amd64".into());
+        r.compile.push("dev-util/shader-slang".into());
+        let out = apply_resolution(text, &r).unwrap();
+        let config = crate::config::Config::parse(&out).unwrap();
+        // One section per package: no duplicate tables (that's a TOML error).
+        assert_eq!(out.matches("[pkg.\"dev-qt/qtbase\"]").count(), 1, "{out}");
+        assert_eq!(
+            config.pkg["dev-qt/qtbase"].use_flags,
+            ["opengl", "widgets", "wayland"],
+            "{out}"
+        );
+        assert!(out.contains("# Qt for the island"), "{out}");
+        assert_eq!(config.pkg["xfce-base/libxfce4ui"].use_flags, ["wayland"]);
+        assert_eq!(config.pkg["dev-cpp/cpptrace"].keywords, ["~amd64"]);
+        assert_eq!(config.pkg["dev-util/shader-slang"].prebuilt, Some(false));
+        assert_eq!(config.compile_from_source(), ["dev-util/shader-slang"]);
+        // Applying it again changes nothing.
+        assert_eq!(apply_resolution(&out, &r).unwrap(), out);
+    }
 
     #[test]
     fn adds_a_repository_and_keywords() {

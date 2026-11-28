@@ -347,6 +347,50 @@ mode = "auto-safe"     # "ask" | "auto-safe" | "off"
   default flags (applied unless the config has its own `[pkg]` entry):
   sudo is built with `-sendmail`, so it doesn't pull in a mail server.
 
+### The resolver: settings worked out in one go (current behaviour)
+
+Decided November 28, 2026, after the first real-hardware desktop install
+took eight rounds of hand-written USE flags. **Anything that works on plain
+Gentoo must work on Bunny, from a minimal profile too**, without hand edits.
+
+What the lab on the test machine showed (real Portage, Gentoo's binhost):
+
+- Gentoo's binhost has **several prebuilt flavours of most big packages**
+  (built for the base, desktop, plasma and gnome profiles): qtbase,
+  qtdeclarative, gtk, mesa each exist with and without
+  `wayland opengl vulkan X`. Portage takes the flavour whose flags match.
+- The G16 "flip-flop" (qtbase opengl on, then off, then on) came from
+  setting flags on one package but not on the packages tied to it:
+  prebuilt qtdeclarative (plain flavour) pins `qtbase[opengl=]` off. Giving
+  qtdeclarative the same flags makes Portage take its desktop flavour:
+  nothing compiles.
+- From a minimal profile, emerge's own fix-up never gets past "any-of (
+  wayland X )" or "One of the following … (Change USE: …)": it doesn't
+  choose. The desktop profile hits fewer of those, but can still hit
+  prebuilt packages built at different times (slot conflicts).
+
+So when emerge refuses (or quietly leaves a package out), bunny runs the
+helper's `resolve`: on a scratch copy of `/etc/portage`, it asks emerge
+(`--pretend --autounmask`) round after round and applies what stops it:
+needed USE changes; testing keywords; a choice for any-of and either/or
+(Wayland first, then turning on rather than off); and **never flipping a
+flag already chosen** (by the config or an earlier round): the package
+that pins it the other way gets the same flag, and only if that's already
+been tried is it compiled (`prebuilt = false`, emerge's
+`--usepkg-exclude`). Up to 30 rounds. The minimal-profile desktop test
+(elogind, dbus, Mango, Quickshell, kitty, Thunar) resolves in 11 rounds:
+197 prebuilt, 25 compiled (mostly GURU packages, which have no prebuilt
+copies).
+
+bunny shows the whole list once, grouped, with a reason per package, and
+asks "Add these to bunny.toml and continue?". Yes writes them into the
+config (merged into existing `[pkg]` sections, never a second table) and
+runs the switch again, keeping the packages being added. At most two
+rounds of that; if emerge still can't plan, bunny shows the end of its
+message and changes nothing. Profiles (`minimal` / `desktop`) are a
+separate, later choice that makes the list shorter; the resolver is what
+makes either one work.
+
 ### Commands (planned)
 
 | Command | Does |

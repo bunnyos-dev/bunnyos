@@ -563,6 +563,39 @@ admins = ["you"]
 - On doas systems an optional `sudo` shim covers scripts that hardcode `sudo`.
 - GUI permission prompts use polkit with a Bunny Linux-styled agent.
 
+### Hardware: graphics cards and CPU features (current behaviour)
+
+```toml
+# hosts/laptop.toml
+[hardware]
+video_cards = ["intel", "nvidia"]   # Gentoo's VIDEO_CARDS
+cpu_flags = ["aes", "avx", "avx2"]  # Gentoo's CPU_FLAGS_X86
+```
+
+- Decided November 2026 (for the G16): a small slice of "make.conf in
+  bunny.toml", pulled forward. bunny still never writes make.conf; it writes
+  `*/* VIDEO_CARDS: -* …` and `*/* CPU_FLAGS_X86: …` lines (Gentoo's
+  package.use USE_EXPAND syntax) at the top of its own `zz-bunny`, so a
+  package's own `[pkg]` flags still win.
+- `video_cards` is the whole list (`-*` first, like Gentoo's NVIDIA guide);
+  `cpu_flags` adds to the profile's defaults, like `cpuid2cpuflags` output.
+  Either one left out isn't managed. It belongs in the host file (it differs
+  per computer); the host file's value wins per setting.
+- The plan compares with what every package.use file's `*/*` lines add up
+  to; a change is a "hardware change" (shown, counted by `status` and
+  `diff`, and it makes the switch run emerge with `--newuse` and depclean).
+  Lines of the user's own stay in `00-bunny-kept` unless `[hardware]` sets
+  everything they set. The resolver ignores `*/*` lines (they aren't one
+  package's flags).
+- `bunny hardware` (read only) suggests values: graphics from `lspci -nn`
+  (falling back to `/sys/class/drm/card*/device/vendor`), CPU features from
+  `cpuid2cpuflags` if installed. `bunny import` reads the package.use lines
+  into `[hardware]` and suggests make.conf's as comments.
+- Cost, said in the plan and the Guide: these are USE flags, so values that
+  differ from what Gentoo's binary packages were built with make those
+  packages compile.
+- Later: `cpu_flags = "auto"`, and recording effective USE flags in the lock.
+
 ### Profiles (current behaviour)
 
 `[system] profile = "minimal" | "desktop"` (decided November 26–28, 2026):

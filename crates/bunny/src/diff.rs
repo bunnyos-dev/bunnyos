@@ -83,6 +83,22 @@ impl Diff<'_> {
             out.push('\n');
         }
 
+        // Graphics cards and CPU features
+        if !p.hardware_changes.is_empty() {
+            out.push_str("Graphics cards and CPU features ([hardware])\n");
+            for change in &p.hardware_changes {
+                let _ = writeln!(
+                    out,
+                    "  {} ({})   config: {}, system: {}",
+                    change.group.plain(),
+                    change.group.portage(),
+                    change.render_to(),
+                    crate::hardware::show(&change.from)
+                );
+            }
+            out.push('\n');
+        }
+
         // Testing versions
         if !p.keyword_changes.is_empty() {
             out.push_str("Testing versions ([pkg] keywords)\n");
@@ -281,6 +297,23 @@ impl Diff<'_> {
                     "    • under [pkg.\"{}\"], set: use = [{}]",
                     change.atom,
                     quoted(&flags)
+                );
+            }
+        }
+
+        for change in &p.hardware_changes {
+            let key = change.group.key();
+            // The system's values, as [hardware] would write them. Only a
+            // list of its own (not "Gentoo's defaults + …") can be copied.
+            let replaces = change.from.first().is_some_and(|w| w == "-*");
+            let values: Vec<&String> = change.from.iter().filter(|w| *w != "-*").collect();
+            if change.from.is_empty() {
+                let _ = writeln!(edits, "    • take `{key}` out of [hardware]");
+            } else if replaces == (change.group == crate::hardware::Group::VideoCards) {
+                let _ = writeln!(
+                    edits,
+                    "    • under [hardware], set: {key} = [{}]",
+                    quoted(&values)
                 );
             }
         }
@@ -526,5 +559,43 @@ mod tests {
         assert!(text.contains("config only   /etc/sudoers.d/bunny"));
         assert!(text.contains("config only   you in the wheel group"));
         assert!(text.contains("remove the [security] section"));
+    }
+
+    #[test]
+    fn shows_hardware_differences_and_the_edit() {
+        use crate::hardware::{Change, Group};
+        let p = Plan {
+            hardware_changes: vec![
+                Change {
+                    group: Group::VideoCards,
+                    from: vec!["-*".into(), "nvidia".into()],
+                    to: Some(vec!["-*".into(), "intel".into(), "nvidia".into()]),
+                },
+                Change {
+                    group: Group::CpuFlags,
+                    from: vec![],
+                    to: Some(vec!["aes".into()]),
+                },
+            ],
+            ..Plan::default()
+        };
+        let text = Diff {
+            config: "bunny.toml",
+            plan: &p,
+            drift: None,
+        }
+        .render();
+        assert!(
+            text.contains("graphics cards (VIDEO_CARDS)   config: intel nvidia, system: nvidia"),
+            "{text}"
+        );
+        assert!(
+            text.contains("under [hardware], set: video_cards = [\"nvidia\"]"),
+            "{text}"
+        );
+        assert!(
+            text.contains("take `cpu_flags` out of [hardware]"),
+            "{text}"
+        );
     }
 }

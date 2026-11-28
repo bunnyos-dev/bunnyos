@@ -1869,3 +1869,98 @@ fn a_quiet_switch_keeps_openrcs_lines_in_the_services_log() {
         "{notes}"
     );
 }
+
+#[test]
+fn hardware_goes_into_bunnys_package_use_file() {
+    let root = fake_system();
+    let r = root.path();
+    // The Gentoo wiki's way, in a file of your own; and cpuid2cpuflags'.
+    write(
+        r,
+        "etc/portage/package.use/00video_cards",
+        "*/* VIDEO_CARDS: -* nvidia\n",
+    );
+    write(
+        r,
+        "etc/portage/package.use/00cpuflags",
+        "*/* CPU_FLAGS_X86: aes avx\n",
+    );
+    // [hardware] in the host file sets the graphics cards only.
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("bunny.toml");
+    std::fs::write(&config_path, CONFIG).unwrap();
+    write(
+        dir.path(),
+        "hosts/laptop.toml",
+        "[hardware]\nvideo_cards = [\"intel\", \"nvidia\"]\n",
+    );
+    let config = Config::load_for_host(&config_path, Some("laptop")).unwrap();
+
+    let plan = plan::make(&config, r).unwrap();
+    assert_eq!(
+        plan.hardware_changes.len(),
+        1,
+        "{:#?}",
+        plan.hardware_changes
+    );
+    let text = plan.render();
+    assert!(
+        text.contains("~ graphics cards (VIDEO_CARDS): nvidia → intel nvidia"),
+        "{text}"
+    );
+    assert!(
+        plan.summary().contains("graphics cards"),
+        "{}",
+        plan.summary()
+    );
+
+    let mut runner = Recorder::default();
+    switch(&config, r, &plan, &mut runner, &opts()).unwrap();
+    assert!(
+        runner
+            .commands
+            .iter()
+            .any(|c| c.starts_with("emerge --update --deep --newuse")),
+        "{:#?}",
+        runner.commands
+    );
+    let use_dir = r.join(portage::PACKAGE_USE_DIR);
+    let ours = std::fs::read_to_string(use_dir.join(portage::BUNNY_USE_FILE)).unwrap();
+    assert!(
+        ours.starts_with(
+            "# Managed by bunny. Edit bunny.toml instead of this file.\n\
+             */* VIDEO_CARDS: -* intel nvidia\n"
+        ),
+        "{ours}"
+    );
+    assert!(!ours.contains("CPU_FLAGS_X86"), "{ours}");
+    // The CPU flags line isn't [hardware]'s, so it's kept word for word;
+    // the old graphics line is replaced by bunny's.
+    let kept = std::fs::read_to_string(use_dir.join(portage::KEPT_USE_FILE)).unwrap();
+    assert!(kept.contains("*/* CPU_FLAGS_X86: aes avx"), "{kept}");
+    assert!(!kept.contains("VIDEO_CARDS"), "{kept}");
+    assert!(!use_dir.join("00video_cards").exists());
+
+    // Nothing left to do afterwards.
+    let after = plan::make(&config, r).unwrap();
+    assert!(
+        after.hardware_changes.is_empty(),
+        "{:#?}",
+        after.hardware_changes
+    );
+
+    // Taken out of [hardware] again: bunny's line goes.
+    let plain = Config::parse(CONFIG).unwrap();
+    let plan = plan::make(&plain, r).unwrap();
+    assert_eq!(plan.hardware_changes.len(), 1);
+    assert!(
+        plan.render()
+            .contains("intel nvidia → not managed by bunny any more"),
+        "{}",
+        plan.render()
+    );
+    switch(&plain, r, &plan, &mut Recorder::default(), &opts()).unwrap();
+    let ours = std::fs::read_to_string(use_dir.join(portage::BUNNY_USE_FILE)).unwrap();
+    assert!(!ours.contains("VIDEO_CARDS"), "{ours}");
+    assert!(plan::make(&plain, r).unwrap().hardware_changes.is_empty());
+}

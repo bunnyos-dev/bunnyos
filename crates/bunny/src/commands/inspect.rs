@@ -41,6 +41,29 @@ pub(crate) fn diff_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
     })
 }
 
+/// `bunny hardware`: what this computer has, as a `[hardware]` block to
+/// paste. Read only. On another root (a test), commands aren't run.
+pub(crate) fn hardware_cmd(root: &Path) -> anyhow::Result<ExitCode> {
+    let mut runner: Box<dyn crate::apply::Runner> = if root == Path::new("/") {
+        Box::new(crate::apply::SystemRunner)
+    } else {
+        Box::new(crate::apply::PrintRunner)
+    };
+    let suggestion = crate::hardware::suggest(root, runner.as_mut());
+    let host_file = match crate::config::this_host(root) {
+        Some(host) => format!(
+            "this computer's host file, {}/{host}.toml",
+            crate::config::SYSTEM_HOSTS
+        ),
+        None => format!(
+            "this computer's host file (in {})",
+            crate::config::SYSTEM_HOSTS
+        ),
+    };
+    print!("{}", suggestion.render(&host_file));
+    Ok(ExitCode::SUCCESS)
+}
+
 pub(crate) fn lock_cmd(config: &Path, root: &Path) -> anyhow::Result<ExitCode> {
     let path = lock::path_for(config);
     let new = lock::from_system(root)?;

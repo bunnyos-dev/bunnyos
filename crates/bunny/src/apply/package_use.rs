@@ -34,7 +34,23 @@ pub fn foreign_package_use_files(root: &Path) -> Vec<String> {
 /// them with bunny's file. Nothing is lost: the flags are in the config, and
 /// lines bunny can't manage yet are kept word for word in their own file.
 pub(super) fn adopt_package_use(config: &Config, root: &Path, backup: &Path) -> Result<()> {
-    let kept = import::read_package_use(root)?.skipped;
+    let package_use = import::read_package_use(root)?;
+    let mut kept = package_use.skipped;
+    // Graphics-card and CPU-feature lines (`*/* VIDEO_CARDS: …`) of your own
+    // stay, unless `[hardware]` now sets everything they set (then bunny's
+    // file has it). bunny's own lines are rewritten below.
+    kept.extend(
+        package_use
+            .hardware
+            .into_iter()
+            .filter(|h| !h.in_bunnys_file())
+            .filter(|h| {
+                h.groups
+                    .iter()
+                    .any(|(group, _)| config.hardware.get(*group).is_none())
+            })
+            .map(|h| (h.file, h.line)),
+    );
     let dir = portage::package_use_dir(root);
     // Lines already in bunny's kept file remember where they first came from.
     let origins = kept_origins(&dir.join(portage::KEPT_USE_FILE));
@@ -63,7 +79,8 @@ pub(super) fn adopt_package_use(config: &Config, root: &Path, backup: &Path) -> 
         let _ = std::fs::remove_file(&kept_path);
     } else {
         let mut text = String::from(
-            "# Kept by bunny: lines bunny can't manage yet (version ranges, wildcards).\n\
+            "# Kept by bunny: lines bunny can't manage yet (version ranges, wildcards),\n\
+             # and graphics-card or CPU-feature lines that [hardware] doesn't set.\n\
              # They work as before. Edit them here.\n",
         );
         for (file, line) in &kept {

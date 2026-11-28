@@ -27,6 +27,11 @@ pub struct Imported {
     pub versioned: usize,
     /// Whether make.conf sets global USE flags (not managed by bunny yet).
     pub global_use: bool,
+    /// Graphics cards and CPU features from package.use's `*/*` lines.
+    pub hardware: crate::hardware::Hardware,
+    /// The same settings from make.conf, only suggested (commented out):
+    /// bunny doesn't manage make.conf.
+    pub make_conf_hardware: crate::hardware::Hardware,
     /// Services set to start at boot whose start script is gone. Left out of
     /// the config so another machine doesn't try to enable them.
     pub leftover_services: Vec<String>,
@@ -49,7 +54,20 @@ pub fn from_system(root: &Path) -> Result<Imported> {
         .partition(|s| init.service_exists(s));
 
     let package_use = read_package_use(root)?;
+    let mut hardware = crate::hardware::Hardware::default();
+    let found = package_use.hardware_settings();
+    let mut make_conf_hardware = crate::hardware::from_make_conf(root);
+    for group in crate::hardware::Group::ALL {
+        if let Some(words) = found.get(&group) {
+            // `-* nvidia` → ["nvidia"]: bunny writes the `-*` itself.
+            let values: Vec<String> = words.iter().filter(|w| *w != "-*").cloned().collect();
+            hardware.set(group, Some(values));
+            make_conf_hardware.set(group, None);
+        }
+    }
     Ok(Imported {
+        hardware,
+        make_conf_hardware,
         packages,
         services,
         multilib: !profile_is_no_multilib(root),
@@ -98,7 +116,58 @@ pub struct PackageUse {
     pub skipped: Vec<(PathBuf, String)>,
     /// How many lines had a version number that was dropped.
     pub versioned: usize,
+    /// `*/* VIDEO_CARDS: …` and `*/* CPU_FLAGS_X86: …` lines (`[hardware]`),
+    /// in Portage's order.
+    pub hardware: Vec<HardwareLine>,
 }
+
+/// A package.use line that sets only `[hardware]` settings.
+#[derive(Debug, Clone)]
+pub struct HardwareLine {
+    /// The file it's in, as shown to the user (`/etc/portage/package.use/…`).
+    pub file: PathBuf,
+    pub line: String,
+    pub groups: Vec<(crate::hardware::Group, Vec<String>)>,
+}
+
+impl HardwareLine {
+    /// Whether it's in bunny's own package.use file.
+    pub fn in_bunnys_file(&self) -> bool {
+        self.file
+            .file_name()
+            .is_some_and(|n| n == portage::BUNNY_USE_FILE)
+    }
+}
+
+impl PackageUse {
+    /// What the `[hardware]` lines add up to, per setting.
+    pub fn hardware_settings(&self) -> BTreeMap<crate::hardware::Group, Vec<String>> {
+        crate::hardware::evaluate(self.hardware.iter().flat_map(|h| &h.groups))
+    }
+
+    /// Every `[hardware]` setting on the system, and the ones in bunny's
+    /// own file, for [`crate::hardware::changes`].
+    pub fn hardware_groups(&self) -> HardwareGroups {
+        let all = self
+            .hardware
+            .iter()
+            .flat_map(|h| h.groups.iter().cloned())
+            .collect();
+        let bunnys = self
+            .hardware
+            .iter()
+            .filter(|h| h.in_bunnys_file())
+            .flat_map(|h| h.groups.iter().cloned())
+            .collect();
+        (all, bunnys)
+    }
+}
+
+/// All `[hardware]` settings on the system, and the ones in bunny's file.
+pub type HardwareGroups = (
+    Vec<(crate::hardware::Group, Vec<String>)>,
+    Vec<(crate::hardware::Group, Vec<String>)>,
+);
 
 pub fn read_package_use(root: &Path) -> Result<PackageUse> {
     let mut result = PackageUse::default();
@@ -121,7 +190,14 @@ pub fn read_package_use(root: &Path) -> Result<PackageUse> {
                         merge_flag(entry, flag);
                     }
                 }
-                None => result.skipped.push((shown.clone(), line.to_string())),
+                None => match crate::hardware::parse_line(line) {
+                    Some(groups) => result.hardware.push(HardwareLine {
+                        file: shown.clone(),
+                        line: line.to_string(),
+                        groups,
+                    }),
+                    None => result.skipped.push((shown.clone(), line.to_string())),
+                },
             }
         }
     }
@@ -303,6 +379,8 @@ impl Imported {
             let _ = writeln!(out, "profile = \"{}\"", profile.name());
         }
 
+        self.render_hardware(&mut out);
+
         for (atom, flags) in &self.use_flags {
             if flags.is_empty() {
                 continue;
@@ -371,6 +449,45 @@ impl Imported {
         out
     }
 
+    /// `[hardware]`: what package.use sets, and (commented out) what
+    /// make.conf sets.
+    fn render_hardware(&self, out: &mut String) {
+        use crate::hardware::Group;
+        let line = |group: Group, values: &[String]| {
+            let values: Vec<_> = values.iter().map(|v| quote(v)).collect();
+            format!("{} = [{}]\n", group.key(), values.join(", "))
+        };
+        if !self.hardware.is_empty() {
+            out.push_str(
+                "\n# Graphics cards and CPU features (Gentoo's VIDEO_CARDS and CPU_FLAGS_X86).\n\
+                 # They differ per computer, so they usually belong in this computer's\n\
+                 # host file (/etc/bunny/hosts/<name>.toml). Its [hardware] wins.\n\
+                 [hardware]\n",
+            );
+            for group in Group::ALL {
+                if let Some(values) = self.hardware.get(group) {
+                    out.push_str(&line(group, values));
+                }
+            }
+        }
+        if !self.make_conf_hardware.is_empty() {
+            out.push_str(
+                "\n# make.conf sets these (bunny leaves make.conf alone). To keep them in\n\
+                 # bunny.toml instead, uncomment them",
+            );
+            if self.hardware.is_empty() {
+                out.push_str(":\n# [hardware]\n");
+            } else {
+                out.push_str(" and move them under [hardware] above:\n");
+            }
+            for group in Group::ALL {
+                if let Some(values) = self.make_conf_hardware.get(group) {
+                    out.push_str(&format!("# {}", line(group, values)));
+                }
+            }
+        }
+    }
+
     pub fn summary(&self) -> String {
         let mut text = format!(
             "Imported {} packages, {} services, and USE flags for {} packages.",
@@ -378,6 +495,14 @@ impl Imported {
             self.services.len(),
             self.use_flags.values().filter(|f| !f.is_empty()).count(),
         );
+        if !self.hardware.is_empty() {
+            text.push_str("\nGraphics cards and CPU features went into [hardware].");
+        }
+        if !self.make_conf_hardware.is_empty() {
+            text.push_str(
+                "\nmake.conf sets graphics cards or CPU features; they're suggested (commented out) under [hardware].",
+            );
+        }
         if !self.leftover_services.is_empty() {
             let _ = write!(
                 text,
@@ -458,8 +583,17 @@ mod tests {
              media-gfx/swayimg LUA_SINGLE_TARGET: -* lua5-4\n\
              */* PYTHON_TARGETS: python3_13\n",
         );
+        write(
+            root,
+            "etc/portage/package.use/00video_cards",
+            "*/* VIDEO_CARDS: -* nvidia\n",
+        );
         write(root, "etc/portage/package.use/.hidden", "x/y z\n");
-        write(root, "etc/portage/make.conf", "USE=\"wayland -X\"\n");
+        write(
+            root,
+            "etc/portage/make.conf",
+            "USE=\"wayland -X\"\nVIDEO_CARDS=\"amdgpu radeonsi\"\nCPU_FLAGS_X86=\"aes avx\"\n",
+        );
         dir
     }
 
@@ -489,6 +623,30 @@ mod tests {
         // `<` range, `-*` wildcard, `*/*` wildcard
         assert_eq!(imported.skipped.len(), 3, "{:#?}", imported.skipped);
         assert!(!imported.use_flags.contains_key("x/y"));
+        // `*/* VIDEO_CARDS:` goes into [hardware], not the skipped lines;
+        // make.conf's are only suggested, and package.use's win.
+        assert_eq!(
+            imported.hardware.video_cards.as_deref(),
+            Some(&["nvidia".to_string()][..])
+        );
+        assert_eq!(imported.make_conf_hardware.video_cards, None);
+        assert_eq!(
+            imported.make_conf_hardware.cpu_flags.as_deref(),
+            Some(&["aes".to_string(), "avx".to_string()][..])
+        );
+        let text = imported.render();
+        assert!(
+            text.contains("[hardware]\nvideo_cards = [\"nvidia\"]\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("# cpu_flags = [\"aes\", \"avx\"]\n"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("#   /etc/portage/package.use/00video_cards"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -558,6 +716,15 @@ mod tests {
         assert!(plan.remove_packages.is_empty());
         assert!(plan.enable_services.is_empty());
         assert!(plan.extra_services.is_empty());
+        assert!(
+            plan.hardware_changes.is_empty(),
+            "{:#?}",
+            plan.hardware_changes
+        );
+        assert_eq!(
+            config.hardware.video_cards.as_deref(),
+            Some(&["nvidia".to_string()][..])
+        );
     }
 
     #[test]

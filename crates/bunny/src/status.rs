@@ -99,6 +99,7 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
                                 + p.remove_packages.len()
                                 + p.use_changes.len()
                                 + p.keyword_changes.len()
+                                + p.hardware_changes.len()
                                 + p.add_repositories.len()
                                 + p.remove_repositories.len()
                                 + p.enable_services.len()

@@ -10,7 +10,7 @@ mod report;
 mod switch;
 mod undo;
 
-pub(crate) use inspect::{diff_cmd, explain_cmd, lock_cmd};
+pub(crate) use inspect::{diff_cmd, explain_cmd, hardware_cmd, lock_cmd};
 pub(crate) use install::{install_cmd, Args as InstallArgs};
 pub(crate) use packages::{add_cmd, remove_cmd, search_cmd};
 pub(crate) use publish::publish;

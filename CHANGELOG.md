@@ -10,6 +10,11 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `[hardware]` in bunny.toml (or, better, this computer's host file):
+  `video_cards = ["intel", "nvidia"]` and `cpu_flags = [...]` set Gentoo's
+  VIDEO_CARDS and CPU_FLAGS_X86 for every package. `bunny hardware` suggests
+  them for this computer, and `bunny import` reads existing `*/* VIDEO_CARDS:`
+  lines into it. New Guide page: "Graphics cards and CPU features".
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

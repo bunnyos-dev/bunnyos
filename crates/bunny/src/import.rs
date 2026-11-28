@@ -17,6 +17,8 @@ pub struct Imported {
     pub packages: Vec<String>,
     pub services: Vec<String>,
     pub multilib: bool,
+    /// Gentoo's plain or desktop profile, when it's one of those.
+    pub profile: Option<crate::profile::Profile>,
     /// USE flags per package, in the order they were found.
     pub use_flags: BTreeMap<String, Vec<String>>,
     /// package.use lines bunny can't represent yet, with the file they came from.
@@ -51,6 +53,7 @@ pub fn from_system(root: &Path) -> Result<Imported> {
         packages,
         services,
         multilib: !profile_is_no_multilib(root),
+        profile: crate::profile::current(root),
         global_use: make_conf_sets_use(root),
         use_flags: package_use.flags,
         skipped: package_use.skipped,
@@ -296,6 +299,9 @@ impl Imported {
 
         out.push_str("[system]\ninit = \"openrc\"\n");
         let _ = writeln!(out, "multilib = {}", self.multilib);
+        if let Some(profile) = self.profile {
+            let _ = writeln!(out, "profile = \"{}\"", profile.name());
+        }
 
         for (atom, flags) in &self.use_flags {
             if flags.is_empty() {

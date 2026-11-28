@@ -129,6 +129,7 @@ pub(super) fn copy_tree(from: &Path, to: &Path) -> Result<()> {
 /// Puts the world file and package.use back as they were before this switch.
 /// Used when emerge refuses or the user cancels before anything is installed.
 pub(super) fn restore_files(root: &Path, backup: &Path) -> Result<()> {
+    crate::profile::restore(root, backup)?;
     let world = portage::world_path(root);
     let saved = backup.join("world");
     if saved.exists() {

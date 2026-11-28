@@ -122,6 +122,7 @@ Like `packages`, put `repositories` above the first `[section]`.
 |---|---|---|---|
 | `init` | `"openrc"` | `"openrc"` | The init system. Only OpenRC for now. |
 | `multilib` | `true` / `false` | `true` | 32-bit support (needed for Steam). Decided when Gentoo is installed. Changing it later needs a reinstall. |
+| `profile` | `"minimal"` / `"desktop"` | not set (left as it is) | Gentoo's defaults. `"minimal"` is Gentoo's plain profile: only what a system needs is on. `"desktop"` is Gentoo's desktop profile: what most desktops need (Wayland, X, sound, D-Bus, …) is on by default, so installing a desktop needs fewer settings. Gentoo prebuilds packages for both. Changing it shows `Profile: minimal → desktop` in the plan; packages whose features change are downloaded again or rebuilt, and undo puts the old profile back. A system on another profile (hardened, plasma, systemd, …) is left alone, with a note. |
 
 ## `[pkg."category/name"]`
 

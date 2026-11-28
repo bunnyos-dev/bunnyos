@@ -508,6 +508,22 @@ admins = ["you"]
 - On doas systems an optional `sudo` shim covers scripts that hardcode `sudo`.
 - GUI permission prompts use polkit with a Bunny Linux-styled agent.
 
+### Profiles (current behaviour)
+
+`[system] profile = "minimal" | "desktop"` (decided November 26–28, 2026):
+Gentoo's plain profile (`default/linux/<arch>/<release>`) or its desktop
+profile (`…/desktop`), switched by pointing `/etc/portage/make.profile` at
+the other one, keeping the architecture, release and the link's style.
+Gentoo's binhost prebuilds for both. The switch changes the link after the
+snapshot and before the package files (so emerge plans with the new
+defaults), keeps the old target in the backup folder, and a cancelled
+switch puts it back. Not set: the profile is left as it is. Any other
+profile (hardened, plasma, systemd, no-multilib, …) is left alone with a
+note: bunny only switches between these two, for now. New installs write
+`profile = "minimal"`; `bunny import` records the current one when it's
+one of the two. A desktop works from either (the resolver); "desktop"
+just needs fewer settings. Bunny's own profiles are fork step 3.
+
 ### Init systems
 
 - **OpenRC is the default and the only init system in v1.**

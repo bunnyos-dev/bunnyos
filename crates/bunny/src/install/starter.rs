@@ -88,6 +88,12 @@ repositories = [\"{own}\"]
 # Services that start when the computer does.
 services = {services}
 
+# Gentoo's defaults. \"minimal\": only what a system needs is on.
+# \"desktop\": what most desktops need (Wayland, X, sound, …) is on too, so a
+# desktop needs fewer settings. Either works; bunny works out the rest.
+[system]
+profile = \"minimal\"
+
 # Who can use sudo.
 [security]
 privilege = \"sudo\"

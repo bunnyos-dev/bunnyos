@@ -78,7 +78,7 @@ bunny status
 · Last change   a switch, Nov 17, 9:15 AM (3 hours ago)
 ✓ Undo          1 generation saved, newest Nov 17, 9:15 AM
                 `bunny rollback list` shows them.
-✓ Updates       last checked 2 days ago
+✓ Updates       package list from 2 days ago
 
 Everything is in order.
 ```

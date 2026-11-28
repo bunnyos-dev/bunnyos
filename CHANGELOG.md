@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `tools/bunny-vm.sh` remembers each VM's user once `VM_USER` is given (ssh,
+  put and stop use it), `put` copies several files and says which it copied,
+  and `stop` asks you to power off from the VM window when it can't log in.
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

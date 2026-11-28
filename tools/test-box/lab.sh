@@ -56,6 +56,23 @@ desktop)
 	em --pretend --verbose --autounmask=y sys-auth/elogind sys-apps/dbus \
 		gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar
 	;;
+binhost)
+	# Which flags Gentoo's prebuilt packages were built with (its index).
+	emerge --pretend --getbinpkg app-misc/tmux >/dev/null 2>&1
+	idx=$(find "$lab/binhost" -name Packages | head -1)
+	echo "index: $idx ($(grep -c '^CPV:' "$idx") packages)"
+	grep -E '^(PROFILE|USE|ARCH|CHOST|CFLAGS):' "$idx" | head -8
+	for p in xfce-base/libxfce4ui x11-libs/gtk+ gui-libs/gtk dev-qt/qtbase dev-qt/qtdeclarative \
+		media-libs/mesa x11-libs/cairo media-libs/freetype media-libs/libglvnd \
+		gui-libs/wlroots x11-libs/libxkbcommon net-wireless/wpa_supplicant; do
+		echo "== $p"
+		awk -v p="$p" 'BEGIN{RS=""} $0 ~ "\nCPV: "p"-[0-9]" {
+			for (i=1;i<=NF;i++) if ($i=="CPV:"||$i=="USE:") {}
+			match($0, /CPV: [^\n]*/); c=substr($0,RSTART,RLENGTH)
+			match($0, /\nUSE: [^\n]*/); u=substr($0,RSTART+1,RLENGTH-1)
+			print "  " c; print "    " u }' "$idx" | head -12
+	done
+	;;
 search)
 	guru
 	for p in hyprland mangowm quickshell sway; do

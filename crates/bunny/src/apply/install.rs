@@ -40,7 +40,7 @@ pub(super) fn install_quietly(
     }
     let update: Vec<&str> = update.iter().map(String::as_str).collect();
     let (list, dry_run_log) = ask_portage(root, plan, runner, opts, outcome, &update)?;
-    let left_out = left_out(plan, &list);
+    let left_out = left_out(root, plan, &list);
     if !left_out.is_empty() {
         // Usually only a testing version, or a USE flag it needs: the
         // resolver can say exactly what, by asking for them by name.
@@ -152,10 +152,15 @@ fn resolve_settings(
 /// `@world`, emerge skips a package it can't install (only a testing
 /// version, masked) with a warning instead of failing, so the plan alone
 /// would say there's nothing to do.
-fn left_out(plan: &Plan, list: &[Merge]) -> Vec<String> {
+///
+/// A package that's already installed isn't left out: it's new to the
+/// world file only (pulled in before as a dependency, like `sys-apps/dbus`
+/// for `[desktop]`), so emerge rightly has nothing to do for it.
+fn left_out(root: &Path, plan: &Plan, list: &[Merge]) -> Vec<String> {
     plan.add_packages
         .iter()
         .filter(|p| !list.iter().any(|m| &m.name == *p))
+        .filter(|p| crate::portage::is_installed(root, p) != Some(true))
         .cloned()
         .collect()
 }
@@ -623,4 +628,35 @@ pub(super) fn save_log(root: &Path, stamp: &str, what: &str, text: &str) -> Opti
     let path = dir.join(format!("{stamp}-{what}.log"));
     std::fs::write(&path, text).ok()?;
     Some(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plan(add: &[&str]) -> Plan {
+        Plan {
+            add_packages: add.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_installed_dependency_new_to_world_is_not_left_out() {
+        // [desktop] adds sys-apps/dbus to the world file, but the base
+        // system already has it, so emerge's @world plan doesn't list it.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("var/db/pkg/sys-apps/dbus-1.16.2-r2")).unwrap();
+        std::fs::create_dir_all(dir.path().join("var/db/pkg/sys-auth")).unwrap();
+        let p = plan(&["sys-apps/dbus", "sys-auth/elogind", "gui-wm/mangowm"]);
+        let list = vec![Merge {
+            name: "gui-wm/mangowm".into(),
+            version: "0.18.6".into(),
+            from: None,
+            action: crate::emerge::Action::New,
+            binary: false,
+            why: crate::emerge::Why::default(),
+        }];
+        assert_eq!(left_out(dir.path(), &p, &list), ["sys-auth/elogind"]);
+    }
 }

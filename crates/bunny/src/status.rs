@@ -479,13 +479,23 @@ impl Status {
                     "Kernel",
                     &format!("/boot has kernel {after} again, put back after the undo from the boot menu"),
                 );
-                more(
-                    &mut out,
-                    &format!(
-                        "(it had {} from the version you went back from)",
-                        record.kernels_before.join(", ")
-                    ),
-                );
+                // Only the kernels that were taken out: one that stayed
+                // isn't something it "had".
+                let removed: Vec<&str> = record
+                    .kernels_before
+                    .iter()
+                    .filter(|k| !record.kernels_after.contains(k))
+                    .map(String::as_str)
+                    .collect();
+                if !removed.is_empty() {
+                    more(
+                        &mut out,
+                        &format!(
+                            "(it had {} from the version you went back from)",
+                            removed.join(", ")
+                        ),
+                    );
+                }
             }
         }
         if self.kernels_unchecked && self.boot_undo_waiting.is_none() {
@@ -981,6 +991,54 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("(it had 6.12.60-gentoo-dist"), "{text}");
+    }
+
+    #[test]
+    fn names_only_the_kernels_that_were_removed() {
+        // The laptop VM test: the version undone had the same kernel plus a
+        // test one; only the test one was taken out.
+        let mut s = good();
+        s.boot_undo = Some(crate::finish_undo::Record {
+            to: "bunny-20261117-091500".into(),
+            at: "20261118-080000".into(),
+            kernels_before: vec!["6.18.63-gentoo-dist-bin".into(), "9.9.9-test".into()],
+            kernels_after: vec!["6.18.63-gentoo-dist-bin".into()],
+            problem: None,
+        });
+        let text = s.render();
+        assert!(
+            text.contains("(it had 9.9.9-test from the version you went back from)"),
+            "{text}"
+        );
+        assert_eq!(text.matches("6.18.63-gentoo-dist-bin").count(), 1, "{text}");
+
+        // Two taken out, one kept.
+        s.boot_undo.as_mut().unwrap().kernels_before = vec![
+            "6.18.63-gentoo-dist-bin".into(),
+            "6.18.64-gentoo-dist-bin".into(),
+            "9.9.9-test".into(),
+        ];
+        let text = s.render();
+        assert!(
+            text.contains("(it had 6.18.64-gentoo-dist-bin, 9.9.9-test from the version"),
+            "{text}"
+        );
+
+        // Nothing taken out, only one added: no "(it had …)" line.
+        let record = s.boot_undo.as_mut().unwrap();
+        record.kernels_before = vec!["6.18.63-gentoo-dist-bin".into()];
+        record.kernels_after = vec![
+            "6.18.62-gentoo-dist-bin".into(),
+            "6.18.63-gentoo-dist-bin".into(),
+        ];
+        let text = s.render();
+        assert!(
+            text.contains(
+                "/boot has kernel 6.18.62-gentoo-dist-bin, 6.18.63-gentoo-dist-bin again"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("(it had"), "{text}");
     }
 
     #[test]

@@ -983,7 +983,7 @@ From the laptop VM test of #74 (November 24):
       root-only) silently skips the kernel check, so a kernel without drivers
       went unmentioned. Say "run with doas to check the kernel too", the way
       `bunny plan` does for the boot menu.
-- [ ] After the kernel is put back, status says "(it had 6.18.63…, 9.9.9-test
+- [~] After the kernel is put back, status says "(it had 6.18.63…, 9.9.9-test
       from …)", listing the kernel that stayed too. Name only the kernels
       that were removed.
 

@@ -127,6 +127,47 @@ then run `bunny switch`. A word on its own turns a feature on; with `-` in
 front it's turned off. To see what a package's flags mean, look it up on
 [packages.gentoo.org](https://packages.gentoo.org).
 
+## When emerge needs settings changed
+
+Bigger programs often need a few settings first: a USE flag on one of the
+libraries they use, or a testing version of something. On Gentoo you'd run
+emerge, add what it asks for, run it again, and repeat. bunny does those
+rounds for you, on a copy of the settings (nothing changes while it works),
+and shows everything at once:
+
+```text
+emerge needs these settings to install what you asked for. bunny worked them
+out the way you would by hand:
+
+  USE flags
+    dev-qt/qtbase         opengl vulkan wayland  needed by dev-qt/qtwayland
+    dev-qt/qtdeclarative  opengl vulkan wayland  to match dev-qt/qtbase
+    xfce-base/libxfce4ui  wayland                needs one of wayland X
+
+  Testing versions
+    dev-cpp/cpptrace  ~amd64  needed by gui-apps/quickshell
+
+Add these to /etc/bunny/bunny.toml and continue? [Y/n]
+```
+
+Say yes and they're written into your `bunny.toml` (into each package's
+existing `[pkg]` section, if it has one) and the install carries on. Say no
+and nothing changes.
+
+How it chooses, so you know what you're agreeing to:
+
+- **"Needs one of A or B"**: Wayland first, then whichever turns a feature on
+  rather than off.
+- **A flag you set yourself is never flipped back.** When something else
+  wants it the other way, it's usually a prebuilt package built without it:
+  that package gets the same flag, so a prebuilt copy that matches is used
+  (Gentoo builds most big packages several ways). If none matches, it's
+  compiled instead, marked `prebuilt = false`.
+- **Testing versions** only for the packages that have no stable one.
+
+If emerge still can't work it out, bunny says so, shows the end of emerge's
+message, and changes nothing.
+
 ## Big programs with flatpak
 
 Some big desktop programs are easier as Flatpaks (no compiling, sandboxed).

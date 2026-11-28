@@ -21,6 +21,7 @@ mod install;
 mod package_use;
 mod repositories;
 mod runner;
+pub mod services;
 #[cfg(test)]
 mod tests;
 
@@ -61,9 +62,27 @@ impl std::fmt::Display for NothingChanged {
 
 impl std::error::Error for NothingChanged {}
 
+/// emerge refused, but bunny's resolver found the settings that make it
+/// work. Nothing was changed: the caller shows them, and (if the user
+/// agrees) writes them into bunny.toml and runs the switch again.
+#[derive(Debug)]
+pub struct NeedsChanges(pub crate::helper::Resolution);
+
+impl std::fmt::Display for NeedsChanges {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("emerge needs some settings changed first. Nothing was changed.")
+    }
+}
+
+impl std::error::Error for NeedsChanges {}
+
 /// Marks an error as coming from before anything was changed.
 pub fn nothing_changed(e: anyhow::Error) -> anyhow::Error {
-    if e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>() {
+    if e.is::<NothingChanged>()
+        || e.is::<Cancelled>()
+        || e.is::<Refused>()
+        || e.is::<NeedsChanges>()
+    {
         return e;
     }
     anyhow::Error::new(NothingChanged(format!("{e:#}")))
@@ -71,7 +90,7 @@ pub fn nothing_changed(e: anyhow::Error) -> anyhow::Error {
 
 /// Whether nothing on the system was changed when `e` happened.
 pub fn changed_nothing(e: &anyhow::Error) -> bool {
-    e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>()
+    e.is::<NothingChanged>() || e.is::<Cancelled>() || e.is::<Refused>() || e.is::<NeedsChanges>()
 }
 
 /// emerge refused before installing anything (its dry run failed), and the
@@ -178,9 +197,20 @@ pub fn switch(
     apply_security(plan, runner, &outcome)?;
     // 6. Remove what nothing needs any more. Always asks.
     remove_unused(plan, runner, opts, &mut outcome)?;
-    // 7. Services.
-    enable_services(config, root, plan, runner, &mut outcome)?;
-    if plan
+    // 7. Services. OpenRC's own lines go to the services log; bunny says
+    //    what happened.
+    let mut services = services::ServiceCommands::new(opts.verbose);
+    enable_services(config, root, plan, runner, &mut services, &mut outcome)?;
+    if plan.enable_services.iter().any(|s| s == "elogind") {
+        // Seats (the screen and keyboard a desktop takes over) are set up
+        // when the computer starts: a desktop started before that says
+        // "Could not take device". Logging out isn't enough.
+        outcome.notes.push(
+            "Desktop logins are set up (elogind). Restart the computer once before \
+             starting a desktop: until then it can't take over the screen and keyboard."
+                .into(),
+        );
+    } else if plan
         .use_changes
         .iter()
         .any(|c| c.atom == "sys-auth/pambase")
@@ -193,9 +223,22 @@ pub fn switch(
     }
     // 7b. The console font that draws ✓ ✗ ⚠ (bunny install sets it up;
     //     existing systems get it here). Problems are notes, never a stop.
-    let font_notes =
-        crate::console_font::apply(root, &plan.console_font, &outcome.backup_dir, runner)?;
+    let font_notes = crate::console_font::apply(
+        root,
+        &plan.console_font,
+        &outcome.backup_dir,
+        runner,
+        &mut services,
+    )?;
     outcome.notes.extend(font_notes);
+    if let (Some(log), true) = (services.save(root, &opts.stamp), services.failed()) {
+        outcome.notes.push(format!(
+            "What OpenRC printed is in {}.",
+            Path::new("/")
+                .join(log.strip_prefix(root).unwrap_or(&log))
+                .display()
+        ));
+    }
     // 8. The boot menu's undo entry, pointing at this switch's snapshot.
     update_boot_menu(config, root, plan, opts, runner, &mut outcome)?;
 
@@ -373,6 +416,7 @@ fn enable_services(
     root: &Path,
     plan: &Plan,
     runner: &mut dyn Runner,
+    services: &mut services::ServiceCommands,
     outcome: &mut Outcome,
 ) -> Result<()> {
     let init = init::for_config(config.system.init, root);
@@ -385,19 +429,21 @@ fn enable_services(
             continue;
         }
         let runlevel = init::openrc_runlevel(service);
-        if !runner.run(&cmd(&["rc-update", "add", service, runlevel]))? {
+        if !services.run(runner, &cmd(&["rc-update", "add", service, runlevel]))? {
             outcome
                 .notes
                 .push(format!("Couldn't enable \"{service}\" at boot."));
             continue;
         }
         // Start it now too, so it doesn't wait for the next reboot.
-        if !runner.run(&cmd(&["rc-service", service, "start"]))? {
+        if !services.run(runner, &cmd(&["rc-service", service, "start"]))? {
             outcome.notes.push(format!(
                 "\"{service}\" will start at boot, but didn't start now. \
                  Check it with: {} rc-service {service} status",
                 crate::security::admin()
             ));
+        } else if !services.verbose && !runner.dry() {
+            println!("  ✓ Started {service}; it starts at every boot too.");
         }
     }
     Ok(())

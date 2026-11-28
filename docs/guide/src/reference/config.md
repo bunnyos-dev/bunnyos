@@ -132,6 +132,7 @@ Settings for one package.
 |---|---|---|
 | `use` | `["pgo", "-telemetry"]` | USE flags: turn features on (`pgo`) or off (`-telemetry`). |
 | `keywords` | `["~amd64"]` | Versions to accept beyond stable ones. `"~amd64"` allows testing versions (most work fine; Gentoo just hasn't declared them stable yet). `"**"` allows any version, including unreleased ones from git: avoid it unless you mean it. |
+| `prebuilt` | `false` | Always compile this package instead of downloading Gentoo's prebuilt copy. Leave it out normally: bunny downloads a prebuilt copy whenever one was built with your flags. bunny sets it itself only when every prebuilt copy gets in the way (see [When emerge needs settings changed](../tasks/install.md#when-emerge-needs-settings-changed)). |
 
 Group flags (Gentoo's `PYTHON_TARGETS: python3_12` style) are written as one
 word: `python_targets_python3_12`.
@@ -195,8 +196,9 @@ Set this up by hand before (the `[pkg]` lines and services above)? Those
 lines can stay, or you can replace them with the section: `bunny plan` then
 says there's nothing to do.
 
-After the switch that turns it on, **log out and back in**: logins from before
-don't go through elogind. bunny reminds you.
+After the switch that turns it on, **restart the computer once**: the seats
+a desktop takes over (screen, keyboard) are set up at startup, and logins
+from before don't go through elogind. bunny reminds you.
 
 It doesn't install a desktop itself; add the one you want with `bunny add`.
 Choosing a whole desktop in this section (`name = "mango"`, Bunny Desktop,

@@ -1,0 +1,15 @@
+WARNING: One or more updates/rebuilds have been skipped due to a dependency conflict:
+
+llvm-runtimes/libclc:0
+
+  (llvm-runtimes/libclc-23.1.6:0/0::gentoo, ebuild scheduled for merge) USE="spirv -test -verify-sig" ABI_X86="(64)" VIDEO_CARDS="radeonsi -nvidia" conflicts with
+    =llvm-runtimes/libclc-22* required by (dev-util/mesa_clc-26.2.7-1:0/0::gentoo, binary scheduled for merge) USE="-debug" ABI_X86="(64)" LLVM_SLOT="22 -20 -21" VIDEO_CARDS="-asahi -panfrost"
+    ^                     ^^^
+
+dev-util/spirv-tools:0
+
+  (dev-util/spirv-tools-1.4.363.0-1:0/0::gentoo, binary scheduled for merge) USE="-test" ABI_X86="(64) -32 (-x32)" conflicts with
+    ~dev-util/spirv-tools-1.4.357.0[abi_x86_64(-)] required by (dev-util/glslang-1.4.357.0-1:0/16.4::gentoo, binary scheduled for merge) USE="" ABI_X86="(64) -32 (-x32)"
+    ^                     ^^^^^^^^^               
+
+

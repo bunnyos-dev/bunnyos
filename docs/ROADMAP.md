@@ -74,12 +74,12 @@ means no more prebuilt packages for what it affects.
 23, 2026).** Teach people to read Gentoo's own information instead of
 copying flags that change:
 
-- [ ] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
+- [x] **Guide page: "Finding and using USE flags"** (Everyday tasks). How to
       read a package's flags on packages.gentoo.org and the Gentoo wiki,
       what `+`/`-` and defaults mean, and how to write what you found in
       `bunny.toml`; then `bunny plan` to see the effect. Use Firefox as the
       worked example, but teach the method, not a fixed list of flags.
-- [ ] **Starter `bunny.toml`: a few commented-out examples** showing how
+- [x] **Starter `bunny.toml`: a few commented-out examples** showing how
       each thing is written (a package with USE flags, a testing keyword, a
       service), each pointing to its Guide page. Only stable, structural
       examples; a test uncomments them and runs `bunny check`.
@@ -520,7 +520,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
-- [ ] **SSH from kitty (and other new terminals) gets "cannot initialize
+- [~] **SSH from kitty (and other new terminals) gets "cannot initialize
       terminal type xterm-kitty"** on a Bunny system: nano and other
       full-screen programs refuse to start. Add the terminfo of common
       terminals to the base system (`x11-terms/kitty-terminfo`, and check
@@ -559,13 +559,13 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `sys-apps/pciutils` and `sys-apps/usbutils` (`lsusb`): they're the
       first thing anyone checks hardware with, and small. Make sure the
       image-shrinking step keeps them (and the PCI ID list they read).
-- [ ] **"There's no disk Bunny Linux can be installed on" could say why.**
+- [~] **"There's no disk Bunny Linux can be installed on" could say why.**
       When only USB sticks are found, add the likely causes in plain words:
       the internal disk isn't connected, or the firmware's storage mode is
       RAID / Intel RST (set SATA Operation to AHCI), which hides it from
       Linux on many laptops. (Tested November 23: Ventoy's stick was
       correctly refused as the live system's own disk.)
-- [ ] **Installing over Wi-Fi leaves the new system offline.** iwd is
+- [~] **Installing over Wi-Fi leaves the new system offline.** iwd is
       installed but not in the starter config's services (only dhcpcd, for
       a cable), and the Wi-Fi network joined on the live USB isn't carried
       over. When the install ran over Wi-Fi: add `iwd` to the services and
@@ -575,34 +575,40 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       way (dracut finds its image), and that the installer leaves the
       Ventoy stick out of the disk list like it does a plain USB stick.
 
-- [ ] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
+- [x] **A fresh install compiled `sys-libs/zlib` (1.3.2-r1 → 1.4)** because no
       prebuilt package was available. Find out whether the binhost is behind
       Gentoo's tree, and make a fresh install compile only bunny's own
-      packages (`bunny-release`).
-- [ ] **The "Note: If this change stops the system from starting…" line wraps
+      packages (`bunny-release`). **Found (November 25):** the binhost was
+      behind. Its zlib 1.4 packages were built on November 23 between 09:11
+      and 12:21 UTC, the day of the install; with the tree of November 24 and
+      bunny's exact settings, the install's world update takes zlib 1.4 (and
+      everything else) prebuilt. Nothing in bunny's settings differs from
+      the prebuilt one, so no change in bunny; the install reference says
+      why it can happen.
+- [x] **The "Note: If this change stops the system from starting…" line wraps
       mid-word** at the console's edge ("star ting"). Wrap at word breaks.
 - [x] **A smaller live USB** (asked for by the maintainer): it was about
       1.45 GB, near its budget. Measure what takes the space and remove what
       the USB never needs, keeping network and graphics drivers and
       firmware. Now 826 MB; installed from it in the VM on November 23.
-- [ ] **The live USB's boot line uses a renamed dracut option**: "Kernel
+- [x] **The live USB's boot line uses a renamed dracut option**: "Kernel
       command line option 'rd.live.overlay.overlayfs' is deprecated, use
       'rd.overlay' instead." Update tools/iso/grub.cfg (every entry) and
       check dracut's docs for the new spelling.
-- [ ] **Early-boot lines still show on the quiet entries**: `insmod
+- [x] **Early-boot lines still show on the quiet entries**: `insmod
       /lib/modules/…/asymmetric_keys/pkc…` and a few more, before OpenRC
       starts (so #106's quiet start doesn't cover them). Find what prints
       them (dracut's module loading, the kernel's log level) and quiet them
       on the normal entries only; "show start-up messages" keeps them.
-- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+- [x] **`bunny status` on a brand-new install says "Updates: last checked
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.
-- [ ] **The graphical installer leaves developer mode off**, while the
+- [x] **The graphical installer leaves developer mode off**, while the
       terminal install keeps it on ("Keeping the recording of this install").
       Make them behave the same (check how the terminal path decides, and
       what `bunny install --yes` from the graphical installer misses).
-- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+- [x] **Switching on the console font prints OpenRC's raw lines** ("service
       consolefont added to runlevel boot", "WARNING: you are stopping a boot
       service", "Caching service dependencies … [ ok ]"). Run rc-update and
       the service quietly and say it in bunny's own words, keeping the
@@ -765,6 +771,28 @@ to-do list. Appearance work comes last and a little at a time.
 ### Outside our control
 - Epic accepting Bunny Linux's signing key (anti-cheat games)
 - A Microsoft-signed shim (Secure Boot on the install USB)
+
+## Desktop-ready (from the G16 test, November 26)
+
+The bar: a fresh install, then `[desktop]` + Mango (or Hyprland) + the
+Quickshell island in one `bunny add`, with no hand edits, from a minimal
+profile as well as a desktop one. Details: the G16 field notes.
+
+- [~] **The resolver**: when emerge needs settings changed, bunny works them
+      all out in one go (USE flags, testing versions, either/or choices,
+      matching flags on packages that pin them), shows them once and adds
+      them to bunny.toml. `prebuilt = false` for packages that must compile.
+      Proven in the lab on the test machine (`tools/test-box/lab.sh`).
+- [~] Explainer fixes from the G16: slot conflicts one by one (#9), Portage
+      crashes (#5). Keyword masks (#7) and any-of (#8) are handled by the
+      resolver: it fixes them instead of only explaining them.
+- [ ] Explainer fixes from the G16: keyword masks reported as "couldn't
+      find" (#7), any-of (#8), slot conflicts (#9), Portage crashes (#5).
+- [ ] Small ones: iwd after a Wi-Fi install (#3), udev re-trigger after
+      `[desktop]` (#4), doas.conf taking effect (#6), kitty terminfo (#11),
+      the ISO attached to a release.
+- [ ] Profiles: `profile = "minimal" | "desktop"`, the installer asks.
+- [ ] Re-test on the G16: the bar above.
 
 ## A solid base, and room to leave it (after alpha)
 
@@ -945,6 +973,20 @@ switch); Wi-Fi checked on its own now and then.
 
 ## Known issues / small fixes
 
+From the Friday test session (November 28; #141–#148 passed and merged):
+- [ ] **"Did you mean" misses the same name in another category**: `bunny add
+      app-misc/tree` suggested tre and two emacs packages, not app-text/tree.
+      An exact name match in any category should come first.
+- [ ] **Developer mode's "couldn't send a report" line wraps mid-word**
+      (`dev-util/` | `github-cli`): use the word-break wrapping from #141.
+- [ ] **A plain `bunny plan` tries to send a report** in developer mode
+      ("Couldn't send a report… gh isn't installed"). Check that "auto" only
+      sends for commands that fail or show ⚠/✗, and that a read-only plan
+      with only `+` lines isn't one.
+- [ ] **The live USB shows `hwclock: select() to /dev/rtc to wait for clock
+      tick timed out`** before the welcome (seen in QEMU). Quiet it on the
+      normal entries, like the insmod line.
+
 From the test machine (November 24):
 - [ ] Logging in on the console prints "Starting user.bunny … failed to start
       user.bunny / ERROR: user.bunny failed to start" (OpenRC's per-user
@@ -959,11 +1001,11 @@ From the laptop VM test of #74 (November 24):
 - [ ] The boot menu's main entry still said **"Gentoo"** after a switch that
       said it renamed it to "Bunny Linux" (theme off and BootNext gone did
       work). Find why the rename didn't reach `grub.cfg`.
-- [ ] `bunny status` run as you on an encrypted install (where `/boot` is
+- [~] `bunny status` run as you on an encrypted install (where `/boot` is
       root-only) silently skips the kernel check, so a kernel without drivers
       went unmentioned. Say "run with doas to check the kernel too", the way
       `bunny plan` does for the boot menu.
-- [ ] After the kernel is put back, status says "(it had 6.18.63…, 9.9.9-test
+- [~] After the kernel is put back, status says "(it had 6.18.63…, 9.9.9-test
       from …)", listing the kernel that stayed too. Name only the kernels
       that were removed.
 

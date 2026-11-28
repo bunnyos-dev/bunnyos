@@ -15,9 +15,12 @@ minimal system. It runs from a live USB.
   encrypted (LUKS2) with btrfs subvolumes for the system, your files, logs,
   caches, build space and generations.
 - A minimal system: OpenRC, Gentoo's prebuilt kernel (`gentoo-kernel-bin`)
-  and firmware, GRUB, networking (`dhcpcd` for Ethernet, `iwd` installed for
-  Wi-Fi), a system log, `sudo`, `git`, and bunny itself in
-  `/usr/local/bin/bunny`.
+  and firmware, GRUB, networking (`dhcpcd` for Ethernet; `iwd` for Wi-Fi,
+  started at boot on a computer that has Wi-Fi, from its host file), a
+  system log, `sudo`, `git`, kitty's terminal type (so SSH from kitty
+  works), and bunny itself in `/usr/local/bin/bunny`.
+- The Wi-Fi networks you joined on the USB, copied into the new system's
+  `/var/lib/iwd` (readable by root only), so it's online at its first start.
 - Your account, in the `wheel` group, with admin rights through sudo. The
   `root` account has no password (use sudo).
 - Your time zone and keyboard layout. The language is US English for now.
@@ -143,11 +146,22 @@ first `bunny switch` would show them as "(rebuild)". The install updates
 them from Gentoo's prebuilt packages instead, so the first switch has
 nothing to rebuild.
 
+**When something compiles anyway.** Everything the install itself puts in
+comes prebuilt from Gentoo's binary host; only Bunny Linux's own packages
+(`bunny-release`) are built on your computer, during the first switch. The
+exception is a package Gentoo marked stable in the last few hours: Gentoo
+builds the prebuilt copy after the package list already has the new
+version, so an install in that window compiles that one package (zlib 1.4's
+prebuilt copies appeared on November 23, 2026, the same day an install
+compiled it). Nothing is wrong when this happens, it only takes longer; an
+install a day later gets the prebuilt one.
+
 If a step fails, bunny says which one and why, unmounts everything and locks
 the disk again. The disk is only partly set up at that point; run
 `bunny install` again and it starts over from the beginning.
 
-On a **preview USB** (built for testing), the install is recorded, and just
+On a **preview USB** (built for testing), the install is recorded (from the
+terminal or the graphical installer alike), and just
 before unmounting it copies the recording into your home folder in the new
 system ("Keeping the recording of this install"), so `bunny report` can send
 it after you restart. See
@@ -188,8 +202,11 @@ computer:
   one lists the minimal system's networking, log, sudo and git, plus
   `sys-apps/bunny-release` from Bunny Linux's own repository
   (`repositories = ["bunny"]`), which makes the system say Bunny Linux
-  instead of Gentoo. It has comments pointing to this Guide. Put it in git and use it on every
-  computer.
+  instead of Gentoo. It has comments pointing to this Guide, and a few
+  commented-out examples (`app-misc/tmux` and `net-misc/chrony` in
+  `packages`, `chronyd` in `services`, and a `[pkg."app-misc/tmux"]` entry
+  with `use` and `keywords`): remove the `#` to use one. Put it in git and
+  use it on every computer.
 - **`/etc/bunny/hosts/<computer name>.toml`** is what this computer needs to
   start (the kernel, firmware, GRUB, the filesystem tools, and `cryptsetup`
   when the disk is encrypted), plus a `[machine]` record of how its disk was

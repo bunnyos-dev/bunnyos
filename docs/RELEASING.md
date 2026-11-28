@@ -70,3 +70,13 @@ tools/bunny-vm.sh run bunny-linux-live.iso
 The release workflow also runs on pull requests that change it, and from
 **Actions → Release → Run workflow**: it builds the binary and the notes and
 keeps them as a workflow artifact, without publishing anything.
+
+## The rolling preview
+
+Between releases, testers get the **Preview** pre-release (tag `preview`):
+the ISO workflow rebuilds the live USB image whenever a push to `main`
+changes something in it (the image's scripts, bunny or the installer), checks
+that it starts, and replaces the Preview with it (deleted and made again, so
+its tag moves to that commit). Preview images record installs (developer
+mode), which its release notes say. Tagged releases (`v0.1.0`, …) are
+separate and never touched by this.

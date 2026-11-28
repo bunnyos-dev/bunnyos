@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Result};
 
 use super::package_use::restore_files;
-use super::{cmd, Cancelled, Options, Outcome, Refused, Runner};
+use super::{cmd, Cancelled, NeedsChanges, Options, Outcome, Refused, Runner};
 use crate::emerge::Merge;
 use crate::explain;
 use crate::plan::Plan;
@@ -23,18 +23,32 @@ pub(super) fn install_quietly(
 ) -> Result<()> {
     // --ask=n: EMERGE_DEFAULT_OPTS may say --ask, but bunny asks itself and
     // emerge has no terminal here, so it would refuse.
-    let update = [
+    let mut update = cmd(&[
         "emerge",
         "--update",
         "--deep",
         "--newuse",
         "--color=n",
         "--ask=n",
-    ];
-    let (list, dry_run_log) = ask_portage(root, runner, opts, outcome, &update)?;
-    let left_out = left_out(plan, &list);
+    ]);
+    // Packages the config says to compile (`prebuilt = false`).
+    if !plan.compile_from_source.is_empty() {
+        update.push(format!(
+            "--usepkg-exclude={}",
+            plan.compile_from_source.join(" ")
+        ));
+    }
+    let update: Vec<&str> = update.iter().map(String::as_str).collect();
+    let (list, dry_run_log) = ask_portage(root, plan, runner, opts, outcome, &update)?;
+    let left_out = left_out(root, plan, &list);
     if !left_out.is_empty() {
-        return explain_left_out(root, &left_out, runner, opts, outcome);
+        // Usually only a testing version, or a USE flag it needs: the
+        // resolver can say exactly what, by asking for them by name.
+        if let Some(resolution) = resolve_settings(runner, plan, &left_out) {
+            discard(root, runner, outcome)?;
+            return Err(NeedsChanges(resolution).into());
+        }
+        return explain_left_out(root, plan, &left_out, runner, opts, outcome);
     }
     if list.is_empty() {
         println!("emerge has nothing to install.");
@@ -59,6 +73,7 @@ pub(super) fn install_quietly(
 /// for the log.
 fn ask_portage(
     root: &Path,
+    plan: &Plan,
     runner: &mut dyn Runner,
     opts: &Options,
     outcome: &mut Outcome,
@@ -73,7 +88,7 @@ fn ask_portage(
     pretend.push("@world".into());
     // Portage's own answer, as data. emerge's screen text only when that
     // isn't available (and to explain a refusal).
-    let problems = match crate::helper::plan(runner) {
+    let problems = match crate::helper::plan(runner, &plan.compile_from_source) {
         crate::helper::PlanAnswer::List(list) => {
             return Ok((
                 list,
@@ -92,13 +107,22 @@ fn ask_portage(
     let raw = output;
     let output = explain::strip_ansi(&raw);
     if !ok {
-        discard(root, runner, outcome)?;
         let log = save_log(
             root,
             &opts.stamp,
             "emerge",
             &format!("$ {}\n{raw}", pretend.join(" ")),
         );
+        // Before giving up: work out what a Gentoo user would change by
+        // hand (USE flags, testing versions, which prebuilt copies fit),
+        // all at once, on a copy of the settings. The files bunny just
+        // wrote are what it starts from, so this happens before they're
+        // put back.
+        if let Some(resolution) = resolve_settings(runner, plan, &[]) {
+            discard(root, runner, outcome)?;
+            return Err(NeedsChanges(resolution).into());
+        }
+        discard(root, runner, outcome)?;
         let text = refusal_message(&output, &problems, log);
         return Err(Refused(text).into());
     }
@@ -106,14 +130,37 @@ fn ask_portage(
     Ok((list, format!("$ {}\n{output}", pretend.join(" "))))
 }
 
+/// Asks bunny's resolver what would let emerge work out a plan. Only an
+/// answer with changes in it counts: no python3, an old helper, or "nothing
+/// I can change" all mean "explain emerge's message as before".
+fn resolve_settings(
+    runner: &mut dyn Runner,
+    plan: &Plan,
+    names: &[String],
+) -> Option<crate::helper::Resolution> {
+    if runner.dry() {
+        return None;
+    }
+    println!(
+        "emerge needs some settings changed first. Working out which ones\n\
+         (the way you would by hand, but all at once; this can take a minute or two)…"
+    );
+    crate::helper::resolve(runner, &plan.compile_from_source, names).filter(|r| !r.is_empty())
+}
+
 /// Packages you added that emerge's plan doesn't install. Updating
 /// `@world`, emerge skips a package it can't install (only a testing
 /// version, masked) with a warning instead of failing, so the plan alone
 /// would say there's nothing to do.
-fn left_out(plan: &Plan, list: &[Merge]) -> Vec<String> {
+///
+/// A package that's already installed isn't left out: it's new to the
+/// world file only (pulled in before as a dependency, like `sys-apps/dbus`
+/// for `[desktop]`), so emerge rightly has nothing to do for it.
+fn left_out(root: &Path, plan: &Plan, list: &[Merge]) -> Vec<String> {
     plan.add_packages
         .iter()
         .filter(|p| !list.iter().any(|m| &m.name == *p))
+        .filter(|p| crate::portage::is_installed(root, p) != Some(true))
         .cloned()
         .collect()
 }
@@ -122,12 +169,19 @@ fn left_out(plan: &Plan, list: &[Merge]) -> Vec<String> {
 /// reason instead of skipping them, and explains it. Nothing is changed.
 fn explain_left_out(
     root: &Path,
+    plan: &Plan,
     left_out: &[String],
     runner: &mut dyn Runner,
     opts: &Options,
     outcome: &mut Outcome,
 ) -> Result<()> {
     let mut pretend = cmd(&["emerge", "--pretend", "--verbose", "--color=n", "--ask=n"]);
+    if !plan.compile_from_source.is_empty() {
+        pretend.push(format!(
+            "--usepkg-exclude={}",
+            plan.compile_from_source.join(" ")
+        ));
+    }
     pretend.extend(left_out.iter().cloned());
     let (_ok, raw) = runner.run_quiet(&pretend, &mut |_| {})?;
     let output = explain::strip_ansi(&raw);
@@ -574,4 +628,35 @@ pub(super) fn save_log(root: &Path, stamp: &str, what: &str, text: &str) -> Opti
     let path = dir.join(format!("{stamp}-{what}.log"));
     std::fs::write(&path, text).ok()?;
     Some(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plan(add: &[&str]) -> Plan {
+        Plan {
+            add_packages: add.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_installed_dependency_new_to_world_is_not_left_out() {
+        // [desktop] adds sys-apps/dbus to the world file, but the base
+        // system already has it, so emerge's @world plan doesn't list it.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("var/db/pkg/sys-apps/dbus-1.16.2-r2")).unwrap();
+        std::fs::create_dir_all(dir.path().join("var/db/pkg/sys-auth")).unwrap();
+        let p = plan(&["sys-apps/dbus", "sys-auth/elogind", "gui-wm/mangowm"]);
+        let list = vec![Merge {
+            name: "gui-wm/mangowm".into(),
+            version: "0.18.6".into(),
+            from: None,
+            action: crate::emerge::Action::New,
+            binary: false,
+            why: crate::emerge::Why::default(),
+        }];
+        assert_eq!(left_out(dir.path(), &p, &list), ["sys-auth/elogind"]);
+    }
 }

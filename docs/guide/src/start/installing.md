@@ -163,6 +163,21 @@ bunny asks a few things, one at a time:
 1. **Which disk.** It lists the disks with their size and model, and leaves
    out ones it can't use (the USB stick, for one) with the reason. With only
    one disk, it picks that one.
+
+   If the USB stick is the only disk it finds, it stops and says so:
+
+   ```text
+   ✗ There's no disk Bunny Linux can be installed on.
+     The USB stick you started from is left out on purpose, and no other
+     disk was found. Check that the computer's disk is fitted, and that it's
+     turned on in the firmware settings (BIOS/UEFI). On many laptops an NVMe
+     disk only shows up when the storage mode ("SATA Operation") is AHCI,
+     not RAID or Intel RST. Then run lsblk to see which disks Linux finds.
+   ```
+
+   Nothing was changed. After fixing the firmware setting, start from the
+   stick again and run `lsblk`: the computer's disk (like `nvme0n1` or
+   `sda`) should be in the list.
 2. **Use the recommended setup?** Press Enter for yes: the disk encrypted
    (if the computer is lost or stolen, nobody can read your files without
    the password) and swap compressed in memory (zram), so the computer

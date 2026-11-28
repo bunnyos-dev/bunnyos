@@ -203,10 +203,7 @@ fn pick_disk(disks: &[Disk]) -> anyhow::Result<Disk> {
         );
     }
     match usable.len() {
-        0 => bail!(
-            "There's no disk Bunny Linux can be installed on.\n  \
-             Disks that are in use (mounted, or unlocked) can't be erased: unmount them first."
-        ),
+        0 => bail!("{}", disks::none_usable(disks)),
         1 => {
             println!();
             Ok(usable[0].clone())
@@ -749,6 +746,16 @@ fn ask_password(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_usb_stick_says_where_to_look() {
+        // lsblk on a computer whose own disk isn't seen: only the live USB.
+        let usb = include_str!("../../tests/fixtures/lsblk-only-usb.json");
+        let disks = disks::parse(usb).unwrap();
+        let err = pick_disk(&disks).unwrap_err().to_string();
+        assert!(err.contains("left out on purpose"), "{err}");
+        assert!(err.contains("lsblk"), "{err}");
+    }
 
     #[test]
     fn a_given_answer_is_checked_and_never_asked() {

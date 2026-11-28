@@ -1,16 +1,19 @@
 # Read-only Portage experiments on the home test machine. Started by hand
 # only; never on pull requests (this repository is public).
+# experiment "bunny" builds bunny from the chosen branch on GitHub's machines
+# and runs its read-only commands on the test machine (tools/test-box/try-bunny.sh).
 name: Lab
 on:
   workflow_dispatch:
     inputs:
       experiment:
-        description: Which experiment in tools/test-box/lab.sh
+        description: Which experiment in tools/test-box/lab.sh (or "bunny")
         default: baseline
 permissions:
   contents: read
 jobs:
   lab:
+    if: inputs.experiment != 'bunny'
     runs-on: [self-hosted, bunny-hw]
     timeout-minutes: 30
     steps:
@@ -19,3 +22,30 @@ jobs:
         env:
           EXPERIMENT: ${{ inputs.experiment }}
         run: sh tools/test-box/lab.sh "$EXPERIMENT"
+  build:
+    if: inputs.experiment == 'bunny'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target x86_64-unknown-linux-musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bunny
+          path: target/x86_64-unknown-linux-musl/release/bunny
+          retention-days: 3
+  try-bunny:
+    needs: build
+    runs-on: [self-hosted, bunny-hw]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: bunny
+          path: build
+      - name: bunny's read-only commands on real hardware
+        run: sh tools/test-box/try-bunny.sh build/bunny

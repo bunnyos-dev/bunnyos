@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- After a switch, bunny says how many packages went into or out of bunny.lock
+  (`+ 140 packages, - 2`) instead of listing every one; `--verbose` lists
+  them, and `bunny update` still shows each new version.
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

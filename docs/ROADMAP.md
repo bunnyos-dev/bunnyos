@@ -981,7 +981,7 @@ and merged):
       laptop's "Gentoo" entry, most likely). Re-tidy in the same switch when
       grub was reinstalled, or keep Portage from installing those two files
       (INSTALL_MASK for sys-boot/grub).
-- [ ] **The lock summary lists every package** (140 lines after a desktop
+- [~] **The lock summary lists every package** (140 lines after a desktop
       install): show a count and the path, and the list with `--verbose`.
 - [ ] **Package messages bunny already took care of**: elogind says "not
       started from any runlevel" right after bunny started it. Leave out

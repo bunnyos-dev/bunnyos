@@ -121,6 +121,30 @@ conflict)
 	em --pretend --verbose sys-auth/elogind sys-apps/dbus gui-wm/mangowm gui-apps/quickshell \
 		x11-terms/kitty xfce-base/thunar
 	;;
+g16|g16-desktop)
+	# The laptop's desktop: Hyprland (from hyproverlay, since Gentoo removed
+	# it in 2026), the Quickshell island (GURU), kitty, NVIDIA's driver.
+	guru
+	git clone -q --depth 1 https://codeberg.org/hyproverlay/hyproverlay.git "$lab/hyproverlay"
+	printf '[hyproverlay]\nlocation = %s\nmasters = gentoo\nauto-sync = no\n' "$lab/hyproverlay" \
+		> "$lab/etc/portage/repos.conf/lab-hyproverlay.conf"
+	put package.use/zz-bunny 'sys-auth/pambase elogind'
+	put package.use/zz-bunny 'sys-auth/seatd elogind'
+	put package.use/00-video '*/* VIDEO_CARDS: -* nvidia'
+	put package.accept_keywords/lab '*/*::guru ~amd64'
+	put package.accept_keywords/lab '*/*::hyproverlay ~amd64'
+	if [ "$1" = g16-desktop ]; then
+		rm "$lab/etc/portage/make.profile"
+		ln -s /var/db/repos/gentoo/profiles/default/linux/amd64/23.0/desktop "$lab/etc/portage/make.profile"
+	fi
+	python3 "$(dirname "$0")/../../crates/bunny/src/helper/bunny-portage.py" resolve \
+		sys-auth/elogind sys-apps/dbus gui-wm/hyprland gui-apps/quickshell x11-terms/kitty \
+		x11-drivers/nvidia-drivers media-video/pipewire \
+		| tail -1 | python3 -m json.tool
+	echo; echo "== what emerge would do then (prebuilt vs compile):"
+	em --pretend sys-auth/elogind sys-apps/dbus gui-wm/hyprland gui-apps/quickshell x11-terms/kitty \
+		x11-drivers/nvidia-drivers media-video/pipewire | grep -E '^Total|^\[ebuild' | head -60
+	;;
 binhost)
 	# Which flags Gentoo's prebuilt packages were built with (its index).
 	curl -fsSL -o "$lab/Packages" https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages

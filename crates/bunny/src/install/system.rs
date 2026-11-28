@@ -98,6 +98,48 @@ fn append(runner: &dyn Runner, path: &Path, text: &str) -> Result<()> {
     std::fs::write(path, old).with_context(|| format!("Couldn't write {}", path.display()))
 }
 
+/// Copies iwd's known networks (`*.psk`, `*.open`, `*.8021x`) from `from`
+/// to `to`, readable by root only, as iwd keeps them. They hold Wi-Fi
+/// passwords: they go into the new system and nowhere else. Returns how
+/// many were copied (`None` when there were none).
+pub fn copy_wifi_networks(from: &Path, to: &Path, runner: &dyn Runner) -> Result<Option<usize>> {
+    use std::os::unix::fs::PermissionsExt;
+    let Ok(entries) = std::fs::read_dir(from) else {
+        return Ok(None);
+    };
+    let networks: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .filter(|p| {
+            matches!(
+                p.extension().and_then(|e| e.to_str()),
+                Some("psk" | "open" | "8021x")
+            )
+        })
+        .collect();
+    if networks.is_empty() {
+        return Ok(None);
+    }
+    if runner.dry() {
+        super::would(
+            runner,
+            "copy",
+            &format!("{} Wi-Fi network(s) to {}", networks.len(), to.display()),
+        );
+        return Ok(Some(networks.len()));
+    }
+    std::fs::create_dir_all(to).with_context(|| format!("Couldn't create {}", to.display()))?;
+    std::fs::set_permissions(to, std::fs::Permissions::from_mode(0o700))?;
+    for network in &networks {
+        let target = to.join(network.file_name().unwrap_or_default());
+        std::fs::copy(network, &target)
+            .with_context(|| format!("Couldn't copy a Wi-Fi network to {}", to.display()))?;
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(Some(networks.len()))
+}
+
 /// Downloads the newest OpenRC stage3, checks it, and unpacks it into the
 /// new system.
 pub fn unpack_stage3(choices: &Choices, runner: &mut dyn Runner) -> Result<()> {
@@ -284,7 +326,25 @@ pub fn configure(
         Some(0o440),
     )?;
 
-    let services = super::starter::services(account);
+    // The Wi-Fi networks joined on the USB (with iwctl or `bunny wifi`),
+    // so the new system is online at its first start.
+    if let Some(n) =
+        copy_wifi_networks(Path::new("/var/lib/iwd"), &mnt.join("var/lib/iwd"), runner)?
+    {
+        say(
+            runner,
+            "Keeping your Wi-Fi",
+            &format!(
+                "Copied {n} Wi-Fi network{} you joined on the USB, so the new system\n\
+                 connects at its first start.",
+                if n == 1 { "" } else { "s" }
+            ),
+        );
+    }
+    let mut services = super::starter::services(account);
+    services.extend(super::starter::host_services(super::starter::has_wifi(
+        Path::new("/"),
+    )));
     let mut boot_services = Vec::new();
     if uuids.home_luks.is_some() {
         boot_services.push("dmcrypt");
@@ -518,6 +578,38 @@ pub fn home_key_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wifi_networks_go_into_the_new_system_root_only() {
+        use std::os::unix::fs::PermissionsExt;
+        struct Real;
+        impl Runner for Real {
+            fn run(&mut self, _: &[String]) -> Result<bool> {
+                Ok(true)
+            }
+        }
+        let live = tempfile::tempdir().unwrap();
+        let new = tempfile::tempdir().unwrap();
+        std::fs::write(live.path().join("Home.psk"), "[Security]\nPassphrase=x\n").unwrap();
+        std::fs::write(live.path().join("Cafe.open"), "").unwrap();
+        std::fs::write(live.path().join("notes.txt"), "not a network").unwrap();
+        let to = new.path().join("var/lib/iwd");
+        assert_eq!(
+            copy_wifi_networks(live.path(), &to, &Real).unwrap(),
+            Some(2)
+        );
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&to), 0o700);
+        assert_eq!(mode(&to.join("Home.psk")), 0o600);
+        assert!(to.join("Cafe.open").exists());
+        assert!(!to.join("notes.txt").exists());
+        // No networks (or no iwd folder): nothing to say.
+        let empty = tempfile::tempdir().unwrap();
+        assert_eq!(
+            copy_wifi_networks(&empty.path().join("none"), &to, &Real).unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn finds_the_newest_stage3() {

@@ -10,6 +10,13 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- An install over Wi-Fi comes up online: iwd starts at boot on computers that
+  have Wi-Fi (from the host file, so a shared config still works on a
+  desktop), and the network you joined on the USB is copied over.
+- SSH from kitty works on a fresh install (kitty's terminal type is in the
+  base system).
+- After turning on `[desktop]`, bunny says to restart once (logging out
+  wasn't enough for a desktop to take over the screen and keyboard).
 - When emerge crashes (a Python error inside Portage), bunny says so in plain
   words and shows Portage's one-line error, instead of the last 20 lines of
   the trace.

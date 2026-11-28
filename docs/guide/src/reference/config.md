@@ -195,8 +195,9 @@ Set this up by hand before (the `[pkg]` lines and services above)? Those
 lines can stay, or you can replace them with the section: `bunny plan` then
 says there's nothing to do.
 
-After the switch that turns it on, **log out and back in**: logins from before
-don't go through elogind. bunny reminds you.
+After the switch that turns it on, **restart the computer once**: the seats
+a desktop takes over (screen, keyboard) are set up at startup, and logins
+from before don't go through elogind. bunny reminds you.
 
 It doesn't install a desktop itself; add the one you want with `bunny add`.
 Choosing a whole desktop in this section (`name = "mango"`, Bunny Desktop,

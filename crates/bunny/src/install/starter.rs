@@ -3,6 +3,8 @@
 //! with what belongs to this one (what it needs to start, and a record of
 //! how its disk was set up).
 
+use std::path::Path;
+
 use super::layout::{self, Choices, Uuids};
 use super::system::Account;
 
@@ -28,12 +30,15 @@ pub fn boot_packages(choices: &Choices) -> Vec<&'static str> {
 }
 
 /// The rest of the minimal system, in the main config.
-pub const BASE_PACKAGES: [&str; 5] = [
+pub const BASE_PACKAGES: [&str; 6] = [
     "net-misc/dhcpcd",
     "net-wireless/iwd",
     "app-admin/sysklogd",
     "app-admin/sudo",
     "dev-vcs/git",
+    // So nano, less and the like work over SSH from kitty (its terminal
+    // type, xterm-kitty, isn't in the base system's list).
+    "x11-terms/kitty-terminfo",
 ];
 
 /// Packages from Bunny Linux's own repository, in the main config after
@@ -50,6 +55,30 @@ pub fn services(account: &Account) -> Vec<&'static str> {
         out.push("sshd");
     }
     out
+}
+
+/// Services for this computer only, in its host file: iwd (Wi-Fi) on a
+/// computer that has Wi-Fi. Without it started, an install done over Wi-Fi
+/// came up offline; in the main config it would fail on a desktop without
+/// Wi-Fi.
+pub fn host_services(wifi: bool) -> Vec<&'static str> {
+    if wifi {
+        vec!["iwd"]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Whether this computer has a Wi-Fi card (a network device with a
+/// `wireless` folder in /sys), looked at from the live USB during install.
+pub fn has_wifi(root: &Path) -> bool {
+    std::fs::read_dir(root.join("sys/class/net"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.path().join("wireless").is_dir())
+        })
+        .unwrap_or(false)
 }
 
 /// Services the base system (stage3) already starts, listed in the config
@@ -159,8 +188,12 @@ undo_entry = true
     )
 }
 
-/// `hosts/<host name>.toml`.
+/// `hosts/<host name>.toml`, for the computer bunny install runs on.
 pub fn host_file(choices: &Choices, account: &Account, uuids: &Uuids) -> String {
+    host_file_with(choices, account, uuids, has_wifi(Path::new("/")))
+}
+
+fn host_file_with(choices: &Choices, account: &Account, uuids: &Uuids, wifi: bool) -> String {
     let mut machine = format!(
         "disk = \"{}\"\nencrypted = {}\n",
         choices.disk, choices.encrypt
@@ -190,6 +223,7 @@ pub fn host_file(choices: &Choices, account: &Account, uuids: &Uuids) -> String 
          # What this computer needs to start. Leave these in unless you know you\n\
          # don't need one.\n\
          packages = {packages}\n\
+         {services}\
          \n\
          [pkg.\"sys-kernel/installkernel\"]\n\
          use = [\"dracut\", \"grub\"]\n\
@@ -200,6 +234,15 @@ pub fn host_file(choices: &Choices, account: &Account, uuids: &Uuids) -> String 
          {machine}",
         host = account.hostname,
         packages = list(&boot_packages(choices)),
+        services = if wifi {
+            format!(
+                "\n# Wi-Fi: this computer has it, so iwd starts at boot. `bunny wifi` or\n\
+                 # `iwctl` connects.\nservices = {}\n",
+                list(&host_services(true))
+            )
+        } else {
+            String::new()
+        },
     )
 }
 
@@ -216,6 +259,29 @@ mod tests {
             timezone: "America/Toronto".into(),
             keymap: "us".into(),
         }
+    }
+
+    #[test]
+    fn wifi_starts_on_a_computer_that_has_it_only() {
+        let choices = Choices::default();
+        let uuids = Uuids::default();
+        let with = host_file_with(&choices, &account(), &uuids, true);
+        let host: Host = toml::from_str(&with).unwrap_or_else(|e| panic!("{e}\n{with}"));
+        assert_eq!(host.services, ["iwd"], "{with}");
+        let without = host_file_with(&choices, &account(), &uuids, false);
+        let host: Host = toml::from_str(&without).unwrap();
+        assert!(host.services.is_empty(), "{without}");
+        // The main config, shared by every computer, never starts it.
+        assert!(!config(&account()).contains("\"iwd\",\n]"));
+    }
+
+    #[test]
+    fn finds_a_wifi_card_in_sys() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("sys/class/net/enp3s0")).unwrap();
+        assert!(!has_wifi(root.path()));
+        std::fs::create_dir_all(root.path().join("sys/class/net/wlan0/wireless")).unwrap();
+        assert!(has_wifi(root.path()));
     }
 
     #[test]

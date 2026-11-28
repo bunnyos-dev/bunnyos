@@ -369,6 +369,15 @@ fn desktop_section_sets_up_elogind() {
         outcome
             .notes
             .iter()
+            .any(|n| n.contains("Restart the computer once before starting a desktop")),
+        "{:#?}",
+        outcome.notes
+    );
+    // One note about it, not "log out" as well.
+    assert!(
+        !outcome
+            .notes
+            .iter()
             .any(|n| n.contains("Log out and back in")),
         "{:#?}",
         outcome.notes

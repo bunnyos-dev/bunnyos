@@ -17,6 +17,8 @@ a minor version can change how things work).
   lines into it. New Guide page: "Graphics cards and CPU features".
 - `bunny import -o /etc/bunny/bunny.toml` works on a system without
   `/etc/bunny` yet (it creates the folder), as `bunny status` suggests.
+- `bunny status`: "N changes not applied yet" counts the changes it lists
+  (it said "2 changes" next to three).
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

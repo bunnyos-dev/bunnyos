@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- The live USB no longer shows dracut's warning about a renamed boot option
+  (`rd.overlay` replaces `rd.live.overlay.overlayfs`), or an `insmod …`
+  line, when it starts. "Show start-up messages" still shows everything.
 - New Guide page, "Finding and using USE flags" (Everyday tasks): how to read a
   package's flags on packages.gentoo.org and the Gentoo wiki, check them with
   emerge or equery, write them in bunny.toml and see what they change, with

@@ -81,19 +81,25 @@ def required_use_choices(out):
 
 def one_of_use(out):
     """emerge's "One of the following packages is required" with
-    "(Change USE: +X)" options: [(cp, flag, on)] for the option chosen.
-    Prefers turning a flag on (keeps features working)."""
+    "(Change USE: ...)" options. Returns [(cp, [(flag, on)], parent)] for
+    each such block: the options in emerge's order (ones that only turn
+    flags on first), and the package that asked (its nearest
+    "dependency required by"), which is what pins the flags when an option
+    would undo a choice already made."""
     found = []
-    for m in re.finditer(r"!!! One of the following packages is required to complete your request:\n((?:- .*\n)+)", out):
+    pattern = (r"!!! One of the following packages is required to complete your request:\n"
+               r"((?:- .*\n)+)\(dependency required by \"(\S+?)::\S+?\" \[(\w+)\]\)")
+    for m in re.finditer(pattern, out):
         options = []
         for line in m.group(1).splitlines():
             g = re.match(r"- (\S+?)::\S+ \(Change USE: ([^)]*)\)", line)
             if g:
-                for f in g.group(2).split():
-                    options.append((cp_of(g.group(1)), f.lstrip("+-"), not f.startswith("-")))
-        on = [o for o in options if o[2]]
-        if on or options:
-            found.append((on or options)[0])
+                changes = [(f.lstrip("+-"), not f.startswith("-")) for f in g.group(2).split()]
+                options.append((cp_of(g.group(1)), changes))
+        options.sort(key=lambda o: not all(on for _, on in o[1]))
+        for cp, changes in options:
+            found.append((cp, changes, cp_of(m.group(2))))
+            break
     return found
 
 
@@ -186,10 +192,23 @@ def main():
             if flags.get(cp, {}).get(pick) is not True:
                 flags.setdefault(cp, {})[pick] = True
                 changed.append("%s %s (one of %s)" % (cp, pick, " ".join(options)))
-        for cp, name, on in one_of_use(out):
-            if flags.get(cp, {}).get(name) is None:
-                flags.setdefault(cp, {})[name] = on
-                changed.append("%s %s%s (emerge offered a choice)" % (cp, "" if on else "-", name))
+        for cp, changes, parent in one_of_use(out):
+            clash = [(n, on) for n, on in changes if flags.get(cp, {}).get(n) not in (None, on)]
+            if clash:
+                # The parent pins these flags the other way (a prebuilt
+                # copy built without them): give the parent the flags
+                # already chosen, so a matching prebuilt flavour (or a
+                # build) is used instead of flipping them back.
+                for n, _ in clash:
+                    want = flags[cp][n]
+                    if flags.get(parent, {}).get(n) != want:
+                        flags.setdefault(parent, {})[n] = want
+                        changed.append("%s %s%s (to match %s)" % (parent, "" if want else "-", n, cp))
+                continue
+            for n, on in changes:
+                if flags.get(cp, {}).get(n) is None:
+                    flags.setdefault(cp, {})[n] = on
+                    changed.append("%s %s%s (emerge offered a choice)" % (cp, "" if on else "-", n))
         for parent in slot_conflicts(out):
             if parent not in exclude:
                 exclude.add(parent)

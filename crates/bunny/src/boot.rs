@@ -124,7 +124,7 @@ pub fn kernels(root: &Path) -> Vec<String> {
 
 /// Whether `/boot` can't be read because of its permissions (only root can
 /// read an EFI partition mounted with `fmask=0077`). Root is never refused.
-fn boot_needs_root(root: &Path) -> bool {
+pub(crate) fn boot_needs_root(root: &Path) -> bool {
     let denied = |r: std::io::Result<std::fs::Metadata>| {
         r.is_err_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
     };

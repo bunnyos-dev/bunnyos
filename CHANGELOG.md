@@ -44,6 +44,9 @@ a minor version can change how things work).
   storage mode on many laptops), then `lsblk` to look.
   The disk list also calls the stick "the USB stick you started from"
   instead of "in use (mounted at /run/initramfs/live)".
+- `bunny status` run as yourself on an encrypted install (where only root can
+  read `/boot`) no longer skips the kernel check without a word: it says the
+  kernel wasn't checked and to run it with sudo or doas.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

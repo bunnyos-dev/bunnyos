@@ -88,6 +88,18 @@ profile-desktop|minimal-loop)
 	echo; echo "== what the fix-ups wrote:"
 	cat "$lab"/etc/portage/package.use/* "$lab"/etc/portage/package.accept_keywords/* 2>/dev/null | grep -v '^#' | sort -u
 	;;
+resolve-minimal|resolve-desktop)
+	guru
+	put package.use/lab 'sys-auth/pambase elogind'
+	put package.use/lab 'sys-auth/seatd elogind'
+	put package.accept_keywords/lab '*/*::guru ~amd64'
+	if [ "$1" = resolve-desktop ]; then
+		rm "$lab/etc/portage/make.profile"
+		ln -s /var/db/repos/gentoo/profiles/default/linux/amd64/23.0/desktop "$lab/etc/portage/make.profile"
+	fi
+	python3 "$(dirname "$0")/resolve.py" "$lab" sys-auth/elogind sys-apps/dbus \
+		gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar
+	;;
 binhost)
 	# Which flags Gentoo's prebuilt packages were built with (its index).
 	curl -fsSL -o "$lab/Packages" https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages

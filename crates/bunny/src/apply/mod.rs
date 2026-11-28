@@ -174,7 +174,16 @@ pub fn switch(
     remove_unused(plan, runner, opts, &mut outcome)?;
     // 7. Services.
     enable_services(config, root, plan, runner, &mut outcome)?;
-    if plan
+    if plan.enable_services.iter().any(|s| s == "elogind") {
+        // Seats (the screen and keyboard a desktop takes over) are set up
+        // when the computer starts: a desktop started before that says
+        // "Could not take device". Logging out isn't enough.
+        outcome.notes.push(
+            "Desktop logins are set up (elogind). Restart the computer once before \
+             starting a desktop: until then it can't take over the screen and keyboard."
+                .into(),
+        );
+    } else if plan
         .use_changes
         .iter()
         .any(|c| c.atom == "sys-auth/pambase")

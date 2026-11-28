@@ -114,7 +114,8 @@ iwctl station wlan0 connect "Network name"
 ```
 
 It asks for the Wi-Fi password. (If `wlan0` isn't found, `iwctl device list`
-shows your Wi-Fi's name.)
+shows your Wi-Fi's name.) The installed system remembers this network and
+connects to it by itself at its first start.
 
 Check:
 

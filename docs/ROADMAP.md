@@ -520,7 +520,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `bunny publish` does.
 
 ### Fixes from the terminal install test (November 23)
-- [ ] **SSH from kitty (and other new terminals) gets "cannot initialize
+- [~] **SSH from kitty (and other new terminals) gets "cannot initialize
       terminal type xterm-kitty"** on a Bunny system: nano and other
       full-screen programs refuse to start. Add the terminfo of common
       terminals to the base system (`x11-terms/kitty-terminfo`, and check
@@ -565,7 +565,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       RAID / Intel RST (set SATA Operation to AHCI), which hides it from
       Linux on many laptops. (Tested November 23: Ventoy's stick was
       correctly refused as the live system's own disk.)
-- [ ] **Installing over Wi-Fi leaves the new system offline.** iwd is
+- [~] **Installing over Wi-Fi leaves the new system offline.** iwd is
       installed but not in the starter config's services (only dhcpcd, for
       a cable), and the Wi-Fi network joined on the live USB isn't carried
       over. When the install ran over Wi-Fi: add `iwd` to the services and

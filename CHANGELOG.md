@@ -10,6 +10,13 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- An install over Wi-Fi comes up online: iwd starts at boot on computers that
+  have Wi-Fi (from the host file, so a shared config still works on a
+  desktop), and the network you joined on the USB is copied over.
+- SSH from kitty works on a fresh install (kitty's terminal type is in the
+  base system).
+- After turning on `[desktop]`, bunny says to restart once (logging out
+  wasn't enough for a desktop to take over the screen and keyboard).
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

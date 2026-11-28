@@ -19,6 +19,8 @@ a minor version can change how things work).
   `/etc/bunny` yet (it creates the folder), as `bunny status` suggests.
 - `bunny status`: "N changes not applied yet" counts the changes it lists
   (it said "2 changes" next to three).
+- The unread-news tip shows once per switch, with the latest count, and says
+  "1 announcement" (not "1 announcements").
 - `[system] profile = "minimal"` or `"desktop"`: switch between Gentoo's plain
   and desktop profiles from bunny.toml. New installs say `"minimal"`;
   `bunny import` records which one a system uses.

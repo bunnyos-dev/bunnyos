@@ -80,7 +80,10 @@ packages pulled it in), and everything else from emerge's message.
 
 Either way, bunny reads emerge's output to explain any other problem, turns its
 notices (news, reminders) into short tips, and shows the messages packages
-leave after installing.
+leave after installing. Each tip shows once per switch, even when emerge says
+it more than once; for unread news that's the latest count ("Gentoo has 2
+announcements you haven't read"), and only when it changed since bunny last
+said it.
 
 Unused packages are looked for after removing something from your config,
 after USE flag changes, and after updates, since all three can leave

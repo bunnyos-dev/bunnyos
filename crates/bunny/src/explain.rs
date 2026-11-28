@@ -1168,14 +1168,22 @@ fn notices(lines: &[&str]) -> Vec<Explanation> {
         if let Some(rest) = line.split("IMPORTANT: ").nth(1) {
             if rest.contains("news items need reading") {
                 let n = rest.split_whitespace().next().unwrap_or("Some");
-                found.push(
+                let explanation = if n == "1" {
+                    Explanation::new(
+                        Severity::Info,
+                        "Gentoo has 1 announcement you haven't read.".to_string(),
+                    )
+                    .detail("It's about a change that might need your attention. It may not apply to you.")
+                    .fix("run `eselect news read` to read it.")
+                } else {
                     Explanation::new(
                         Severity::Info,
                         format!("Gentoo has {n} announcements you haven't read."),
                     )
                     .detail("They're about changes that might need your attention. Most won't apply to you.")
-                    .fix("run `eselect news read` to read them."),
-                );
+                    .fix("run `eselect news read` to read them.")
+                };
+                found.push(explanation);
             }
         }
         if line.contains("it is important to remove obsolete packages with") {
@@ -1462,6 +1470,21 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert!(found.iter().all(|e| e.severity == Severity::Info));
         assert!(found[0].title.contains("26 announcements"));
+    }
+
+    #[test]
+    fn one_announcement_is_singular() {
+        let found = notices(&[" * IMPORTANT: 1 news items need reading for repository 'gentoo'."]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].title,
+            "Gentoo has 1 announcement you haven't read."
+        );
+        assert!(
+            found[0].render().contains("read it"),
+            "{}",
+            found[0].render()
+        );
     }
 
     #[test]

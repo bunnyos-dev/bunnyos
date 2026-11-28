@@ -600,7 +600,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       starts (so #106's quiet start doesn't cover them). Find what prints
       them (dracut's module loading, the kernel's log level) and quiet them
       on the normal entries only; "show start-up messages" keeps them.
-- [ ] **`bunny status` on a brand-new install says "Updates: last checked
+- [~] **`bunny status` on a brand-new install says "Updates: last checked
       18 hours ago"**: it counts from the package list's date, which reads
       oddly on day one. Say something like "package list from 18 hours ago"
       or count from the install.
@@ -608,7 +608,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       terminal install keeps it on ("Keeping the recording of this install").
       Make them behave the same (check how the terminal path decides, and
       what `bunny install --yes` from the graphical installer misses).
-- [ ] **Switching on the console font prints OpenRC's raw lines** ("service
+- [~] **Switching on the console font prints OpenRC's raw lines** ("service
       consolefont added to runlevel boot", "WARNING: you are stopping a boot
       service", "Caching service dependencies … [ ok ]"). Run rc-update and
       the service quietly and say it in bunny's own words, keeping the

@@ -26,6 +26,13 @@ PKGDIR="$lab/binpkgs"
 PORTAGE_TMPDIR="$lab/tmp"
 EOT
 export PORTAGE_CONFIGROOT="$lab"
+# GURU (where Hyprland, Mango and Quickshell live now), cloned into the
+# scratch folder and added only to the copy's repos.conf.
+guru() {
+	git clone -q --depth 1 https://github.com/gentoo-mirror/guru "$lab/guru"
+	mkdir -p "$lab/etc/portage/repos.conf"
+	printf '[guru]\nlocation = %s\n' "$lab/guru" > "$lab/etc/portage/repos.conf/lab-guru.conf"
+}
 em() { echo; echo "\$ emerge $*"; emerge --color=n --ask=n "$@" 2>&1; echo "(exit $?)"; }
 put() { mkdir -p "$(dirname "$lab/etc/portage/$1")"; printf '%s\n' "$2" >> "$lab/etc/portage/$1"; }
 
@@ -37,21 +44,20 @@ case "${1:-baseline}" in
 baseline)
 	em --pretend --verbose --update --deep --newuse @world | tail -15
 	;;
-hyprland)
-	put package.accept_keywords/lab 'gui-apps/quickshell ~amd64'
-	em --pretend --verbose --autounmask=y gui-wm/hyprland gui-apps/quickshell
-	;;
 desktop)
 	# What [desktop] wayland = true writes, then a desktop on top.
 	put package.use/lab 'sys-auth/pambase elogind'
 	put package.use/lab 'sys-auth/seatd elogind'
-	put package.accept_keywords/lab 'gui-apps/quickshell ~amd64'
+	guru
+	# GURU's packages are testing-only: accept them, as `bunny add` would.
+	put package.accept_keywords/lab '*/*::guru ~amd64'
 	em --pretend --verbose --autounmask=y sys-auth/elogind sys-apps/dbus \
-		gui-wm/sway gui-apps/quickshell x11-terms/kitty xfce-base/thunar
+		gui-wm/hyprland gui-apps/quickshell x11-terms/kitty xfce-base/thunar
 	;;
 search)
+	guru
 	for p in hyprland mangowm quickshell sway; do
-		echo "== $p"; ls -d /var/db/repos/*/*/"$p" 2>/dev/null
+		echo "== $p"; ls -d /var/db/repos/*/*/"$p" "$lab"/guru/*/"$p" 2>/dev/null
 	done
 	echo "== tree date: $(cat /var/db/repos/gentoo/metadata/timestamp.chk 2>/dev/null)"
 	;;

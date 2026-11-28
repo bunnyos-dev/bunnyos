@@ -88,20 +88,13 @@ profile-desktop|minimal-loop)
 	echo; echo "== what the fix-ups wrote:"
 	cat "$lab"/etc/portage/package.use/* "$lab"/etc/portage/package.accept_keywords/* 2>/dev/null | grep -v '^#' | sort -u
 	;;
-resolve-minimal|resolve-desktop)
+helper-resolve|helper-resolve-desktop)
+	# bunny's resolver (the helper's `resolve`), on a minimal or desktop profile.
 	guru
-	put package.use/lab 'sys-auth/pambase elogind'
-	put package.use/lab 'sys-auth/seatd elogind'
-	put package.accept_keywords/lab '*/*::guru ~amd64'
-	if [ "$1" = resolve-desktop ]; then
+	if [ "$1" = helper-resolve-desktop ]; then
 		rm "$lab/etc/portage/make.profile"
 		ln -s /var/db/repos/gentoo/profiles/default/linux/amd64/23.0/desktop "$lab/etc/portage/make.profile"
 	fi
-	python3 "$(dirname "$0")/resolve.py" "$lab" sys-auth/elogind sys-apps/dbus \
-		gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar
-	;;
-helper-resolve)
-	guru
 	put package.use/zz-bunny 'sys-auth/pambase elogind'
 	put package.use/zz-bunny 'sys-auth/seatd elogind'
 	put package.accept_keywords/lab '*/*::guru ~amd64'

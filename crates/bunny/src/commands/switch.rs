@@ -1,6 +1,8 @@
 //! `bunny switch` and `bunny update`, and what they print afterwards.
 
 use std::path::Path;
+
+use anyhow::Context;
 use std::process::ExitCode;
 
 use super::{ask, confirm, elevate, report_problems, runner_for, timestamp, Default};
@@ -36,8 +38,23 @@ pub(crate) fn switch_inner(
     root: &Path,
     removal_requested: bool,
 ) -> anyhow::Result<Switched> {
+    switch_with(config, yes, root, removal_requested, 0)
+}
+
+/// How many times a switch may add the resolver's settings and try again.
+/// One normally does it; a second covers what only shows up once the
+/// first set is in (the resolver works from the config as it was).
+const RESOLVE_TRIES: u8 = 2;
+
+fn switch_with(
+    config: &Path,
+    yes: bool,
+    root: &Path,
+    removal_requested: bool,
+    tries: u8,
+) -> anyhow::Result<Switched> {
     let real_system = root == Path::new("/");
-    let _changing = super::changing(real_system, false)?;
+    let changing = super::changing(real_system, false)?;
 
     let cfg = Config::load(config).map_err(apply::nothing_changed)?;
     if report_problems(&cfg, config) != ExitCode::SUCCESS {
@@ -126,6 +143,14 @@ pub(crate) fn switch_inner(
                 eprintln!("✗ {e}");
                 return Ok(Switched::NotApplied(ExitCode::FAILURE));
             }
+            Err(e) if e.is::<apply::NeedsChanges>() => {
+                let Ok(apply::NeedsChanges(resolution)) = e.downcast::<apply::NeedsChanges>()
+                else {
+                    unreachable!("checked just above");
+                };
+                drop(changing);
+                return add_resolution(config, yes, root, removal_requested, tries, &resolution);
+            }
             result => result?,
         };
 
@@ -148,6 +173,115 @@ pub(crate) fn switch_inner(
     print_tips(root, &outcome.tips);
     keep_applied(root, config);
     Ok(Switched::Applied)
+}
+
+/// Shows what the resolver found, and (if you agree) writes it into the
+/// config and runs the switch again. Nothing was changed before this.
+fn add_resolution(
+    config: &Path,
+    yes: bool,
+    root: &Path,
+    removal_requested: bool,
+    tries: u8,
+    resolution: &crate::helper::Resolution,
+) -> anyhow::Result<Switched> {
+    print!("\n{}", render_resolution(resolution));
+    if !resolution.resolved {
+        eprintln!(
+            "\n✗ Even with these, emerge still can't work out a plan, so nothing was changed.\n  \
+             The end of its message:\n\n{}\n\n  \
+             You can add the settings above to {} yourself and run the switch again,\n  \
+             or paste emerge's message into `bunny explain`.",
+            indent(resolution.stuck.as_deref().unwrap_or("(no message)")),
+            config.display()
+        );
+        return Ok(Switched::NotApplied(ExitCode::FAILURE));
+    }
+    if tries >= RESOLVE_TRIES {
+        eprintln!(
+            "\n✗ bunny already added settings once and emerge still wants more, so it stopped\n  \
+             here (nothing was changed). Add the settings above to {} and run the switch again.",
+            config.display()
+        );
+        return Ok(Switched::NotApplied(ExitCode::FAILURE));
+    }
+    if !yes
+        && !confirm(
+            &format!("\nAdd these to {} and continue?", config.display()),
+            Default::Yes,
+        )?
+    {
+        println!("Nothing was changed.");
+        return Ok(Switched::NotApplied(ExitCode::SUCCESS));
+    }
+    let text = std::fs::read_to_string(config)
+        .with_context(|| format!("Couldn't read {}", config.display()))?;
+    let new = crate::edit::apply_resolution(&text, resolution)?;
+    std::fs::write(config, &new).with_context(|| format!("Couldn't write {}", config.display()))?;
+    println!("Added them to {}. Trying again…\n", config.display());
+    match switch_with(config, yes, root, removal_requested, tries + 1)? {
+        Switched::NotApplied(code) => {
+            // Keep the config as it was if nothing came of it.
+            std::fs::write(config, &text)
+                .with_context(|| format!("Couldn't put {} back", config.display()))?;
+            Ok(Switched::NotApplied(code))
+        }
+        done => Ok(done),
+    }
+}
+
+/// The resolver's settings, grouped, each with why in a few words.
+pub(crate) fn render_resolution(r: &crate::helper::Resolution) -> String {
+    let why = |atom: &str| r.why.get(atom).cloned().unwrap_or_default();
+    let mut out = String::from(
+        "emerge needs these settings to install what you asked for. bunny worked them\n\
+         out the way you would by hand:\n",
+    );
+    let section = |title: &str, items: Vec<(String, String, String)>, out: &mut String| {
+        if items.is_empty() {
+            return;
+        }
+        out.push_str(&format!("\n  {title}\n"));
+        let w0 = items.iter().map(|i| i.0.len()).max().unwrap_or(0);
+        let w1 = items.iter().map(|i| i.1.len()).max().unwrap_or(0);
+        for (a, b, c) in items {
+            let line = format!("    {a:w0$}  {b:w1$}  {c}");
+            out.push_str(line.trim_end());
+            out.push('\n');
+        }
+    };
+    let flags: Vec<_> = r
+        .use_flags
+        .iter()
+        .map(|(atom, flags)| {
+            let written: Vec<String> = flags
+                .iter()
+                .map(|(f, on)| if *on { f.clone() } else { format!("-{f}") })
+                .collect();
+            (atom.clone(), written.join(" "), why(atom))
+        })
+        .collect();
+    section("USE flags", flags, &mut out);
+    let testing: Vec<_> = r
+        .keywords
+        .iter()
+        .map(|(atom, k)| (atom.clone(), k.clone(), why(atom)))
+        .collect();
+    section("Testing versions", testing, &mut out);
+    let compile: Vec<_> = r
+        .compile
+        .iter()
+        .map(|atom| (atom.clone(), "prebuilt = false".to_string(), why(atom)))
+        .collect();
+    section("Compiled instead of downloaded", compile, &mut out);
+    out
+}
+
+fn indent(text: &str) -> String {
+    text.lines()
+        .map(|l| format!("    {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Keeps a copy of the config that now matches the system, so undoing a

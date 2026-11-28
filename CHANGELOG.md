@@ -10,6 +10,14 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- When emerge needs settings changed before it can install something (USE
+  flags, testing versions), bunny now works them all out in one go, the way
+  you would by hand round after round, and asks once: "Add these to
+  bunny.toml and continue?" It never flips a flag you set; it gives the
+  package that pins it the same flag instead, so a matching prebuilt copy is
+  used. This is what makes a desktop installable from a minimal system.
+- `[pkg."…"] prebuilt = false`: always compile a package instead of
+  downloading Gentoo's prebuilt copy.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

@@ -32,6 +32,9 @@ guru() {
 	git clone -q --depth 1 https://github.com/gentoo-mirror/guru "$lab/guru"
 	mkdir -p "$lab/etc/portage/repos.conf"
 	printf '[guru]\nlocation = %s\n' "$lab/guru" > "$lab/etc/portage/repos.conf/lab-guru.conf"
+	ls -la "$lab/etc/portage/repos.conf" "$lab/guru" | head -20
+	cat "$lab/guru/profiles/repo_name" 2>&1
+	portageq get_repos / 2>&1
 }
 em() { echo; echo "\$ emerge $*"; emerge --color=n --ask=n "$@" 2>&1; echo "(exit $?)"; }
 put() { mkdir -p "$(dirname "$lab/etc/portage/$1")"; printf '%s\n' "$2" >> "$lab/etc/portage/$1"; }

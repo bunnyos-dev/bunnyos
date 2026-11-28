@@ -93,7 +93,8 @@ welcome says so. Nothing is sent from the USB.
 
 When `bunny install` finishes, it copies its recording (up to just before it
 unmounts the new system, so the last few lines are missing) into your new
-home folder, `~/.local/state/bunny/sessions/`. After restarting, sign in to
+home folder, `~/.local/state/bunny/sessions/`. This works the same from
+the terminal and from the graphical installer. After restarting, sign in to
 GitHub and run `bunny report`: the install is one of the recordings waiting,
 and it shows what it sends and asks first. It's sent like any other
 recording, with personal details swapped out. If the install fails, the
@@ -111,3 +112,11 @@ terminal exactly as it appears without changing how the command behaves.
 Only commands typed in a terminal are recorded; `bunny report` itself and
 commands run from scripts aren't. When bunny re-runs itself through sudo or
 doas, the same recording continues.
+
+One exception: `bunny install` run without a terminal (the graphical
+installer runs it with its output going to the installer, not a terminal)
+is recorded too. `script` needs a terminal, so bunny runs the install again
+with its output passing through bunny, which hands every byte on unchanged
+and keeps a copy. The password the installer sends on standard input goes
+straight to the install and is never in the recording. `bunny install
+--list-disks`, which the installer asks for often, isn't recorded.

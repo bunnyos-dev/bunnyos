@@ -214,7 +214,9 @@ isolated = false       # compile inside a clean container
   any problem). `bunny status` shows that as a ✓ Kernel line while the undo
   is the last action, or a ⚠ with the reason (the note is then kept, so the
   next start tries again). `bunny status` still warns about kernels in
-  `/boot` with no `/lib/modules` in the running system (older generations).
+  `/boot` with no `/lib/modules` in the running system (older generations);
+  when `/boot` can only be read as root and status runs as a user, it says
+  the kernel wasn't checked and to run it with sudo or doas.
   `clean` drops lists of deleted generations and unused copies.
 - **Nested subvolumes** (subvolumes inside `@`, e.g. `/srv` when tmpfiles
   creates it as a subvolume on btrfs) aren't part of snapshots. Rollback moves

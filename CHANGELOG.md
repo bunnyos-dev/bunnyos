@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- `bunny status` run as yourself on an encrypted install (where only root can
+  read `/boot`) no longer skips the kernel check without a word: it says the
+  kernel wasn't checked and to run it with sudo or doas.
 - When the USB stick is the only disk `bunny install` finds, it now says the
   stick is left out on purpose and no other disk was found, and what to
   check: that the disk is fitted and turned on in the firmware (the NVMe/RAID

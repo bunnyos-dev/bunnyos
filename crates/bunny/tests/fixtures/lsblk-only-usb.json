@@ -1,0 +1,4 @@
+{"blockdevices": [
+ {"name":"sda", "path":"/dev/sda", "size":64000000000, "type":"disk", "model":"USB Flash Disk", "tran":"usb", "rm":true, "ro":false, "mountpoints":[null],
+  "children": [{"name":"sda1", "path":"/dev/sda1", "size":64000000000, "type":"part", "mountpoints":["/run/initramfs/live"], "fstype":"iso9660", "label":"BUNNY"}]}
+]}

@@ -559,7 +559,7 @@ prebuilt Baseline image comes with phase 6). Not styled yet.
       `sys-apps/pciutils` and `sys-apps/usbutils` (`lsusb`): they're the
       first thing anyone checks hardware with, and small. Make sure the
       image-shrinking step keeps them (and the PCI ID list they read).
-- [ ] **"There's no disk Bunny Linux can be installed on" could say why.**
+- [~] **"There's no disk Bunny Linux can be installed on" could say why.**
       When only USB sticks are found, add the likely causes in plain words:
       the internal disk isn't connected, or the firmware's storage mode is
       RAID / Intel RST (set SATA Operation to AHCI), which hides it from

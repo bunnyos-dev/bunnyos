@@ -10,6 +10,12 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- When the USB stick is the only disk `bunny install` finds, it now says the
+  stick is left out on purpose and no other disk was found, and what to
+  check: that the disk is fitted and turned on in the firmware (the NVMe/RAID
+  storage mode on many laptops), then `lsblk` to look.
+  The disk list also calls the stick "the USB stick you started from"
+  instead of "in use (mounted at /run/initramfs/live)".
 - Long notes after a switch or undo (like "If this change stops the system
   from starting…") now wrap between words on an 80-column console, instead of
   breaking a word in two at the screen's edge.

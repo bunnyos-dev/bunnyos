@@ -10,6 +10,9 @@ a minor version can change how things work).
 
 ## [Unreleased]
 
+- A rolling **Preview** pre-release on GitHub with the newest live USB image,
+  rebuilt whenever a change on main touches it. The Guide points there until
+  the first release.
 - After an undo from the boot menu on an encrypted disk (where `/boot` is its
   own partition), bunny now puts `/boot`'s kernel back to the one that version
   used, early in the first start afterwards, and rebuilds the boot menu.

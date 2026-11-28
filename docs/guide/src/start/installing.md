@@ -26,8 +26,13 @@ terminal, your account, encryption, and undo. A desktop is the
 
 ## 1. Download the USB image
 
-From the [newest release](https://github.com/bunnyos-dev/bunnyos/releases/latest),
-download `bunny-linux-live-<version>.iso` and the `.sha256` file next to it.
+Bunny Linux has no release yet, so for now use the
+[Preview](https://github.com/bunnyos-dev/bunnyos/releases/tag/preview): the
+newest image, rebuilt whenever a change touches it. It's pre-alpha: for
+testing, not yet for a computer you depend on. Download
+`bunny-linux-live-preview.iso` and the `.sha256` file next to it. (Once
+there are releases, the [newest release](https://github.com/bunnyos-dev/bunnyos/releases/latest)
+has `bunny-linux-live-<version>.iso`.)
 Check that the download is complete:
 
 ```sh

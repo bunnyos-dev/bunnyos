@@ -192,8 +192,13 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
     }
 }
 
-/// When the Gentoo package tree was last synced: the newest of the files a
-/// sync touches (rsync/webrsync write `timestamp.chk`, git updates `FETCH_HEAD`).
+/// How old the Gentoo package tree is: the newest of the files a sync
+/// touches (rsync/webrsync write `timestamp.chk`, git updates `FETCH_HEAD`).
+/// emerge-webrsync (what `bunny install` uses) keeps the snapshot's own date
+/// on `timestamp.chk`, so on a new install this is when Gentoo made the
+/// list, often the day before, not when it was downloaded. That's the age
+/// that matters for security fixes, so `status` shows it as the package
+/// list's age ("package list from 18 hours ago"), not as a last check.
 fn tree_synced(root: &Path) -> Option<i64> {
     let repo = root.join("var/db/repos/gentoo");
     ["metadata/timestamp.chk", ".git/FETCH_HEAD", ".git/HEAD"]
@@ -504,11 +509,16 @@ impl Status {
                         &mut out,
                         "⚠",
                         "Updates",
-                        &format!("last checked {ago}; there may be security fixes waiting"),
+                        &format!("package list from {ago}; there may be security fixes waiting"),
                     );
                     more(&mut out, "Run `bunny update`.");
                 } else {
-                    line(&mut out, "✓", "Updates", &format!("last checked {ago}"));
+                    line(
+                        &mut out,
+                        "✓",
+                        "Updates",
+                        &format!("package list from {ago}"),
+                    );
                 }
             }
         }
@@ -710,7 +720,7 @@ mod tests {
         );
         assert!(!text.contains("UTC"), "{text}");
         assert!(text.contains("1 generation saved"));
-        assert!(text.contains("last checked 2 days ago"));
+        assert!(text.contains("package list from 2 days ago"));
         assert!(text.ends_with("Everything is in order.\n"));
     }
 
@@ -743,7 +753,7 @@ mod tests {
         let mut s = good();
         s.tree_synced = Some(NOW - 12 * 86_400);
         let text = s.render();
-        assert!(text.contains("last checked 12 days ago; there may be security fixes waiting"));
+        assert!(text.contains("package list from 12 days ago; there may be security fixes waiting"));
         assert!(text.contains("Run `bunny update`."));
         assert!(!s.all_good());
     }

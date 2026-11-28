@@ -17,6 +17,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
+use crate::apply::services::ServiceCommands;
 use crate::apply::Runner;
 
 /// kbd's font, compressed (Gentoo) or not.
@@ -148,6 +149,7 @@ pub fn apply(
     steps: &[Step],
     backup: &Path,
     runner: &mut dyn Runner,
+    services: &mut ServiceCommands,
 ) -> Result<Vec<String>> {
     let mut notes = Vec::new();
     if steps.is_empty() {
@@ -186,7 +188,10 @@ pub fn apply(
             .with_context(|| format!("Couldn't write {}", path.display()))?;
     }
     if steps.contains(&Step::AtBoot)
-        && !runner.run(&["rc-update", "add", "consolefont", "boot"].map(String::from))?
+        && !services.run(
+            runner,
+            &["rc-update", "add", "consolefont", "boot"].map(String::from),
+        )?
     {
         notes.push(
             "Couldn't add consolefont to the boot runlevel, so the console font isn't \
@@ -195,8 +200,13 @@ pub fn apply(
         );
     }
     // Load it now, so the console has it before the next restart.
-    if !runner.run(&["rc-service", "consolefont", "restart"].map(String::from))? {
+    if !services.run(
+        runner,
+        &["rc-service", "consolefont", "restart"].map(String::from),
+    )? {
         notes.push("The console font is set up, and is used from the next restart.".into());
+    } else if notes.is_empty() && !services.verbose && !runner.dry() {
+        println!("  ✓ The console now has a font that draws ✓ ✗ ⚠, at every start too.");
     }
     Ok(notes)
 }
@@ -252,7 +262,14 @@ mod tests {
         let r = root.path();
         let backup = r.join("var/lib/bunny/backups/1");
         let mut runner = Recorder::default();
-        let notes = apply(r, &needed(r), &backup, &mut runner).unwrap();
+        let notes = apply(
+            r,
+            &needed(r),
+            &backup,
+            &mut runner,
+            &mut ServiceCommands::new(false),
+        )
+        .unwrap();
         assert!(notes.is_empty(), "{notes:?}");
         // The font, made with kbd's tools from eurlatgr, ⚠ added.
         let make = &runner.0[0];
@@ -327,7 +344,14 @@ mod tests {
         }
         let root = gentoo_root();
         let r = root.path();
-        let notes = apply(r, &needed(r), &r.join("b"), &mut Fails).unwrap();
+        let notes = apply(
+            r,
+            &needed(r),
+            &r.join("b"),
+            &mut Fails,
+            &mut ServiceCommands::new(false),
+        )
+        .unwrap();
         assert!(
             notes[0].contains("Couldn't make the console font"),
             "{notes:?}"

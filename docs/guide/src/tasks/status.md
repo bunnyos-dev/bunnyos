@@ -9,7 +9,7 @@ bunny keeps an eye on:
 
 | Line | ✓ means | If it's ⚠ or ✗ |
 |---|---|---|
-| **Config** | The system matches `bunny.toml`. | Something isn't applied yet, or was installed outside bunny (say, with `emerge` directly). Run `bunny diff` to see what. |
+| **Config** | The system matches `bunny.toml`. | Something isn't applied yet, or was installed outside bunny (say, with `emerge` directly). The line counts the changes it lists ("3 changes not applied yet: + tree, tidier boot menu, console font"; a long list ends "and 4 more"). Run `bunny diff` to see them all. |
 | **Versions** | Installed versions match `bunny.lock`. | `bunny switch` puts them back; `bunny lock` accepts them as they are. If it says packages are "not in bunny.lock yet" (installed outside bunny), `bunny switch` records them. |
 | **Last change** | (just information) | If it says to restart after a rollback, run `sudo reboot`. |
 | **Undo** | Generations are being saved. | Your disk isn't set up for undo; see [The disk layout](../reference/disk-layout.md). |

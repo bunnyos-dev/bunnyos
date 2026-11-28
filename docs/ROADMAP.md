@@ -990,7 +990,7 @@ and merged):
       announcements") in one switch, and "1 announcements" should be singular.
 - [ ] **`bunny import -o /etc/bunny/bunny.toml` fails when /etc/bunny doesn't
       exist**, though `bunny status` suggests exactly that. Create the folder.
-- [ ] **"2 changes not applied yet: + tree, tidier boot menu, console font"**:
+- [~] **"2 changes not applied yet: + tree, tidier boot menu, console font"**:
       the count doesn't match the list.
 - [ ] **Undoing the very first switch leaves bunny.toml as edited** (status
       says "not applied"): there's no saved config from before the first

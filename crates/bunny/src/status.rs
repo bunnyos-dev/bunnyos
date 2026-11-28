@@ -94,17 +94,10 @@ pub fn gather(config: &Path, root: &Path, now: i64) -> Status {
                     match made {
                         Err(_) => ConfigState::Unreadable,
                         Ok(p) if p.is_empty() => ConfigState::Matches,
+                        // Count what the summary lists, so "2 changes"
+                        // never sits next to three of them.
                         Ok(p) => ConfigState::Differs {
-                            count: p.add_packages.len()
-                                + p.remove_packages.len()
-                                + p.use_changes.len()
-                                + p.keyword_changes.len()
-                                + p.add_repositories.len()
-                                + p.remove_repositories.len()
-                                + p.enable_services.len()
-                                + usize::from(p.security.file.is_some())
-                                + usize::from(!p.boot.is_empty())
-                                + p.security.add_to_wheel.len(),
+                            count: p.change_count().max(1),
                             summary: p.summary(),
                         },
                     }

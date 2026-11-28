@@ -56,6 +56,38 @@ desktop)
 	em --pretend --verbose --autounmask=y sys-auth/elogind sys-apps/dbus \
 		gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar
 	;;
+profile-desktop|minimal-loop)
+	guru
+	put package.use/lab 'sys-auth/pambase elogind'
+	put package.use/lab 'sys-auth/seatd elogind'
+	put package.accept_keywords/lab '*/*::guru ~amd64'
+	want="sys-auth/elogind sys-apps/dbus gui-wm/mangowm gui-apps/quickshell x11-terms/kitty xfce-base/thunar"
+	if [ "$1" = profile-desktop ]; then
+		rm "$lab/etc/portage/make.profile"
+		ln -s /var/db/repos/gentoo/profiles/default/linux/amd64/23.0/desktop "$lab/etc/portage/make.profile"
+	fi
+	# emerge's own fix-up loop: accept every change it suggests, in the
+	# copy only, and try again, up to 12 rounds. Shows what each round asks.
+	round=1
+	while [ $round -le 12 ]; do
+		echo; echo "######## round $round"
+		# shellcheck disable=SC2086
+		out=$(CONFIG_PROTECT="-*" emerge --color=n --ask=n --pretend --verbose \
+			--autounmask=y --autounmask-write=y --autounmask-continue=n $want 2>&1)
+		status=$?
+		echo "$out" | grep -E '^(=|>=|<|~)?[a-z0-9-]+/[^ ]+ [-a-zA-Z0-9_ ]+$|USE changes|keyword|REQUIRED_USE|any-of|conflict|slot|!!!|required by' | head -40
+		if echo "$out" | grep -q '^\[ebuild\|^\[binary'; then
+			if [ $status -eq 0 ]; then
+				echo "== resolved: $(echo "$out" | grep -c '^\[binary') prebuilt, $(echo "$out" | grep -c '^\[ebuild') to compile"
+				echo "$out" | grep '^\[ebuild' | head -40
+				break
+			fi
+		fi
+		round=$((round + 1))
+	done
+	echo; echo "== what the fix-ups wrote:"
+	cat "$lab"/etc/portage/package.use/* "$lab"/etc/portage/package.accept_keywords/* 2>/dev/null | grep -v '^#' | sort -u
+	;;
 binhost)
 	# Which flags Gentoo's prebuilt packages were built with (its index).
 	curl -fsSL -o "$lab/Packages" https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64/Packages
